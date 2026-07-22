@@ -1,0 +1,321 @@
+{
+  "beschrijving": "Officiele gebiedsindeling gemeente Amsterdam (gebiedsgericht werken), indeling per 24-3-2022 (incl. Weesp), gekoppeld aan CBS-wijkcodes 2025.",
+  "peildatum_indeling": "2022-03-24",
+  "bronnen": [
+    "https://api.data.amsterdam.nl/v1/gebieden/ggwgebieden/",
+    "https://api.data.amsterdam.nl/v1/gebieden/wijken/",
+    "https://onderzoek.amsterdam.nl/artikel/nieuwe-indeling-naar-wijken-en-buurten-2022",
+    "https://maps.amsterdam.nl/gebiedsindeling/"
+  ],
+  "stadsdelen": {
+    "A": "Centrum",
+    "B": "Westpoort",
+    "E": "West",
+    "F": "Nieuw-West",
+    "K": "Zuid",
+    "M": "Oost",
+    "N": "Noord",
+    "S": "Weesp",
+    "T": "Zuidoost"
+  },
+  "gebieden": [
+    {
+      "code": "GA01",
+      "naam": "Centrum-West",
+      "stadsdeelLetter": "A",
+      "wijkcodes": [
+        "WK0363AA",
+        "WK0363AB",
+        "WK0363AC",
+        "WK0363AD",
+        "WK0363AE"
+      ]
+    },
+    {
+      "code": "GA02",
+      "naam": "Centrum-Oost",
+      "stadsdeelLetter": "A",
+      "wijkcodes": [
+        "WK0363AF",
+        "WK0363AG",
+        "WK0363AH",
+        "WK0363AJ",
+        "WK0363AK"
+      ]
+    },
+    {
+      "code": "GE03",
+      "naam": "Westerpark",
+      "stadsdeelLetter": "E",
+      "wijkcodes": [
+        "WK0363EA",
+        "WK0363EB",
+        "WK0363EC",
+        "WK0363EG",
+        "WK0363EH",
+        "WK0363EJ"
+      ]
+    },
+    {
+      "code": "GE04",
+      "naam": "Bos en Lommer",
+      "stadsdeelLetter": "E",
+      "wijkcodes": [
+        "WK0363ED",
+        "WK0363EE",
+        "WK0363EF"
+      ]
+    },
+    {
+      "code": "GE05",
+      "naam": "Oud-West, De Baarsjes",
+      "stadsdeelLetter": "E",
+      "wijkcodes": [
+        "WK0363EK",
+        "WK0363EL",
+        "WK0363EM",
+        "WK0363EN",
+        "WK0363EP",
+        "WK0363EQ",
+        "WK0363ER",
+        "WK0363ES",
+        "WK0363ET",
+        "WK0363EU",
+        "WK0363EV"
+      ]
+    },
+    {
+      "code": "GF06",
+      "naam": "Sloterdijk Nieuw-West",
+      "stadsdeelLetter": "F",
+      "wijkcodes": [
+        "WK0363FA"
+      ]
+    },
+    {
+      "code": "GF07",
+      "naam": "Geuzenveld, Slotermeer",
+      "stadsdeelLetter": "F",
+      "wijkcodes": [
+        "WK0363FB",
+        "WK0363FC",
+        "WK0363FD",
+        "WK0363FE"
+      ]
+    },
+    {
+      "code": "GF08",
+      "naam": "Osdorp",
+      "stadsdeelLetter": "F",
+      "wijkcodes": [
+        "WK0363FF",
+        "WK0363FH",
+        "WK0363FJ",
+        "WK0363FK"
+      ]
+    },
+    {
+      "code": "GF09",
+      "naam": "De Aker, Sloten, Nieuw-Sloten",
+      "stadsdeelLetter": "F",
+      "wijkcodes": [
+        "WK0363FG",
+        "WK0363FQ"
+      ]
+    },
+    {
+      "code": "GF10",
+      "naam": "Slotervaart",
+      "stadsdeelLetter": "F",
+      "wijkcodes": [
+        "WK0363FL",
+        "WK0363FM",
+        "WK0363FN",
+        "WK0363FP"
+      ]
+    },
+    {
+      "code": "GK11",
+      "naam": "Oud-Zuid",
+      "stadsdeelLetter": "K",
+      "wijkcodes": [
+        "WK0363KA",
+        "WK0363KB",
+        "WK0363KC",
+        "WK0363KD",
+        "WK0363KH",
+        "WK0363KJ"
+      ]
+    },
+    {
+      "code": "GK12",
+      "naam": "Buitenveldert, Zuidas",
+      "stadsdeelLetter": "K",
+      "wijkcodes": [
+        "WK0363KN",
+        "WK0363KP",
+        "WK0363KQ",
+        "WK0363KR"
+      ]
+    },
+    {
+      "code": "GK13",
+      "naam": "De Pijp, Rivierenbuurt",
+      "stadsdeelLetter": "K",
+      "wijkcodes": [
+        "WK0363KE",
+        "WK0363KF",
+        "WK0363KG",
+        "WK0363KK",
+        "WK0363KL",
+        "WK0363KM"
+      ]
+    },
+    {
+      "code": "GM14",
+      "naam": "Oud-Oost",
+      "stadsdeelLetter": "M",
+      "wijkcodes": [
+        "WK0363MB",
+        "WK0363MC",
+        "WK0363MD",
+        "WK0363ME"
+      ]
+    },
+    {
+      "code": "GM15",
+      "naam": "Indische Buurt, Oostelijk Havengebied",
+      "stadsdeelLetter": "M",
+      "wijkcodes": [
+        "WK0363MA",
+        "WK0363MF",
+        "WK0363MG"
+      ]
+    },
+    {
+      "code": "GM16",
+      "naam": "Watergraafsmeer",
+      "stadsdeelLetter": "M",
+      "wijkcodes": [
+        "WK0363MM",
+        "WK0363MN",
+        "WK0363MP",
+        "WK0363MQ"
+      ]
+    },
+    {
+      "code": "GM17",
+      "naam": "IJburg, Zeeburgereiland",
+      "stadsdeelLetter": "M",
+      "wijkcodes": [
+        "WK0363MH",
+        "WK0363MJ",
+        "WK0363MK",
+        "WK0363ML"
+      ]
+    },
+    {
+      "code": "GN18",
+      "naam": "Noord-West",
+      "stadsdeelLetter": "N",
+      "wijkcodes": [
+        "WK0363NA",
+        "WK0363NC",
+        "WK0363ND",
+        "WK0363NE"
+      ]
+    },
+    {
+      "code": "GN19",
+      "naam": "Oud-Noord",
+      "stadsdeelLetter": "N",
+      "wijkcodes": [
+        "WK0363NB",
+        "WK0363NF",
+        "WK0363NK",
+        "WK0363NL",
+        "WK0363NM",
+        "WK0363NN",
+        "WK0363NP"
+      ]
+    },
+    {
+      "code": "GN20",
+      "naam": "Noord-Oost",
+      "stadsdeelLetter": "N",
+      "wijkcodes": [
+        "WK0363NG",
+        "WK0363NH",
+        "WK0363NJ",
+        "WK0363NQ"
+      ]
+    },
+    {
+      "code": "GS25",
+      "naam": "Weesp, Driemond",
+      "stadsdeelLetter": "S",
+      "wijkcodes": [
+        "WK0363SA",
+        "WK0363SB",
+        "WK0363SC",
+        "WK0363SD",
+        "WK0363SE"
+      ]
+    },
+    {
+      "code": "GT21",
+      "naam": "Bijlmer-West",
+      "stadsdeelLetter": "T",
+      "wijkcodes": [
+        "WK0363TA"
+      ]
+    },
+    {
+      "code": "GT22",
+      "naam": "Bijlmer-Centrum",
+      "stadsdeelLetter": "T",
+      "wijkcodes": [
+        "WK0363TB",
+        "WK0363TC",
+        "WK0363TD"
+      ]
+    },
+    {
+      "code": "GT23",
+      "naam": "Bijlmer-Oost",
+      "stadsdeelLetter": "T",
+      "wijkcodes": [
+        "WK0363TE",
+        "WK0363TF",
+        "WK0363TG",
+        "WK0363TH"
+      ]
+    },
+    {
+      "code": "GT24",
+      "naam": "Gaasperdam",
+      "stadsdeelLetter": "T",
+      "wijkcodes": [
+        "WK0363TJ",
+        "WK0363TK",
+        "WK0363TL",
+        "WK0363TM"
+      ]
+    },
+    {
+      "code": "westpoort",
+      "naam": "Westpoort",
+      "stadsdeelLetter": "B",
+      "wijkcodes": [
+        "WK0363BA",
+        "WK0363BB"
+      ]
+    }
+  ],
+  "caveats": [
+    "Amsterdam kent officieel 25 gebieden (gebiedsgericht werken, codes GA01 t/m GS25). Stadsdeel Westpoort (wijken BA Havens-West en BB Coenhaven/Minervahaven) valt buiten deze 25 gebieden; hier toegevoegd als pseudo-gebied 'westpoort' zodat alle 110 wijken gedekt zijn.",
+    "Weesp is formeel een 'stadsgebied', geen stadsdeel, maar wordt in de data (en hier) als stadsdeel-niveau behandeld (letter S).",
+    "Wijk Driemond (WK0363SA) hoort sinds 2022 bij gebied 'Weesp, Driemond' (stadsgebied Weesp), niet meer bij Zuidoost.",
+    "Koppeling op wijkcodeletter (laatste 2 tekens CBS-wijkcode = Amsterdamse wijkcode); alle 110 CBS-wijken uit kwb2025.xlsx exact gematcht op code."
+  ]
+}

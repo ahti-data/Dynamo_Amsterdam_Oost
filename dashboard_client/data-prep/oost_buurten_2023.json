@@ -1,0 +1,306 @@
+[
+ {
+  "code": "BU0363MA01",
+  "naam": "Java-eiland"
+ },
+ {
+  "code": "BU0363MA02",
+  "naam": "KNSM-eiland"
+ },
+ {
+  "code": "BU0363MA03",
+  "naam": "Oostelijke Handelskade"
+ },
+ {
+  "code": "BU0363MA04",
+  "naam": "Rietlanden"
+ },
+ {
+  "code": "BU0363MA05",
+  "naam": "Sporenburg"
+ },
+ {
+  "code": "BU0363MA06",
+  "naam": "Borneo"
+ },
+ {
+  "code": "BU0363MA07",
+  "naam": "Entrepot-Noordwest"
+ },
+ {
+  "code": "BU0363MA08",
+  "naam": "Bedrijvengebied Veelaan"
+ },
+ {
+  "code": "BU0363MA09",
+  "naam": "Architectenbuurt"
+ },
+ {
+  "code": "BU0363MA10",
+  "naam": "Cruquiusbuurt"
+ },
+ {
+  "code": "BU0363MA11",
+  "naam": "Bedrijvengebied Zeeburgerkade"
+ },
+ {
+  "code": "BU0363MB01",
+  "naam": "Weesperzijde-Noord"
+ },
+ {
+  "code": "BU0363MB02",
+  "naam": "Weesperzijde-Midden/Zuid"
+ },
+ {
+  "code": "BU0363MB03",
+  "naam": "Parooldriehoek"
+ },
+ {
+  "code": "BU0363MC01",
+  "naam": "Oosterparkbuurt-Noordwest"
+ },
+ {
+  "code": "BU0363MC02",
+  "naam": "Oosterpark"
+ },
+ {
+  "code": "BU0363MC03",
+  "naam": "Oosterparkbuurt-Zuidwest"
+ },
+ {
+  "code": "BU0363MC04",
+  "naam": "Oosterparkbuurt-Zuidoost"
+ },
+ {
+  "code": "BU0363MD01",
+  "naam": "Transvaalbuurt-West"
+ },
+ {
+  "code": "BU0363MD02",
+  "naam": "Transvaalbuurt-Oost"
+ },
+ {
+  "code": "BU0363ME01",
+  "naam": "Dapperbuurt-Noord"
+ },
+ {
+  "code": "BU0363ME02",
+  "naam": "Dapperbuurt-Zuid"
+ },
+ {
+  "code": "BU0363ME03",
+  "naam": "Oostpoort"
+ },
+ {
+  "code": "BU0363MF01",
+  "naam": "Timorpleinbuurt-Noord"
+ },
+ {
+  "code": "BU0363MF02",
+  "naam": "Timorpleinbuurt-Zuid"
+ },
+ {
+  "code": "BU0363MF03",
+  "naam": "Ambonpleinbuurt"
+ },
+ {
+  "code": "BU0363MG01",
+  "naam": "Makassarpleinbuurt"
+ },
+ {
+  "code": "BU0363MG02",
+  "naam": "Zeeburgerdijk-Oost"
+ },
+ {
+  "code": "BU0363MG03",
+  "naam": "Sumatraplantsoenbuurt"
+ },
+ {
+  "code": "BU0363MG04",
+  "naam": "Flevopark"
+ },
+ {
+  "code": "BU0363MH01",
+  "naam": "Sluisbuurt"
+ },
+ {
+  "code": "BU0363MH02",
+  "naam": "Sportheldenbuurt"
+ },
+ {
+  "code": "BU0363MH03",
+  "naam": "Oostpunt Zeeburgereiland"
+ },
+ {
+  "code": "BU0363MH04",
+  "naam": "Baaibuurt-West"
+ },
+ {
+  "code": "BU0363MH05",
+  "naam": "Baaibuurt-Oost"
+ },
+ {
+  "code": "BU0363MH06",
+  "naam": "Bovendiep/Diemerpark"
+ },
+ {
+  "code": "BU0363MJ01",
+  "naam": "Steigereiland-Zuid"
+ },
+ {
+  "code": "BU0363MJ02",
+  "naam": "Steigereiland-Noord"
+ },
+ {
+  "code": "BU0363MJ03",
+  "naam": "Rieteilanden-West"
+ },
+ {
+  "code": "BU0363MJ04",
+  "naam": "Joris Ivenspleinbuurt"
+ },
+ {
+  "code": "BU0363MJ05",
+  "naam": "Ed Pelsterparkbuurt"
+ },
+ {
+  "code": "BU0363MK01",
+  "naam": "Buiteneiland"
+ },
+ {
+  "code": "BU0363MK02",
+  "naam": "Pampusbuurt-West"
+ },
+ {
+  "code": "BU0363MK03",
+  "naam": "Pampusbuurt-Oost"
+ },
+ {
+  "code": "BU0363MK04",
+  "naam": "Centrumeiland"
+ },
+ {
+  "code": "BU0363MK05",
+  "naam": "Muidenbuurt-West"
+ },
+ {
+  "code": "BU0363ML01",
+  "naam": "Havenkwartier IJburg"
+ },
+ {
+  "code": "BU0363ML02",
+  "naam": "Theo van Goghparkbuurt"
+ },
+ {
+  "code": "BU0363ML03",
+  "naam": "Rieteiland-Oost"
+ },
+ {
+  "code": "BU0363MM01",
+  "naam": "Van der Kunbuurt"
+ },
+ {
+  "code": "BU0363MM02",
+  "naam": "De Eenhoorn"
+ },
+ {
+  "code": "BU0363MM03",
+  "naam": "Don Bosco"
+ },
+ {
+  "code": "BU0363MM04",
+  "naam": "Julianapark"
+ },
+ {
+  "code": "BU0363MM05",
+  "naam": "Frankendael"
+ },
+ {
+  "code": "BU0363MM06",
+  "naam": "Tuindorp Amstelstation"
+ },
+ {
+  "code": "BU0363MM07",
+  "naam": "De Wetbuurt"
+ },
+ {
+  "code": "BU0363MM08",
+  "naam": "Tuindorp Frankendael"
+ },
+ {
+  "code": "BU0363MN01",
+  "naam": "Linnaeusparkbuurt"
+ },
+ {
+  "code": "BU0363MN02",
+  "naam": "Middenmeer-Noord"
+ },
+ {
+  "code": "BU0363MN03",
+  "naam": "Middenmeer-Zuid"
+ },
+ {
+  "code": "BU0363MN04",
+  "naam": "Science Park-Noord"
+ },
+ {
+  "code": "BU0363MN05",
+  "naam": "Science Park-Zuid"
+ },
+ {
+  "code": "BU0363MN06",
+  "naam": "Sportpark Middenmeer-Zuid"
+ },
+ {
+  "code": "BU0363MN07",
+  "naam": "Sportpark Middenmeer-Noord"
+ },
+ {
+  "code": "BU0363MN08",
+  "naam": "Park de Meer"
+ },
+ {
+  "code": "BU0363MN09",
+  "naam": "Sportpark Voorland"
+ },
+ {
+  "code": "BU0363MP01",
+  "naam": "Drieburg"
+ },
+ {
+  "code": "BU0363MP02",
+  "naam": "Nieuwe Oosterbegraafplaats"
+ },
+ {
+  "code": "BU0363MP03",
+  "naam": "Betondorp"
+ },
+ {
+  "code": "BU0363MQ01",
+  "naam": "De Omval"
+ },
+ {
+  "code": "BU0363MQ02",
+  "naam": "Overamstel"
+ },
+ {
+  "code": "BU0363MQ03",
+  "naam": "Amstelglorie"
+ },
+ {
+  "code": "BU0363MQ04",
+  "naam": "Amstelkwartier-West"
+ },
+ {
+  "code": "BU0363MQ05",
+  "naam": "Amstelkwartier-Noord"
+ },
+ {
+  "code": "BU0363MQ06",
+  "naam": "Amstelkwartier-Zuid"
+ },
+ {
+  "code": "BU0363MQ07",
+  "naam": "Weespertrekvaart"
+ }
+]

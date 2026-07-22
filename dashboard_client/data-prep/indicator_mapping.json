@@ -1,0 +1,143 @@
+{
+  "meta": {
+    "bron": "CBS Kerncijfers Wijken en Buurten 2025 - Toelichting variabelen (Toelichting-variabelen-kwb-2025.pdf, stand maart 2026)",
+    "doel": "Indicatorenmapping voor demografisch dashboard Dynamo Amsterdam: bepalen waar in stadsdeel Oost welzijnsfaciliteiten moeten komen op basis van bevolkingsopbouw en -ontwikkeling",
+    "opgesteld": "2026-07-10",
+    "regioniveaus": "gemeente (GM), wijk (WK), buurt (BU); gwb_code identificeert het niveau, recs geeft het soort regio",
+    "kernkolommen_altijd_meenemen": ["regio", "gm_naam", "recs", "gwb_code", "ind_wbi", "a_inw"],
+    "let_op": [
+      "Aantallen op wijk-/buurtniveau zijn aselect afgerond op veelvouden van 5; sommen van buurten tellen niet altijd op tot wijk-/gemeentetotaal.",
+      "ind_wbi gebruiken bij jaar-op-jaar vergelijking: waarde 3 betekent gewijzigde afbakening, cijfers niet zonder meer vergelijkbaar.",
+      "Veel leeftijds-, huishoudens- en herkomstvariabelen zijn aantallen; percentages moeten zelf worden afgeleid (bijv. p_00_14 = a_00_14 / a_inw * 100).",
+      "Inkomens-, zorg-, sociale zekerheid- en onderwijsvariabelen zijn per maart 2026 nog niet allemaal gevuld voor peiljaar 2025 (legenda: leeg = komt nog); zo nodig terugvallen op KWB 2023/2024.",
+      "Zorgcijfers (jeugdzorg, Wmo) zijn afgerond op vijftallen; waarden 0-7 zijn geheim gezet."
+    ]
+  },
+  "themas": [
+    {
+      "id": "basis_demografie",
+      "titel": "Basisdemografie & wijkprofiel",
+      "dynamo_dienst": "Buurtwerk, Huizen van de Wijk en participatie (algemene voorzieningen voor alle bewoners)",
+      "indicatoren": [
+        { "kolom": "a_inw", "label": "Aantal inwoners", "eenheid": "aantal", "waarom": "Draagvlak: bepaalt het potentiele bereik van een Huis van de Wijk of buurtvoorziening." },
+        { "kolom": "bev_dich", "label": "Bevolkingsdichtheid", "eenheid": "aantal inwoners per km2", "waarom": "Hoge dichtheid = groot loopafstand-bereik van een fysieke locatie; laag = spreiding of outreach nodig." },
+        { "kolom": "a_hh", "label": "Huishoudens totaal", "eenheid": "aantal", "waarom": "Basis voor huishoudensgerichte dienstverlening en noemer voor afgeleide percentages." },
+        { "kolom": "g_hhgro", "label": "Gemiddelde huishoudensgrootte", "eenheid": "aantal personen", "waarom": "Onderscheidt gezinsbuurten (kinderwerk) van alleenwonenden-buurten (ontmoeting/eenzaamheid)." },
+        { "kolom": "p_geb", "label": "Geboorte relatief", "eenheid": "per 1.000 inwoners", "waarom": "Signaal van jonge, groeiende buurten waar op termijn kinderwerk nodig is (bevolkingsontwikkeling)." },
+        { "kolom": "p_ste", "label": "Sterfte relatief", "eenheid": "per 1.000 inwoners", "waarom": "Signaal van sterk vergrijsde buurten; samen met p_geb indicatief voor demografische dynamiek." },
+        { "kolom": "ste_mvs", "label": "Mate van stedelijkheid", "eenheid": "code 1-5", "waarom": "Context bij bereikbaarheids- en spreidingskeuzes; in Amsterdam Oost vrijwel overal klasse 1, dus vooral controlevariabele." }
+      ]
+    },
+    {
+      "id": "jeugd_jongeren",
+      "titel": "Jeugd & jongeren",
+      "dynamo_dienst": "Jeugd- en jongerenwerk en kinderwerk",
+      "indicatoren": [
+        { "kolom": "a_00_14", "label": "Inwoners 0 tot 15 jaar", "eenheid": "aantal", "waarom": "Directe doelgroep kinderwerk; absoluut volume bepaalt capaciteitsbehoefte per buurt." },
+        { "kolom": "a_15_24", "label": "Inwoners 15 tot 25 jaar", "eenheid": "aantal", "waarom": "Directe doelgroep jongerenwerk; buurten met veel tieners/jongvolwassenen vragen jongerencentra en ambulant jongerenwerk." },
+        { "kolom": "a_hh_m_k", "label": "Huishoudens met kinderen", "eenheid": "aantal", "waarom": "Gezinsdichtheid; ouders zijn ingang voor opvoedondersteuning en kinderactiviteiten." },
+        { "kolom": "p_jz_tn", "label": "Jongeren met jeugdzorg in natura", "eenheid": "% van personen tot 23 jaar", "waarom": "Proxy voor problematiek onder jeugd; hoog percentage = behoefte aan preventief jongerenwerk naast geindiceerde zorg." },
+        { "kolom": "a_ons_po", "label": "Leerlingen primair onderwijs (woonbuurt)", "eenheid": "aantal", "waarom": "Schoolgaande basisschoolkinderen per woonbuurt; aanknopingspunt voor naschools kinderwerk en samenwerking met scholen." },
+        { "kolom": "a_ons_vovavo", "label": "Leerlingen voortgezet onderwijs (woonbuurt)", "eenheid": "aantal", "waarom": "Middelbare scholieren per woonbuurt; kerndoelgroep tienerwerk." },
+        { "kolom": "g_afs_kv", "label": "Afstand tot kinderdagverblijf", "eenheid": "km", "waarom": "Bestaand voorzieningenniveau voor jonge gezinnen; grote afstand kan wijzen op voorzieningenarme gezinsbuurt." }
+      ]
+    },
+    {
+      "id": "ouderen_vergrijzing",
+      "titel": "Ouderen & vergrijzing",
+      "dynamo_dienst": "Ouderenwerk en activiteiten voor senioren",
+      "indicatoren": [
+        { "kolom": "a_65_oo", "label": "Inwoners 65 jaar of ouder", "eenheid": "aantal", "waarom": "Directe doelgroep ouderenwerk; absoluut volume bepaalt waar seniorenactiviteiten renderen." },
+        { "kolom": "a_soz_ow", "label": "Personen met AOW-uitkering", "eenheid": "aantal", "waarom": "Alternatieve, registergebaseerde maat voor het aantal ouderen (AOW-leeftijd ligt boven 65); dekt de feitelijke pensioenpopulatie." },
+        { "kolom": "a_45_64", "label": "Inwoners 45 tot 65 jaar", "eenheid": "aantal", "waarom": "Aankomende vergrijzing: buurten met veel 45-64-jarigen worden de ouderenbuurten van over 10-20 jaar (ontwikkelperspectief voor locatiekeuze)." },
+        { "kolom": "a_verwed", "label": "Verweduwde inwoners", "eenheid": "aantal", "waarom": "Verweduwing concentreert zich bij ouderen en is een sterke voorspeller van eenzaamheid; doelgroep voor ontmoetingsactiviteiten." },
+        { "kolom": "p_ste", "label": "Sterfte relatief", "eenheid": "per 1.000 inwoners", "waarom": "Hoge sterfte duidt op sterk vergrijsde buurt of aanwezigheid verzorgings-/verpleeghuis; relevant voor samenwerking en mantelzorgondersteuning." },
+        { "kolom": "g_afs_hp", "label": "Afstand tot huisartsenpraktijk", "eenheid": "km", "waarom": "Nabijheid eerstelijnszorg voor minder mobiele ouderen; grote afstand versterkt de meerwaarde van een welzijnslocatie dichtbij." }
+      ]
+    },
+    {
+      "id": "bestaanszekerheid_schuldhulp",
+      "titel": "Bestaanszekerheid & schuldhulp",
+      "dynamo_dienst": "Maatschappelijke dienstverlening: schuldhulpverlening, financieel advies, sociaal raadslieden",
+      "indicatoren": [
+        { "kolom": "a_soz_wb", "label": "Personen met bijstandsuitkering (Participatiewet)", "eenheid": "aantal", "waarom": "Kerndoelgroep schuldhulp en sociaal raadslieden; bijstandsontvangers hebben het vaakst financieel-administratieve hulpvragen. In oudere KWB-jaargangen anders benoemd (bijv. a_bijstuitk); controleer per jaargang." },
+        { "kolom": "p_ink_ar", "label": "Personen in armoede", "eenheid": "%", "waarom": "Nieuwe CBS/Nibud/SCP-armoededefinitie (vanaf verslagjaar 2024): direct de populatie die financieel niet rondkomt. Vervangt oudere indicatoren huishoudens onder/rond sociaal minimum." },
+        { "kolom": "p_ink_ba", "label": "Personen tot 25% boven armoedegrens", "eenheid": "%", "waarom": "Kwetsbare middengroep die bij een tegenslag in de schulden raakt; preventieve doelgroep voor vroegsignalering en financieel advies." },
+        { "kolom": "p_hh_li", "label": "40% huishoudens met laagste inkomen", "eenheid": "%", "waarom": "Structurele maat voor lage-inkomensconcentratie op huishoudensniveau; robuust vergelijkbaar tussen buurten." },
+        { "kolom": "g_ink_pi", "label": "Gemiddeld inkomen per inwoner", "eenheid": "x 1.000 euro", "waarom": "Algemene welvaartsmaat; laag gemiddelde markeert buurten waar inloopspreekuren financien prioriteit hebben." },
+        { "kolom": "m_hh_ver", "label": "Mediaan vermogen particuliere huishoudens", "eenheid": "x 1.000 euro", "waarom": "Laag of negatief mediaan vermogen betekent geen buffer: schuldproblematiek escaleert er sneller." },
+        { "kolom": "p_arb_pp", "label": "Nettoarbeidsparticipatie", "eenheid": "% van 15-75-jarigen", "waarom": "Lage participatie hangt samen met uitkeringsafhankelijkheid en behoefte aan activering/participatietrajecten." },
+        { "kolom": "a_soz_ww", "label": "Personen met WW-uitkering", "eenheid": "aantal", "waarom": "Recente werkloosheid: doelgroep voor preventieve budgetondersteuning voordat schulden ontstaan." }
+      ]
+    },
+    {
+      "id": "eenzaamheid_huishoudens",
+      "titel": "Eenzaamheid & huishoudenssamenstelling",
+      "dynamo_dienst": "Buurtwerk, Huizen van de Wijk (ontmoeting) en ouderenwerk gericht op eenzaamheidsbestrijding",
+      "indicatoren": [
+        { "kolom": "a_1p_hh", "label": "Eenpersoonshuishoudens", "eenheid": "aantal", "waarom": "Alleenwonen is de sterkste demografische risicofactor voor eenzaamheid; afgeleid aandeel (a_1p_hh/a_hh) tonen naast het absolute aantal." },
+        { "kolom": "g_hhgro", "label": "Gemiddelde huishoudensgrootte", "eenheid": "aantal personen", "waarom": "Lage gemiddelde grootte bevestigt dominantie van alleenwonenden en stellen zonder kinderen." },
+        { "kolom": "a_verwed", "label": "Verweduwde inwoners", "eenheid": "aantal", "waarom": "Verlies van partner is een scharniermoment voor sociaal isolement; gerichte outreach mogelijk." },
+        { "kolom": "a_gesch", "label": "Gescheiden inwoners", "eenheid": "aantal", "waarom": "Gescheiden alleenstaanden (vaak 45+) zijn een groeiende eenzaamheidsgroep en doelgroep voor ontmoetingsactiviteiten." },
+        { "kolom": "a_hh_z_k", "label": "Meerpersoonshuishoudens zonder kinderen", "eenheid": "aantal", "waarom": "Completeert het huishoudensbeeld; buurten zonder gezinnen vragen ander activiteitenaanbod dan gezinsbuurten." },
+        { "kolom": "a_65_oo", "label": "Inwoners 65 jaar of ouder", "eenheid": "aantal", "waarom": "Combinatie ouderdom x alleenwonen (kruising met a_1p_hh op buurtniveau) markeert de hoogste eenzaamheidsrisico's." }
+      ]
+    },
+    {
+      "id": "diversiteit_inburgering",
+      "titel": "Diversiteit & herkomst",
+      "dynamo_dienst": "Buurtwerk/participatie, taal- en inburgeringsondersteuning, sociaal raadslieden (regelingen, formulieren)",
+      "indicatoren": [
+        { "kolom": "a_nl_all", "label": "Herkomst Nederland", "eenheid": "aantal", "waarom": "Referentiegroep om aandelen herkomstgroepen per buurt te berekenen." },
+        { "kolom": "a_eur_al", "label": "Herkomst Europa (excl. Nederland)", "eenheid": "aantal", "waarom": "O.a. arbeidsmigranten; specifieke vragen rond taal, werk en rechten bij sociaal raadslieden." },
+        { "kolom": "a_neu_al", "label": "Herkomst buiten Europa", "eenheid": "aantal", "waarom": "Groep met gemiddeld de grootste afstand tot voorzieningen; prioriteit voor cultuursensitief buurtwerk en inburgeringsondersteuning. Let op: Turkije en Kaukasus-/Centraal-Aziatische landen tellen sinds correctie okt 2025 onder buiten Europa." },
+        { "kolom": "a_gbl_ne", "label": "Geboren buiten Nederland, herkomst buiten Europa", "eenheid": "aantal", "waarom": "Eerste generatie migranten: meest directe doelgroep voor taallessen en wegwijs-ondersteuning. Alternatieve schrijfwijze in overzichtstabel: a_gebl_ne." },
+        { "kolom": "a_gbl_eu", "label": "Geboren buiten Nederland, herkomst Europa (excl. NL)", "eenheid": "aantal", "waarom": "Eerste generatie Europese migranten (o.a. EU-arbeidsmigranten). Alternatieve schrijfwijze in overzichtstabel: a_gebl_eu." },
+        { "kolom": "a_opl_bvm", "label": "Hoogst behaald onderwijsniveau: basisonderwijs/vmbo/mbo1", "eenheid": "aantal (15-75 jaar)", "waarom": "Proxy voor beperkte basisvaardigheden en laaggeletterdheid; overlapt met behoefte aan formulierenhulp en taalondersteuning." }
+      ]
+    },
+    {
+      "id": "zorg_mantelzorg",
+      "titel": "Zorg, beperking & mantelzorg",
+      "dynamo_dienst": "Mantelzorgondersteuning en aansluiting welzijn-zorg (welzijn op recept, Wmo-voorliggend aanbod)",
+      "indicatoren": [
+        { "kolom": "p_wmo_t", "label": "Wmo-clienten per 1.000 inwoners", "eenheid": "per 1.000 inwoners", "waarom": "Waar veel Wmo-maatwerk wordt gebruikt, wonen veel mensen met beperkingen en dus ook hun mantelzorgers: kerngebied voor mantelzorgondersteuning en voorliggend welzijnsaanbod." },
+        { "kolom": "a_wmo_t", "label": "Wmo-clienten totaal", "eenheid": "aantal", "waarom": "Absoluut volume voor capaciteitsplanning van mantelzorgondersteuning per gebied." },
+        { "kolom": "a_soz_ao", "label": "Personen met arbeidsongeschiktheidsuitkering", "eenheid": "aantal", "waarom": "Chronische gezondheidsproblemen onder de beroepsbevolking; doelgroep voor dagbesteding, participatie en financieel advies." },
+        { "kolom": "p_jz_tn", "label": "Jongeren met jeugdzorg in natura", "eenheid": "% van personen tot 23 jaar", "waarom": "Gezinnen met jeugdzorg bevatten vaak jonge mantelzorgers en opvoedstress; koppelvlak jeugdwerk-zorg." },
+        { "kolom": "g_afs_hp", "label": "Afstand tot huisartsenpraktijk", "eenheid": "km", "waarom": "Nabijheid van de huisarts als verwijzer (welzijn op recept) en als vindplaats van overbelaste mantelzorgers." },
+        { "kolom": "a_65_oo", "label": "Inwoners 65 jaar of ouder", "eenheid": "aantal", "waarom": "Vergrijzing drijft de mantelzorgvraag; combinatie met p_wmo_t wijst gebieden aan met hoge zorg- en mantelzorgdruk." }
+      ]
+    }
+  ],
+  "afgeleide_indicatoren": [
+    { "naam": "p_00_14", "formule": "a_00_14 / a_inw * 100", "label": "Aandeel 0-14 jaar", "eenheid": "%" },
+    { "naam": "p_15_24", "formule": "a_15_24 / a_inw * 100", "label": "Aandeel 15-24 jaar", "eenheid": "%" },
+    { "naam": "p_65_oo", "formule": "a_65_oo / a_inw * 100", "label": "Aandeel 65-plus", "eenheid": "%" },
+    { "naam": "p_1p_hh", "formule": "a_1p_hh / a_hh * 100", "label": "Aandeel eenpersoonshuishoudens", "eenheid": "%" },
+    { "naam": "p_hh_m_k", "formule": "a_hh_m_k / a_hh * 100", "label": "Aandeel huishoudens met kinderen", "eenheid": "%" },
+    { "naam": "p_herkomst_buiten_eur", "formule": "a_neu_al / a_inw * 100", "label": "Aandeel herkomst buiten Europa", "eenheid": "%" },
+    { "naam": "p_bijstand_hh", "formule": "a_soz_wb / a_hh * 100", "label": "Bijstandsontvangers per 100 huishoudens", "eenheid": "%", "opmerking": "benadering: teller is personen, noemer huishoudens" },
+    { "naam": "p_verwed_65", "formule": "a_verwed / a_65_oo * 100", "label": "Verweduwden t.o.v. 65-plussers", "eenheid": "%", "opmerking": "ruwe proxy, verweduwing komt ook onder 65 voor" }
+  ],
+  "vergelijkingsaanpak": {
+    "referenties": [
+      { "niveau": "gemeente Amsterdam (GM0363)", "rol": "primaire benchmark", "toelichting": "Zit als gemeenterij in hetzelfde KWB-bestand; bepaalt of een buurt binnen de Amsterdamse context afwijkt. Dynamo positioneert zich binnen de stad, dus dit is de relevantste maatstaf." },
+      { "niveau": "stadsdeel Oost (geaggregeerd)", "rol": "secundaire benchmark", "toelichting": "KWB kent geen stadsdeelniveau; aggregeer zelf de wijken/buurten van stadsdeel Oost (gewogen: aantallen sommeren, percentages en gemiddelden wegen naar a_inw of a_hh). Hiermee onderscheid je buurten die binnen Oost zelf relatief kwetsbaar zijn - het meest sturend voor de spreiding van Dynamo-locaties binnen Oost." },
+      { "niveau": "Nederland (landelijk totaal)", "rol": "context", "toelichting": "Alleen voor duiding richting gemeente en financiers; landelijke kwintielindicatoren (p_hh_li, p_ink_hi, p_ink_li) zijn per definitie al landelijk genormeerd (landelijk gemiddelde 40% resp. 20%)." }
+    ],
+    "vorm": [
+      { "type": "indexcijfer (referentie = 100)", "gebruik": "Voor aandelen, gemiddelden en dichtheden (p_*, g_*, bev_dich): buurtwaarde / Amsterdam-waarde * 100. Intuitief op een dashboard (bijv. index 140 = 40% boven stadsgemiddelde) en vergelijkbaar over indicatoren met verschillende eenheden heen." },
+      { "type": "percentagepunt-verschil", "gebruik": "Aanvullend voor percentage-indicatoren (p_ink_ar, p_hh_li, p_jz_tn, afgeleide aandelen): buurt% minus referentie%. Nodig naast het indexcijfer omdat een index bij kleine percentages hard oploopt (2% vs 1% = index 200 maar slechts 1 procentpunt)." },
+      { "type": "absolute aantallen (niet indexeren)", "gebruik": "Voor capaciteits- en locatiebeslissingen altijd het absolute doelgroepvolume tonen (a_00_14, a_65_oo, a_soz_wb, a_1p_hh): een buurt met index 150 maar 200 ouderen is minder locatie-relevant dan een buurt met index 110 en 2.000 ouderen." }
+    ],
+    "advies": "Dashboard per thema: (1) absolute doelgroepomvang per buurt (kaart/staaf), (2) indexcijfer t.o.v. gemeente Amsterdam als default met omschakeling naar stadsdeel Oost-aggregaat, (3) percentagepunt-verschil als tooltip/detail bij percentage-indicatoren. Prioriteitsscore per thema = gestandaardiseerde combinatie van volume (aantal) en concentratie (index), zodat locatiekeuze beide dimensies weegt. Gebruik ind_wbi als filter bij trendvergelijking over jaargangen."
+  },
+  "alternatieve_kolomnamen": [
+    { "kwb2025": "a_gbl_eu", "alternatief": "a_gebl_eu", "toelichting": "Overzichtstabel in de PDF schrijft a_gebl_eu, de definitiesectie a_gbl_eu; controleer de kolomkop in het feitelijke databestand per jaargang." },
+    { "kwb2025": "a_gbl_ne", "alternatief": "a_gebl_ne", "toelichting": "Idem als hierboven." },
+    { "kwb2025": "p_1gezw_vw", "alternatief": "p_1gezw_hvw", "toelichting": "Overzicht vermeldt p_1gezw_vw, definitiesectie p_1gezw_hvw (vrijstaande woningen); niet in onze themaselectie maar genoteerd voor volledigheid." },
+    { "kwb2025": "p_ink_ar / p_ink_ba", "alternatief": "p_hh_osm / p_hh_110 e.d. (oude indicatoren huishoudens onder/rond sociaal minimum)", "toelichting": "Vanaf verslagjaar 2024 nieuwe armoededefinitie (CBS/Nibud/SCP); oudere jaargangen bevatten in plaats daarvan sociaal-minimum-indicatoren met andere kolomnamen. Niet 1-op-1 vergelijkbaar over de definitiebreuk heen." },
+    { "kwb2025": "a_soz_wb / a_soz_ao / a_soz_ww / a_soz_ow", "alternatief": "in oudere jaargangen soms andere benamingen (bijv. a_bijstuitk, a_ao_uitk, a_ww_uitk, a_aow)", "toelichting": "Sociale-zekerheidsvariabelen worden regelmatig gereviseerd; map per jaargang op basis van de bijbehorende toelichting." }
+  ]
+}

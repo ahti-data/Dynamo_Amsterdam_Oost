@@ -1,0 +1,1225 @@
+[
+  {
+    "source": "RIVM Beweegvriendelijke omgeving",
+    "slug": "rivm_beweegvriendelijke_omgeving_50143NED",
+    "table_id": "50143NED",
+    "title": "Beweegvriendelijke omgeving per wijk en buurt; 2024",
+    "modified": "2025-07-24T02:00:00",
+    "period": "2024",
+    "rows": 18310,
+    "columns": 10,
+    "topics": 8,
+    "years_in_download": [],
+    "unique_region_codes": 18310,
+    "row_levels": {
+      "land": 1,
+      "gemeente": 342,
+      "wijk": 3393,
+      "buurt": 14574
+    },
+    "amsterdam_rows": 628,
+    "file_bytes": 1743042
+  },
+  {
+    "source": "RIVM Gezondheid wijk/buurt",
+    "slug": "rivm_gezondheid_wijk_buurt_50150NED",
+    "table_id": "50150NED",
+    "title": "Gezondheid per wijk en buurt; 2012/2016/2020/2022/2024 (indeling 2024)",
+    "modified": "2025-11-18T02:00:00",
+    "period": "2012, 2016, 2020, 2022, 2024",
+    "rows": 91550,
+    "columns": 65,
+    "topics": 60,
+    "years_in_download": [
+      "2012",
+      "2016",
+      "2020",
+      "2022",
+      "2024"
+    ],
+    "unique_region_codes": 18310,
+    "row_levels": {
+      "land": 5,
+      "gemeente": 1710,
+      "wijk": 16965,
+      "buurt": 72870
+    },
+    "amsterdam_rows": 3140,
+    "file_bytes": 22670978
+  },
+  {
+    "source": "RIVM Regiobeeld wijk/buurt",
+    "slug": "rivm_regiobeeld_wijk_buurt_50149NED",
+    "table_id": "50149NED",
+    "title": "RIVM Regiobeeld; wijk en buurt (indeling 2024), 2014-2023",
+    "modified": "2025-11-11T02:00:00",
+    "period": "1999-2040",
+    "rows": 549300,
+    "columns": 31,
+    "topics": 27,
+    "years_in_download": [
+      "2014",
+      "2015",
+      "2016",
+      "2017",
+      "2018",
+      "2019",
+      "2020",
+      "2021",
+      "2022",
+      "2023"
+    ],
+    "unique_region_codes": 18310,
+    "row_levels": {
+      "land": 30,
+      "gemeente": 10260,
+      "wijk": 101790,
+      "buurt": 437220
+    },
+    "amsterdam_rows": 18840,
+    "file_bytes": 57200527
+  },
+  {
+    "source": "CBS SES-WOA",
+    "slug": "cbs_ses_woa_86296NED",
+    "table_id": "86296NED",
+    "title": "Sociaal-economische status; scores per wijk en buurt, regio-indeling 2025",
+    "modified": "2026-06-03T02:00:00",
+    "period": "2014-2024",
+    "rows": 203434,
+    "columns": 46,
+    "topics": 43,
+    "years_in_download": [
+      "2014",
+      "2015",
+      "2016",
+      "2017",
+      "2018",
+      "2019",
+      "2020",
+      "2021",
+      "2022",
+      "2023",
+      "2024"
+    ],
+    "unique_region_codes": 18494,
+    "row_levels": {
+      "gemeente": 3762,
+      "wijk": 37653,
+      "buurt": 162019
+    },
+    "amsterdam_rows": 6908,
+    "file_bytes": 43510826
+  },
+  {
+    "source": "CBS Nabijheid voorzieningen",
+    "slug": "cbs_nabijheid_voorzieningen_86270NED",
+    "table_id": "86270NED",
+    "title": "Nabijheid voorzieningen; afstand locatie, wijk- en buurtcijfers 2025",
+    "modified": "2026-03-16T02:00:00",
+    "period": "2025",
+    "rows": 18495,
+    "columns": 116,
+    "topics": 114,
+    "years_in_download": [],
+    "unique_region_codes": 18495,
+    "row_levels": {
+      "land": 1,
+      "gemeente": 342,
+      "wijk": 3423,
+      "buurt": 14729
+    },
+    "amsterdam_rows": 628,
+    "file_bytes": 7573400
+  },
+  {
+    "source": "CBS Sociaal domein",
+    "slug": "cbs_sociaal_domein_85994NED",
+    "table_id": "85994NED",
+    "title": "Gebruik voorzieningen sociaal domein; aantal voorzieningen, wijken, 2024",
+    "modified": "2026-01-27T02:00:00",
+    "period": "2024",
+    "rows": 209160,
+    "columns": 13,
+    "topics": 8,
+    "years_in_download": [
+      "2024"
+    ],
+    "unique_region_codes": 3639,
+    "row_levels": {
+      "gemeente": 18592,
+      "wijk": 185192
+    },
+    "amsterdam_rows": 6216,
+    "file_bytes": 23512096
+  },
+  {
+    "source": "CBS Wmo naar type",
+    "slug": "cbs_wmo_type_86158NED",
+    "table_id": "86158NED",
+    "title": "Wmo-cliënten; type maatwerkvoorziening, wijken, 2025",
+    "modified": "2026-05-28T02:00:00",
+    "period": "2025",
+    "rows": 26355,
+    "columns": 10,
+    "topics": 6,
+    "years_in_download": [
+      "2025"
+    ],
+    "unique_region_codes": 3733,
+    "row_levels": {
+      "gemeente": 2359,
+      "wijk": 23772
+    },
+    "amsterdam_rows": 777,
+    "file_bytes": 2687250
+  },
+  {
+    "source": "CBS Jeugdzorg wijken",
+    "slug": "cbs_jeugdzorg_wijken_86204NED",
+    "table_id": "86204NED",
+    "title": "Jongeren met jeugdzorg en jeugdzorgtrajecten in natura; wijken, 2025",
+    "modified": "2026-04-30T06:30:00",
+    "period": "2025",
+    "rows": 22596,
+    "columns": 25,
+    "topics": 21,
+    "years_in_download": [
+      "2025"
+    ],
+    "unique_region_codes": 3766,
+    "row_levels": {
+      "land": 6,
+      "gemeente": 2052,
+      "wijk": 20538
+    },
+    "amsterdam_rows": 666,
+    "file_bytes": 2891202
+  },
+  {
+    "source": "Amsterdam O&S BBGA",
+    "rows": 7568231,
+    "columns": 4,
+    "variables_in_data": 918,
+    "metadata_indicators": 918,
+    "years_min_max": [
+      2001,
+      2055
+    ],
+    "year_count": 53,
+    "unique_area_codes": 949,
+    "sample_area_codes": [
+      "0000",
+      "1011",
+      "1012",
+      "1013",
+      "1014",
+      "1015",
+      "1016",
+      "1017",
+      "1018",
+      "1019",
+      "1021",
+      "1022",
+      "1023",
+      "1024",
+      "1025",
+      "1026",
+      "1027",
+      "1028",
+      "1031",
+      "1032",
+      "1033",
+      "1034",
+      "1035",
+      "1036",
+      "1037"
+    ],
+    "file_bytes": 185389660
+  },
+  {
+    "source": "BZK Leefbaarometer 2024",
+    "files": [
+      {
+        "file": "raw\\leefbaarometer_2024\\uitgepakt_relevant\\Leefbaarometer 3.0 - Meting 2024 - open data\\Leefbaarometer-ontwikkeling buurten 2002-2024.csv",
+        "rows": 498416,
+        "columns": [
+          "bu_code",
+          "bu_naam",
+          "jaar_van",
+          "jaar_naar",
+          "lbm",
+          "fys",
+          "onv",
+          "soc",
+          "vrz",
+          "won"
+        ],
+        "years": [],
+        "unique_regions": 14013,
+        "file_bytes": 50205361
+      },
+      {
+        "file": "raw\\leefbaarometer_2024\\uitgepakt_relevant\\Leefbaarometer 3.0 - Meting 2024 - open data\\Leefbaarometer-ontwikkeling gemeenten 2002-2024.csv",
+        "rows": 12312,
+        "columns": [
+          "gm_code",
+          "gm_naam",
+          "jaar_van",
+          "jaar_naar",
+          "lbm",
+          "fys",
+          "onv",
+          "soc",
+          "vrz",
+          "won"
+        ],
+        "years": [],
+        "unique_regions": 342,
+        "file_bytes": 1118614
+      },
+      {
+        "file": "raw\\leefbaarometer_2024\\uitgepakt_relevant\\Leefbaarometer 3.0 - Meting 2024 - open data\\Leefbaarometer-ontwikkeling wijken 2002-2024.csv",
+        "rows": 120392,
+        "columns": [
+          "wk_code",
+          "wk_naam",
+          "jaar_van",
+          "jaar_naar",
+          "lbm",
+          "fys",
+          "onv",
+          "soc",
+          "vrz",
+          "won"
+        ],
+        "years": [],
+        "unique_regions": 3363,
+        "file_bytes": 11788844
+      },
+      {
+        "file": "raw\\leefbaarometer_2024\\uitgepakt_relevant\\Leefbaarometer 3.0 - Meting 2024 - open data\\Leefbaarometer-scores buurten 2002-2024.csv",
+        "rows": 125105,
+        "columns": [
+          "bu_code",
+          "bu_naam",
+          "jaar",
+          "lbm",
+          "afw",
+          "fys",
+          "onv",
+          "soc",
+          "vrz",
+          "won"
+        ],
+        "years": [
+          "2002",
+          "2008",
+          "2012",
+          "2014",
+          "2016",
+          "2018",
+          "2020",
+          "2022",
+          "2024"
+        ],
+        "unique_regions": 14033,
+        "file_bytes": 16709406
+      },
+      {
+        "file": "raw\\leefbaarometer_2024\\uitgepakt_relevant\\Leefbaarometer 3.0 - Meting 2024 - open data\\Leefbaarometer-scores gemeenten 2002-2024.csv",
+        "rows": 3078,
+        "columns": [
+          "gm_code",
+          "gm_naam",
+          "jaar",
+          "lbm",
+          "afw",
+          "fys",
+          "onv",
+          "soc",
+          "vrz",
+          "won"
+        ],
+        "years": [
+          "2002",
+          "2008",
+          "2012",
+          "2014",
+          "2016",
+          "2018",
+          "2020",
+          "2022",
+          "2024"
+        ],
+        "unique_regions": 342,
+        "file_bytes": 383090
+      },
+      {
+        "file": "raw\\leefbaarometer_2024\\uitgepakt_relevant\\Leefbaarometer 3.0 - Meting 2024 - open data\\Leefbaarometer-scores wijken 2002-2024.csv",
+        "rows": 30152,
+        "columns": [
+          "wk_code",
+          "wk_naam",
+          "jaar",
+          "lbm",
+          "afw",
+          "fys",
+          "onv",
+          "soc",
+          "vrz",
+          "won"
+        ],
+        "years": [
+          "2002",
+          "2008",
+          "2012",
+          "2014",
+          "2016",
+          "2018",
+          "2020",
+          "2022",
+          "2024"
+        ],
+        "unique_regions": 3364,
+        "file_bytes": 3946605
+      }
+    ]
+  },
+  {
+    "source": "Vektis Gemeentezorgspiegel Wmo",
+    "title": "Wmo-cliënten naar maatwerkarrangement en leeftijd, 2019-2024",
+    "period": "2019-2024",
+    "boundary_year": 2024,
+    "geography": [
+      "buurt",
+      "wijk",
+      "gemeente",
+      "VNG/ZN-regio",
+      "land"
+    ],
+    "care_categories": [
+      "Hulp bij het huishouden - totaal",
+      "Hulpmiddelen en diensten - totaal",
+      "Ondersteuning thuis - begeleiding",
+      "Ondersteuning thuis - dagbesteding",
+      "Ondersteuning thuis - totaal",
+      "Overig - overige maatwerkarrangementen",
+      "Overig - totaal",
+      "Totaal zorgdomein - exclusief verblijf en opvang",
+      "Verblijf en opvang - beschermd wonen",
+      "Verblijf en opvang - totaal"
+    ],
+    "privacy": "Categorieën met minder dan 10 cliënten ontbreken; aantallen zijn afgerond op tientallen.",
+    "files": [
+      {
+        "file": "raw\\vektis_gemeentezorgspiegel\\wmo_cijfers_gzs_buurt_alle_leeftijden_publicatie_2025.xlsx",
+        "rows_excluding_header": 248019,
+        "worksheet_dimension": "A1:I248020",
+        "file_bytes": 9181568
+      },
+      {
+        "file": "raw\\vektis_gemeentezorgspiegel\\wmo_cijfers_gzs_buurt_leeftijdscategorieen_publicatie_2025.xlsx",
+        "rows_excluding_header": 772026,
+        "worksheet_dimension": "A1:I772027",
+        "file_bytes": 27744225
+      },
+      {
+        "file": "raw\\vektis_gemeentezorgspiegel\\wmo_cijfers_gzs_publicatie_2025.xlsx",
+        "rows_excluding_header": 28,
+        "worksheet_dimension": "A1:C29",
+        "file_bytes": 132155
+      },
+      {
+        "file": "raw\\vektis_gemeentezorgspiegel\\wmo_cijfers_gzs_wijk_gemeente_regio_land_publicatie_2025.xlsx",
+        "rows_excluding_header": 633635,
+        "worksheet_dimension": "A1:I633636",
+        "file_bytes": 22685897
+      }
+    ]
+  },
+  {
+    "source": "Gemeente Amsterdam maatschappelijke voorzieningen",
+    "slug": "amsterdam_maatschappelijke_voorzieningen",
+    "title": "Voorzieningen op de kaart",
+    "period": "momentopname download 2026-07-10",
+    "geography": "puntlocatie; koppelbaar aan buurt/wijk/GGW-gebied",
+    "files": [
+      {
+        "file": "raw\\amsterdam_maatschappelijke_voorzieningen\\voorzieningen_op_de_kaart.csv",
+        "file_bytes": 264975,
+        "kind": "csv",
+        "rows_excluding_header": 1771,
+        "columns": [
+          "id",
+          "naam",
+          "domein",
+          "categorie",
+          "soort",
+          "straat",
+          "postcode",
+          "huisnummer",
+          "stadsdeel",
+          "geometry"
+        ]
+      },
+      {
+        "file": "raw\\amsterdam_maatschappelijke_voorzieningen\\voorzieningen_op_de_kaart.geojson",
+        "file_bytes": 658651,
+        "kind": "geojson",
+        "features": 1771,
+        "property_fields": [
+          "categorie",
+          "domein",
+          "huisnummer",
+          "id",
+          "naam",
+          "postcode",
+          "soort",
+          "stadsdeel",
+          "straat"
+        ],
+        "geometry_types": {
+          "Point": 1771
+        }
+      }
+    ]
+  },
+  {
+    "source": "Gemeente Amsterdam sportvoorzieningen",
+    "slug": "amsterdam_sportvoorzieningen",
+    "title": "Sportvoorzieningen",
+    "period": "momentopname download 2026-07-10",
+    "geography": "punt-, lijn- en vlakgeometrie; koppelbaar aan buurt/wijk/GGW-gebied",
+    "files": [
+      {
+        "file": "raw\\amsterdam_sportvoorzieningen\\aanbieder.geojson",
+        "file_bytes": 864876,
+        "kind": "geojson",
+        "features": 1763,
+        "property_fields": [
+          "aangepastSporten",
+          "adres",
+          "id",
+          "kvkNummer",
+          "naamAanbieder",
+          "naamSportfaciliteit",
+          "plaats",
+          "postcode",
+          "stadsdeel",
+          "stadspas55",
+          "stadspasJeugd",
+          "typeSport",
+          "website"
+        ],
+        "geometry_types": {
+          "Point": 1763
+        }
+      },
+      {
+        "file": "raw\\amsterdam_sportvoorzieningen\\gymzaal.geojson",
+        "file_bytes": 62291,
+        "kind": "geojson",
+        "features": 90,
+        "property_fields": [
+          "adres",
+          "beheerder",
+          "bijzonderheden",
+          "emailadres",
+          "gebiedsgerichtwerkengebied",
+          "id",
+          "indicatieToegankelijkMindervaliden",
+          "indicatieVoorzieningenMindervaliden",
+          "naam",
+          "omschrijving",
+          "plaats",
+          "postcode",
+          "scheidingswand",
+          "stadsdeel",
+          "telefoonnummer",
+          "type",
+          "website"
+        ],
+        "geometry_types": {
+          "Point": 90
+        }
+      },
+      {
+        "file": "raw\\amsterdam_sportvoorzieningen\\hal.geojson",
+        "file_bytes": 19972,
+        "kind": "geojson",
+        "features": 33,
+        "property_fields": [
+          "aantalHallen",
+          "adres",
+          "emailadres",
+          "exploitant",
+          "gebiedsgerichtwerkengebied",
+          "id",
+          "naam",
+          "plaats",
+          "postcode",
+          "stadsdeel",
+          "telefoonnummer",
+          "type",
+          "vastgoedeigenaar",
+          "verhuuradministratie",
+          "website"
+        ],
+        "geometry_types": {
+          "Point": 33
+        }
+      },
+      {
+        "file": "raw\\amsterdam_sportvoorzieningen\\hardlooproute.geojson",
+        "file_bytes": 111220,
+        "kind": "geojson",
+        "features": 32,
+        "property_fields": [
+          "categorie",
+          "id",
+          "id2",
+          "lengte",
+          "naam"
+        ],
+        "geometry_types": {
+          "MultiLineString": 32
+        }
+      },
+      {
+        "file": "raw\\amsterdam_sportvoorzieningen\\openbare_sportplek.geojson",
+        "file_bytes": 362904,
+        "kind": "geojson",
+        "features": 841,
+        "property_fields": [
+          "foto",
+          "id",
+          "indicatieOverdekt",
+          "naam",
+          "omschrijving",
+          "oppervlakte",
+          "soortLocatie",
+          "soortOmheining",
+          "soortOndergrond",
+          "soortVerlichting",
+          "sportvoorziening"
+        ],
+        "geometry_types": {
+          "Point": 841
+        }
+      },
+      {
+        "file": "raw\\amsterdam_sportvoorzieningen\\park.geojson",
+        "file_bytes": 165373,
+        "kind": "geojson",
+        "features": 47,
+        "property_fields": [
+          "code",
+          "id",
+          "jaarVanActiviteit",
+          "objectsubtype",
+          "objecttype",
+          "omschrijving",
+          "omtrek",
+          "oppervlakte",
+          "windrichting"
+        ],
+        "geometry_types": {
+          "MultiPolygon": 47
+        }
+      },
+      {
+        "file": "raw\\amsterdam_sportvoorzieningen\\veld.geojson",
+        "file_bytes": 1821086,
+        "kind": "geojson",
+        "features": 728,
+        "property_fields": [
+          "id",
+          "id2",
+          "jaarVanActiviteit",
+          "objectsubtype",
+          "objecttype",
+          "omtrek",
+          "oppervlakte",
+          "soortOndergrond",
+          "sportfunctie",
+          "sportpark",
+          "sportparkFunctioneleNaam",
+          "veldindeling"
+        ],
+        "geometry_types": {
+          "MultiPolygon": 728
+        }
+      },
+      {
+        "file": "raw\\amsterdam_sportvoorzieningen\\zwembad.geojson",
+        "file_bytes": 10167,
+        "kind": "geojson",
+        "features": 18,
+        "property_fields": [
+          "aantalHallen",
+          "adres",
+          "emailadres",
+          "exploitant",
+          "gebiedsgerichtwerkengebied",
+          "id",
+          "naam",
+          "plaats",
+          "postcode",
+          "stadsdeel",
+          "telefoonnummer",
+          "type",
+          "vastgoedeigenaar",
+          "verhuuradministratie",
+          "website"
+        ],
+        "geometry_types": {
+          "Point": 18
+        }
+      }
+    ]
+  },
+  {
+    "source": "Gemeente Amsterdam schoolgebouwen",
+    "slug": "amsterdam_schoolgebouwen",
+    "title": "Schoolgebouwen en kengetallen",
+    "period": "momentopname download 2026-07-10",
+    "geography": "adres, stadsdeel en wijk; relaties via accommodatie-, instelling- en object-id",
+    "files": [
+      {
+        "file": "raw\\amsterdam_schoolgebouwen\\accommodatie.csv",
+        "file_bytes": 280226,
+        "kind": "csv",
+        "rows_excluding_header": 1343,
+        "columns": [
+          "id",
+          "accommodatieId",
+          "instellingId",
+          "code",
+          "adresStraat",
+          "adresPostcode",
+          "adresHuisnummer",
+          "adresHuisnummerToev",
+          "stadsdeel",
+          "wijk",
+          "bestemming",
+          "bvo",
+          "onderwijs",
+          "bouwaard",
+          "bouwjaar",
+          "renovatieDatum",
+          "bouwlagen",
+          "schoolpleinM2",
+          "speellokalen",
+          "juridischEigenaar",
+          "economischClaimrecht",
+          "archief",
+          "archiefDatum",
+          "datumExport",
+          "versie",
+          "mGeldigVan",
+          "mGeldigTot",
+          "mIsActief"
+        ]
+      },
+      {
+        "file": "raw\\amsterdam_schoolgebouwen\\gebruik.csv",
+        "file_bytes": 221997,
+        "kind": "csv",
+        "rows_excluding_header": 1926,
+        "columns": [
+          "id",
+          "gebruikId",
+          "objectId",
+          "instellingId",
+          "datumBegin",
+          "datumEind",
+          "gebruikM2",
+          "gebruikUren",
+          "gebruikRuimtes",
+          "gebruik",
+          "datumExport",
+          "versie",
+          "mGeldigVan",
+          "mGeldigTot",
+          "mIsActief"
+        ]
+      },
+      {
+        "file": "raw\\amsterdam_schoolgebouwen\\instelling.csv",
+        "file_bytes": 58733,
+        "kind": "csv",
+        "rows_excluding_header": 476,
+        "columns": [
+          "id",
+          "instellingId",
+          "bestuurId",
+          "brinNummerDuo",
+          "naam",
+          "soort",
+          "concept",
+          "denominatie",
+          "archief",
+          "datumArchief",
+          "datumExport",
+          "versie",
+          "mGeldigVan",
+          "mGeldigTot",
+          "mIsActief"
+        ]
+      },
+      {
+        "file": "raw\\amsterdam_schoolgebouwen\\kengetallen.csv",
+        "file_bytes": 6972021,
+        "kind": "csv",
+        "rows_excluding_header": 45016,
+        "columns": [
+          "id",
+          "kengetalId",
+          "instellingId",
+          "prognoseSoort",
+          "prognoseJaar",
+          "jaar",
+          "maand",
+          "prognose",
+          "gebruikM2",
+          "behoefteM2",
+          "aantalLeerlingen",
+          "gebruikKlokuren",
+          "behoefteKlokuren",
+          "achterstandsscore",
+          "datumExport",
+          "versie",
+          "mGeldigVan",
+          "mGeldigTot",
+          "mIsActief"
+        ]
+      },
+      {
+        "file": "raw\\amsterdam_schoolgebouwen\\object.csv",
+        "file_bytes": 150703,
+        "kind": "csv",
+        "rows_excluding_header": 1135,
+        "columns": [
+          "id",
+          "objectId",
+          "accommodatieId",
+          "code",
+          "type",
+          "ruimtesoort",
+          "ruimtetype",
+          "capaciteitM2",
+          "capaciteitUren",
+          "capaciteitRuimtes",
+          "leegstandM2",
+          "leegstandUren",
+          "leegstandRuimtes",
+          "datumExport",
+          "versie",
+          "mGeldigVan",
+          "mGeldigTot",
+          "mIsActief"
+        ]
+      }
+    ]
+  },
+  {
+    "source": "Gemeente Amsterdam nieuwbouwplannen",
+    "slug": "amsterdam_nieuwbouwplannen",
+    "title": "Woningbouwplannen openbaar",
+    "period": "momentopname download 2026-07-10",
+    "geography": "punt-/vlakgeometrie en buurt/wijk/GGW-gebied/stadsdeel",
+    "files": [
+      {
+        "file": "raw\\amsterdam_nieuwbouwplannen\\woningbouwplannen_openbaar.csv",
+        "file_bytes": 738531,
+        "kind": "csv",
+        "rows_excluding_header": 987,
+        "columns": [
+          "id",
+          "projectnaamAfkorting",
+          "buurtCode",
+          "buurtNaam",
+          "wijkCode",
+          "wijkNaam",
+          "gebiedCode",
+          "gebiedNaam",
+          "stadsdeelCode",
+          "stadsdeelNaam",
+          "zelfbouw",
+          "socialeHuurCorporatie",
+          "plaberumPublicatie",
+          "startBouwGepland",
+          "startBouwGerealiseerd",
+          "socialeHuurZelfstPerm",
+          "middeldureHuur",
+          "betaalbareKoop",
+          "vrijeSectorHuur",
+          "vrijeSectorKoop",
+          "vrijeSectorNb",
+          "onbekend",
+          "jongeren",
+          "studenten",
+          "shOnzelfstEnOfTijdelijk",
+          "onzelfstandig",
+          "tijdelijk",
+          "totaal",
+          "totaalZelfstPerm",
+          "peildatum",
+          "geometrie"
+        ]
+      },
+      {
+        "file": "raw\\amsterdam_nieuwbouwplannen\\woningbouwplannen_openbaar.geojson",
+        "file_bytes": 1340914,
+        "kind": "geojson",
+        "features": 987,
+        "property_fields": [
+          "betaalbareKoop",
+          "buurtCode",
+          "buurtNaam",
+          "gebiedCode",
+          "gebiedNaam",
+          "id",
+          "jongeren",
+          "middeldureHuur",
+          "onbekend",
+          "onzelfstandig",
+          "peildatum",
+          "plaberumPublicatie",
+          "projectnaamAfkorting",
+          "shOnzelfstEnOfTijdelijk",
+          "socialeHuurCorporatie",
+          "socialeHuurZelfstPerm",
+          "stadsdeelCode",
+          "stadsdeelNaam",
+          "startBouwGepland",
+          "startBouwGerealiseerd",
+          "studenten",
+          "tijdelijk",
+          "totaal",
+          "totaalZelfstPerm",
+          "vrijeSectorHuur",
+          "vrijeSectorKoop",
+          "vrijeSectorNb",
+          "wijkCode",
+          "wijkNaam",
+          "zelfbouw"
+        ],
+        "geometry_types": {
+          "MultiPolygon": 987
+        }
+      }
+    ]
+  },
+  {
+    "source": "Gemeente Amsterdam gebiedsindelingen",
+    "slug": "amsterdam_gebieden",
+    "title": "Officiële gebiedsgrenzen",
+    "period": "momentopname download 2026-07-10",
+    "geography": "buurt/wijk/GGW-gebied/stadsdeel",
+    "files": [
+      {
+        "file": "raw\\amsterdam_gebieden\\buurten.geojson",
+        "file_bytes": 1190516,
+        "kind": "geojson",
+        "features": 518,
+        "property_fields": [
+          "beginGeldigheid",
+          "cbsCode",
+          "code",
+          "documentdatum",
+          "documentnummer",
+          "eindGeldigheid",
+          "identificatie",
+          "ligtInGgpgebiedId",
+          "ligtInGgwgebiedId",
+          "ligtInWijkId",
+          "naam",
+          "registratiedatum",
+          "volgnummer"
+        ],
+        "geometry_types": {
+          "Polygon": 518
+        }
+      },
+      {
+        "file": "raw\\amsterdam_gebieden\\ggwgebieden.geojson",
+        "file_bytes": 465826,
+        "kind": "geojson",
+        "features": 25,
+        "property_fields": [
+          "beginGeldigheid",
+          "code",
+          "documentdatum",
+          "documentnummer",
+          "eindGeldigheid",
+          "identificatie",
+          "ligtInStadsdeelId",
+          "naam",
+          "registratiedatum",
+          "volgnummer"
+        ],
+        "geometry_types": {
+          "Polygon": 25
+        }
+      },
+      {
+        "file": "raw\\amsterdam_gebieden\\stadsdelen.geojson",
+        "file_bytes": 410124,
+        "kind": "geojson",
+        "features": 9,
+        "property_fields": [
+          "beginGeldigheid",
+          "code",
+          "documentdatum",
+          "documentnummer",
+          "eindGeldigheid",
+          "identificatie",
+          "ligtInGemeenteId",
+          "naam",
+          "registratiedatum",
+          "volgnummer"
+        ],
+        "geometry_types": {
+          "Polygon": 9
+        }
+      },
+      {
+        "file": "raw\\amsterdam_gebieden\\wijken.geojson",
+        "file_bytes": 661426,
+        "kind": "geojson",
+        "features": 110,
+        "property_fields": [
+          "beginGeldigheid",
+          "cbsCode",
+          "code",
+          "documentdatum",
+          "documentnummer",
+          "eindGeldigheid",
+          "identificatie",
+          "ligtInGgwgebiedId",
+          "ligtInStadsdeelId",
+          "naam",
+          "registratiedatum",
+          "volgnummer"
+        ],
+        "geometry_types": {
+          "Polygon": 110
+        }
+      }
+    ]
+  },
+  {
+    "source": "Amsterdam O&S focusgebieden",
+    "slug": "amsterdam_ois_focusgebieden",
+    "title": "Outcomemonitor focusgebieden",
+    "period": "juni 2026 (metingen verschillen per indicator)",
+    "geography": "focusgebieden en bijbehorende deelgebieden",
+    "files": [
+      {
+        "file": "raw\\amsterdam_ois_focusgebieden\\tabel_alle_data_aanpak_noord_juni_2026.xlsx",
+        "file_bytes": 402237,
+        "kind": "xlsx",
+        "sheets": [
+          {
+            "name": "Colofon",
+            "dimension": "A1:A35"
+          },
+          {
+            "name": "H1 Kansen voor de jeugd",
+            "dimension": "A1:R223"
+          },
+          {
+            "name": "H2 Kansrijke sociale buurten",
+            "dimension": "A1:R951"
+          },
+          {
+            "name": "H3 Wonen",
+            "dimension": "A1:R785"
+          },
+          {
+            "name": "H4 Openbare Ruimte",
+            "dimension": "A1:R271"
+          },
+          {
+            "name": "H5 Stadsnatuur en Groen",
+            "dimension": "A1:R1054"
+          },
+          {
+            "name": "H6 Buurteconomie",
+            "dimension": "A1:R1025"
+          }
+        ]
+      },
+      {
+        "file": "raw\\amsterdam_ois_focusgebieden\\tabel_alle_data_masterplan_zuidoost_juni_2026.xlsx",
+        "file_bytes": 292196,
+        "kind": "xlsx",
+        "sheets": [
+          {
+            "name": "Colofon",
+            "dimension": "A1:A36"
+          },
+          {
+            "name": "SD1 Inclusie en participatie",
+            "dimension": "A1:Q710"
+          },
+          {
+            "name": "SD2 Veilig en prettig wonen",
+            "dimension": "A1:Q447"
+          },
+          {
+            "name": "SD3 ruimte en mob.",
+            "dimension": "A1:Q513"
+          },
+          {
+            "name": "SD4 Gelijke kansen",
+            "dimension": "A1:Q886"
+          },
+          {
+            "name": "SD5 Kansen om te ontwikkelen",
+            "dimension": "A1:Q509"
+          },
+          {
+            "name": "SD7 Werken en ondernemen",
+            "dimension": "A1:Q537"
+          },
+          {
+            "name": "SD8 Kunst en cultuur",
+            "dimension": "A1:Q326"
+          }
+        ]
+      },
+      {
+        "file": "raw\\amsterdam_ois_focusgebieden\\tabel_alle_data_samen_nieuw_west_juni_2026.xlsx",
+        "file_bytes": 365312,
+        "kind": "xlsx",
+        "sheets": [
+          {
+            "name": "Colofon",
+            "dimension": "A1:A34"
+          },
+          {
+            "name": "basis",
+            "dimension": "A1:R304"
+          },
+          {
+            "name": "eigenaarschap en inclusie",
+            "dimension": "A1:R44"
+          },
+          {
+            "name": "kansen voor de jeugd",
+            "dimension": "A1:R976"
+          },
+          {
+            "name": "veiligheid",
+            "dimension": "A1:R195"
+          },
+          {
+            "name": "werk en bestaanszekerheid",
+            "dimension": "A1:R1056"
+          },
+          {
+            "name": "wonen",
+            "dimension": "A1:R1464"
+          }
+        ]
+      },
+      {
+        "file": "raw\\amsterdam_ois_focusgebieden\\tabel_overzicht_indicatoren_focusgebieden_juni_2026.xlsx",
+        "file_bytes": 35573,
+        "kind": "xlsx",
+        "sheets": [
+          {
+            "name": "Colofon",
+            "dimension": "A1:A25"
+          },
+          {
+            "name": "ind_MPZO",
+            "dimension": "A1:E105"
+          },
+          {
+            "name": "ind_SNW",
+            "dimension": "A1:E81"
+          },
+          {
+            "name": "ind_NOORD",
+            "dimension": "A1:E74"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "source": "Amsterdam O&S veiligheidsindex",
+    "slug": "amsterdam_ois_veiligheidsindex",
+    "title": "Veiligheidsindex",
+    "period": "2026-1; onderliggende jaren variëren per indicator",
+    "geography": "veiligheidsmonitorgebied/deelgebied",
+    "files": [
+      {
+        "file": "raw\\amsterdam_ois_veiligheidsindex\\veiligheidsindex_2026_1.xlsx",
+        "file_bytes": 562317,
+        "kind": "xlsx",
+        "sheets": [
+          {
+            "name": "index_volgorde_VMgebied",
+            "dimension": "A1:EL237"
+          },
+          {
+            "name": "index_rangorde_VMgebied",
+            "dimension": "A1:EX238"
+          },
+          {
+            "name": "index_volgorde_25geb",
+            "dimension": "A1:EK30"
+          },
+          {
+            "name": "index_volgorde_stadsdelen",
+            "dimension": "A2:EK23"
+          },
+          {
+            "name": "index_volgorde_gemeenten",
+            "dimension": "A2:EK22"
+          },
+          {
+            "name": "klasse grenzen indexen",
+            "dimension": "A1:Q20"
+          }
+        ]
+      },
+      {
+        "file": "raw\\amsterdam_ois_veiligheidsindex\\veiligheidsindex_vergelijking_2026_1.xlsx",
+        "file_bytes": 382970,
+        "kind": "xlsx",
+        "sheets": [
+          {
+            "name": "gebruiksaanwijzing",
+            "dimension": "A1:L31"
+          },
+          {
+            "name": "vergelijking_selectie",
+            "dimension": "A1:FA327"
+          },
+          {
+            "name": "2025_1",
+            "dimension": "A1:FZ205"
+          },
+          {
+            "name": "2026_1",
+            "dimension": "A1:FZ205"
+          },
+          {
+            "name": "Variabelenamen",
+            "dimension": "A1:H195"
+          },
+          {
+            "name": "115_gebiedsnamen",
+            "dimension": "A1:D116"
+          }
+        ]
+      }
+    ]
+  }
+]

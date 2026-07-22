@@ -1,0 +1,290 @@
+{
+  "source": {
+    "dataset": "RIVM Gezondheid per wijk en buurt",
+    "table": "50150NED",
+    "file": "external-data/raw/rivm_gezondheid_wijk_buurt_50150NED/data.csv",
+    "estimateType": "kleine-gebiedsschatting (gemodelleerde synthetische schatting, geen directe meting)",
+    "unit": "pct",
+    "valueRange": [
+      0,
+      100
+    ]
+  },
+  "codeColumn": "Codering_3",
+  "levelColumn": "SoortRegio_2",
+  "levels": [
+    "Land",
+    "Gemeente",
+    "Wijk",
+    "Buurt"
+  ],
+  "periodColumn": "Perioden",
+  "periodMap": {
+    "2012JJ00": 2012,
+    "2016JJ00": 2016,
+    "2020JJ00": 2020,
+    "2022JJ00": 2022,
+    "2024JJ00": 2024
+  },
+  "coverageNotes": {
+    "wijk": "In elk meetjaar heeft ~94.5% van de wijk-records een waarde; nagenoeg alle Amsterdamse wijken zijn gedekt.",
+    "buurt": "In elk meetjaar heeft ~80.5% van de buurt-records een waarde; kleine/dunbevolkte buurten worden onderdrukt of niet gemodelleerd.",
+    "excludedZeroCoverage": [
+      "EenOfMeerLichamelijkeBeperkingen_9",
+      "BeperkingInHoren_10",
+      "BeperkingInZien_11",
+      "BeperkingInBewegen_12",
+      "EenOfMeerdereKerenGevallen_13",
+      "BrozeGezondheid_18",
+      "BrozeGezondheidPsychologischDomein_19",
+      "BrozeGezondheidFysiekDomein_20",
+      "BrozeGezondheidSociaalDomein_21",
+      "LopenEnOfFietsenNaarSchoolOfWerk_42",
+      "LopenNaarSchoolOfWerk_43",
+      "FietsenNaarSchoolOfWerk_44"
+    ],
+    "excludedReason": "Deze indicatoren (65+ beperkingen/vallen/broze gezondheid en woon-werkverkeer) zijn op wijk- en buurtniveau volledig leeg (0% dekking) en dus niet bruikbaar in de monitor."
+  },
+  "outcomeIndicators": [
+    {
+      "rivmColumn": "GoedErvarenGezondheid_4",
+      "id": "o_ervaren_gezondheid",
+      "label": "Goed ervaren gezondheid",
+      "shortLabel": "Ervaren gezondheid",
+      "domain": "ervaren_gezondheid",
+      "unit": "pct",
+      "higherIsWorse": false,
+      "why": "Kernindicator van subjectieve gezondheid; alle jaren gevuld (2016-2024). Basis voor prioritering van welzijns- en preventie-inzet in Oost.",
+      "coverageWijk": "alle jaren",
+      "coverageBuurt": "alle jaren"
+    },
+    {
+      "rivmColumn": "EenOfMeerLangdurigeAandoeningen_5",
+      "id": "o_langdurige_aandoening",
+      "label": "Een of meer langdurige aandoeningen",
+      "shortLabel": "Langdurige aandoening",
+      "domain": "ervaren_gezondheid",
+      "unit": "pct",
+      "higherIsWorse": true,
+      "why": "Chronische ziektelast in de buurt; indicatie voor zorgvraag en ondersteuningsbehoefte. Vanaf 2016 gevuld.",
+      "coverageWijk": "2016-2024",
+      "coverageBuurt": "2016-2024"
+    },
+    {
+      "rivmColumn": "LangdurigBeperkt_6",
+      "id": "o_langdurig_beperkt",
+      "label": "Langdurig beperkt vanwege gezondheid",
+      "shortLabel": "Langdurig beperkt",
+      "domain": "ervaren_gezondheid",
+      "unit": "pct",
+      "higherIsWorse": true,
+      "why": "Beperkingen in het dagelijks leven door gezondheid; signaleert behoefte aan praktische/sociale ondersteuning. Vanaf 2020 gevuld.",
+      "coverageWijk": "2020-2024",
+      "coverageBuurt": "2020-2024"
+    },
+    {
+      "rivmColumn": "HoogRisicoAngststoornisOfDepressie_14",
+      "id": "o_hoog_risico_angst_depressie",
+      "label": "Hoog risico op angststoornis of depressie",
+      "shortLabel": "Risico angst/depressie",
+      "domain": "mentaal",
+      "unit": "pct",
+      "higherIsWorse": true,
+      "why": "Best gevulde indicator voor psychische problematiek (alle jaren); kernsignaal voor mentaal welzijn en GGZ-preventie.",
+      "coverageWijk": "alle jaren",
+      "coverageBuurt": "alle jaren"
+    },
+    {
+      "rivmColumn": "HeelVeelStressAfg4Weken_17",
+      "id": "o_veel_stress",
+      "label": "(Heel) veel stress afgelopen 4 weken",
+      "shortLabel": "Veel stress",
+      "domain": "mentaal",
+      "unit": "pct",
+      "higherIsWorse": true,
+      "why": "Ervaren stress; laagdrempelig signaal voor mentale druk en overbelasting in de wijk. Vanaf 2020 gevuld.",
+      "coverageWijk": "2020-2024",
+      "coverageBuurt": "2020-2024"
+    },
+    {
+      "rivmColumn": "AngstDepressiegevoelensAfg4Weken_16",
+      "id": "o_angst_depressie_gevoelens",
+      "label": "Angst- of depressiegevoelens afgelopen 4 weken",
+      "shortLabel": "Angst/depressie gevoel",
+      "domain": "mentaal",
+      "unit": "pct",
+      "higherIsWorse": true,
+      "why": "Actuele klachtenmaat naast risicomaat; aanvullend beeld van mentaal welzijn. Alleen 2022 en 2024 beschikbaar.",
+      "coverageWijk": "2022-2024",
+      "coverageBuurt": "2022-2024"
+    },
+    {
+      "rivmColumn": "SuicideGedachtenDeLaatste12Maanden_15",
+      "id": "o_suicidegedachten",
+      "label": "Suicidegedachten laatste 12 maanden",
+      "shortLabel": "Suicidegedachten",
+      "domain": "mentaal",
+      "unit": "pct",
+      "higherIsWorse": true,
+      "why": "Zwaarste mentale-nood-indicator; relevant voor vroegsignalering. Alleen 2022 en 2024; op buurtniveau vaak dun/onderdrukt.",
+      "coverageWijk": "2022-2024",
+      "coverageBuurt": "2022-2024 (dun)"
+    },
+    {
+      "rivmColumn": "Eenzaam_25",
+      "id": "o_eenzaam",
+      "label": "Eenzaam",
+      "shortLabel": "Eenzaam",
+      "domain": "eenzaamheid_sociaal",
+      "unit": "pct",
+      "higherIsWorse": true,
+      "why": "Kernindicator eenzaamheid (alle jaren); direct relevant voor Dynamo's sociale activering en ontmoetingsaanbod.",
+      "coverageWijk": "alle jaren",
+      "coverageBuurt": "alle jaren"
+    },
+    {
+      "rivmColumn": "SterkEenzaam_26",
+      "id": "o_sterk_eenzaam",
+      "label": "Sterk eenzaam",
+      "shortLabel": "Sterk eenzaam",
+      "domain": "eenzaamheid_sociaal",
+      "unit": "pct",
+      "higherIsWorse": true,
+      "why": "Ernstmaat naast prevalentie; toont waar zwaardere eenzaamheidsproblematiek zit. Alle jaren gevuld.",
+      "coverageWijk": "alle jaren",
+      "coverageBuurt": "alle jaren"
+    },
+    {
+      "rivmColumn": "MatigVeelRegieOverHetEigenLeven_24",
+      "id": "o_regie_eigen_leven",
+      "label": "Matig/veel regie over het eigen leven",
+      "shortLabel": "Regie eigen leven",
+      "domain": "eenzaamheid_sociaal",
+      "unit": "pct",
+      "higherIsWorse": false,
+      "why": "Ervaren eigen regie/zelfredzaamheid; positieve welzijnsmaat die aansluit bij empowerment-doelen. Gevuld 2016, 2020 en 2024 (2022 ontbreekt).",
+      "coverageWijk": "2016, 2020, 2024",
+      "coverageBuurt": "2016, 2020, 2024"
+    },
+    {
+      "rivmColumn": "KrijgtSteunVanAnderen_29",
+      "id": "o_krijgt_steun",
+      "label": "Krijgt steun van anderen",
+      "shortLabel": "Sociale steun",
+      "domain": "eenzaamheid_sociaal",
+      "unit": "pct",
+      "higherIsWorse": false,
+      "why": "Ervaren sociale steun uit de omgeving; kernmaat voor sociaal netwerk. Let op: alleen 2024, op buurtniveau dun.",
+      "coverageWijk": "2024",
+      "coverageBuurt": "2024 (dun)"
+    },
+    {
+      "rivmColumn": "Mantelzorger_30",
+      "id": "o_mantelzorger",
+      "label": "Mantelzorger",
+      "shortLabel": "Mantelzorger",
+      "domain": "zorg_mantelzorg",
+      "unit": "pct",
+      "higherIsWorse": false,
+      "why": "Aandeel dat mantelzorg geeft; neutraal maar hier als false behandeld (hogere waarde = meer informele zorginzet, tevens signaal van mogelijke overbelasting dat vraagt om ondersteuning). Alle jaren gevuld.",
+      "coverageWijk": "alle jaren",
+      "coverageBuurt": "alle jaren"
+    },
+    {
+      "rivmColumn": "MoeiteMetRondkomen_32",
+      "id": "o_moeite_rondkomen",
+      "label": "Moeite met rondkomen",
+      "shortLabel": "Moeite rondkomen",
+      "domain": "bestaanszekerheid",
+      "unit": "pct",
+      "higherIsWorse": true,
+      "why": "Belevingsmaat voor bestaanszekerheid/financiele stress; sterke voorspeller van bredere problematiek. Alle jaren gevuld.",
+      "coverageWijk": "alle jaren",
+      "coverageBuurt": "alle jaren"
+    },
+    {
+      "rivmColumn": "Overgewicht_33",
+      "id": "o_overgewicht",
+      "label": "Overgewicht",
+      "shortLabel": "Overgewicht",
+      "domain": "leefstijl",
+      "unit": "pct",
+      "higherIsWorse": true,
+      "why": "Brede leefstijl-/gezondheidsmaat (BMI >= 25); alle jaren gevuld. Ingang voor beweeg- en voedingsaanbod.",
+      "coverageWijk": "alle jaren",
+      "coverageBuurt": "alle jaren"
+    },
+    {
+      "rivmColumn": "ErnstigOvergewichtObesitas_34",
+      "id": "o_obesitas",
+      "label": "Ernstig overgewicht (obesitas)",
+      "shortLabel": "Obesitas",
+      "domain": "leefstijl",
+      "unit": "pct",
+      "higherIsWorse": true,
+      "why": "Ernstmaat (BMI >= 30) naast overgewicht; klinisch relevanter en toont concentratie van gezondheidsrisico. Alle jaren gevuld.",
+      "coverageWijk": "alle jaren",
+      "coverageBuurt": "alle jaren"
+    },
+    {
+      "rivmColumn": "RooktTabak_35",
+      "id": "o_rookt",
+      "label": "Rookt tabak",
+      "shortLabel": "Roken",
+      "domain": "leefstijl",
+      "unit": "pct",
+      "higherIsWorse": true,
+      "why": "Belangrijkste vermijdbare gezondheidsrisicofactor; alle jaren gevuld. Kern voor preventiebeleid.",
+      "coverageWijk": "alle jaren",
+      "coverageBuurt": "alle jaren"
+    },
+    {
+      "rivmColumn": "OvermatigDrinken_37",
+      "id": "o_overmatig_drinken",
+      "label": "Overmatig drinken",
+      "shortLabel": "Overmatig drinken",
+      "domain": "leefstijl",
+      "unit": "pct",
+      "higherIsWorse": true,
+      "why": "Problematisch alcoholgebruik; leefstijlrisico met sociale component. Alle jaren gevuld.",
+      "coverageWijk": "alle jaren",
+      "coverageBuurt": "alle jaren"
+    },
+    {
+      "rivmColumn": "VoldoetAanDeBeweegrichtlijn_40",
+      "id": "o_beweegrichtlijn",
+      "label": "Voldoet aan de beweegrichtlijn",
+      "shortLabel": "Beweegrichtlijn",
+      "domain": "leefstijl",
+      "unit": "pct",
+      "higherIsWorse": false,
+      "why": "Positieve leefstijlmaat (voldoende bewegen); hoger is beter. Alle jaren gevuld. Ingang voor beweegaanbod.",
+      "coverageWijk": "alle jaren",
+      "coverageBuurt": "alle jaren"
+    },
+    {
+      "rivmColumn": "WekelijksSporten_41",
+      "id": "o_wekelijks_sporten",
+      "label": "Wekelijks sporten",
+      "shortLabel": "Wekelijks sporten",
+      "domain": "leefstijl",
+      "unit": "pct",
+      "higherIsWorse": false,
+      "why": "Sportdeelname als concrete positieve gedragsmaat naast de beweegrichtlijn; hoger is beter. Alle jaren gevuld.",
+      "coverageWijk": "alle jaren",
+      "coverageBuurt": "alle jaren"
+    },
+    {
+      "rivmColumn": "TevredenMetDeWoonomgeving_57",
+      "id": "o_tevreden_woonomgeving",
+      "label": "Tevreden met de woonomgeving",
+      "shortLabel": "Tevreden woonomgeving",
+      "domain": "leefomgeving",
+      "unit": "pct",
+      "higherIsWorse": false,
+      "why": "Samenvattende maat voor beleving van de leefomgeving (gekozen boven de vele geluidhinder-subvarianten); hoger is beter. Let op: alleen 2024, op buurtniveau dun.",
+      "coverageWijk": "2024",
+      "coverageBuurt": "2024 (dun)"
+    }
+  ]
+}
