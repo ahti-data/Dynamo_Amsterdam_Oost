@@ -4,6 +4,8 @@ import type { AppState, GeoSet } from '../App'
 import { StatTile } from '../components/StatTile'
 import { BarChart, type BarRow } from '../components/BarChart'
 import { Choropleth } from '../components/Choropleth'
+import { SegmentedPicker } from '../components/SegmentedPicker'
+import { TabFootnote } from '../components/TabFootnote'
 import {
   areas, availableYears, getSeries, getValue, deltaOverPeriod,
   indicatorById, regionName, nearestYear, signalSort, noDataReason, coverageFrac,
@@ -110,25 +112,19 @@ export function Overzicht({ ds, geo, state }: { ds: Dataset; geo: GeoSet; state:
         </p>
       )}
 
-      <div className="chip-row" role="tablist" aria-label="Thema's">
-        {themes.map((t) => (
-          <button
-            key={t.id}
-            role="tab"
-            aria-selected={t.id === theme.id}
-            className={`chip${t.id === theme.id ? ' active' : ''}`}
-            onClick={() => {
-              state.setThemeId(t.id)
-              const first = ds.themes.find((x) => x.id === t.id)!
-              // behoud de indicator als die ook in het nieuwe thema zit
-              if (!first.indicatorIds.includes(state.indicatorId))
-                state.setIndicatorId(first.headline[0] ?? first.indicatorIds[0])
-            }}
-          >
-            {t.title}
-          </button>
-        ))}
-      </div>
+      <SegmentedPicker
+        ariaLabel="Thema's"
+        asTabs
+        value={theme.id}
+        options={themes.map((t) => ({ id: t.id, label: t.title }))}
+        onChange={(id) => {
+          state.setThemeId(id)
+          const first = ds.themes.find((x) => x.id === id)!
+          // behoud de indicator als die ook in het nieuwe thema zit
+          if (!first.indicatorIds.includes(state.indicatorId))
+            state.setIndicatorId(first.headline[0] ?? first.indicatorIds[0])
+        }}
+      />
 
       <p className="view-sub" style={{ marginTop: -8 }}>
         <strong>{theme.title}</strong> · sluit aan op: {theme.dynamoService.toLowerCase()}
@@ -236,6 +232,8 @@ export function Overzicht({ ds, geo, state }: { ds: Dataset; geo: GeoSet; state:
           </div>
         )}
       </div>
+
+      <TabFootnote viewId="overzicht" ds={ds} state={state} />
     </>
   )
 }

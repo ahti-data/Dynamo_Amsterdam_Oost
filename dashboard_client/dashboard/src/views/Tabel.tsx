@@ -4,6 +4,7 @@ import type { AppState } from '../App'
 import { DataTable, type TableColumn, type TableRowData } from '../components/DataTable'
 import { NL, areas, getValue, indicatorById, regionName, toCsv, downloadCsv } from '../lib/data'
 import { fmtValue } from '../lib/format'
+import { TabFootnote } from '../components/TabFootnote'
 
 export function Tabel({ ds, state }: { ds: Dataset; state: AppState }) {
   const [relative, setRelative] = useState(false)
@@ -144,6 +145,8 @@ export function Tabel({ ds, state }: { ds: Dataset; state: AppState }) {
           : ''}
         {hasOutcomeCol ? ' * = gemodelleerde RIVM-schatting, geen directe telling.' : ''}
       </p>
+
+      <TabFootnote viewId="tabel" ds={ds} state={state} />
     </>
   )
 }

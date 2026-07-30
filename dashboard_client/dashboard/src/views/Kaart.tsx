@@ -5,6 +5,7 @@ import { Choropleth } from '../components/Choropleth'
 import { BarChart, type BarRow } from '../components/BarChart'
 import { areas, availableYears, getValue, indicatorById, regionName, nearestYear, signalSort, noDataReason } from '../lib/data'
 import { fmtValue } from '../lib/format'
+import { TabFootnote } from '../components/TabFootnote'
 
 type Mode = 'abs' | 'rel'
 
@@ -270,6 +271,8 @@ export function Kaart({ ds, geo, state }: { ds: Dataset; geo: GeoSet; state: App
           </div>
         </div>
       )}
+
+      <TabFootnote viewId="kaart" ds={ds} state={state} />
     </>
   )
 }

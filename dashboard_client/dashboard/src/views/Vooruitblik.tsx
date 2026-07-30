@@ -5,6 +5,8 @@ import { StatTile } from '../components/StatTile'
 import { BarChart, type BarRow } from '../components/BarChart'
 import { Choropleth } from '../components/Choropleth'
 import { ForecastChart, type ForecastSeries } from '../components/ForecastChart'
+import { SegmentedPicker } from '../components/SegmentedPicker'
+import { TabFootnote } from '../components/TabFootnote'
 import { areas, regionName, coverageBreakYears } from '../lib/data'
 import { fmtValue, fmtDelta } from '../lib/format'
 import { forecastArea, forecastGroup, pctChange, absChange, HORIZONS } from '../lib/forecast'
@@ -152,18 +154,12 @@ export function Vooruitblik({ ds, geo, state }: { ds: Dataset; geo: GeoSet; stat
           er is geen bijbehorend tabpanel-DOM, dus dat vereist roving tabindex +
           aria-controls die er niet is (A11Y-5-regressie) — dit is een filter,
           geen tab-widget, dus role="group" met aria-pressed past beter. */}
-      <div className="chip-row" role="group" aria-label="Doelgroep">
-        {GROUPS.map((g) => (
-          <button
-            key={g.id}
-            aria-pressed={g.id === group.id}
-            className={`chip${g.id === group.id ? ' active' : ''}`}
-            onClick={() => { setGroupId(g.id); state.setSelectedArea(null) }}
-          >
-            {g.label}
-          </button>
-        ))}
-      </div>
+      <SegmentedPicker
+        ariaLabel="Doelgroep"
+        value={group.id}
+        options={GROUPS.map((g) => ({ id: g.id, label: g.label }))}
+        onChange={(id) => { setGroupId(id); state.setSelectedArea(null) }}
+      />
       <p className="view-sub" style={{ marginTop: -8 }}>
         <strong>{group.label}</strong> · stuurt op: {group.service.toLowerCase()}
         <span style={{ marginLeft: 14 }}>
@@ -325,6 +321,8 @@ export function Vooruitblik({ ds, geo, state }: { ds: Dataset; geo: GeoSet; stat
           </p>
         </>
       )}
+
+      <TabFootnote viewId="vooruitblik" ds={ds} state={state} />
     </>
   )
 }

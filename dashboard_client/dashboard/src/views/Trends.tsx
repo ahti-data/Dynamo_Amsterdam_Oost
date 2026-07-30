@@ -4,13 +4,13 @@ import type { AppState } from '../App'
 import { LineChart, type LineSeries } from '../components/LineChart'
 import { areas, availableYears, getSeries, indicatorById, deltaOverPeriod, regionName, coverageBreakYears } from '../lib/data'
 import { fmtDelta } from '../lib/format'
+import { TabFootnote } from '../components/TabFootnote'
 
 const COLORS = [
   'var(--series-1)', 'var(--series-2)', 'var(--series-3)', 'var(--series-4)',
   'var(--series-5)', 'var(--series-6)', 'var(--series-7)', 'var(--series-8)',
 ]
 const MAX_AREAS = 6
-const CHIP_LIMIT = 26
 
 export function Trends({ ds, state }: { ds: Dataset; state: AppState }) {
   const indicator = indicatorById(ds, state.indicatorId) ?? ds.indicators[0]
@@ -95,9 +95,7 @@ export function Trends({ ds, state }: { ds: Dataset; state: AppState }) {
       <p className="view-sub">
         Volg per gebied hoe de doelgroep zich ontwikkelt
         {showRefs ? `, afgezet tegen ${regionName(ds, ds.meta.gemeente)} (gestippeld)` : ''}.
-        {list.length <= CHIP_LIMIT
-          ? ` Klik op ${levelNaam} om ze toe te voegen of te verwijderen (max ${MAX_AREAS}).`
-          : ` Voeg ${levelNaam} toe via de keuzelijst (max ${MAX_AREAS}).`}
+        {` Voeg ${levelNaam} toe via de keuzelijst (max ${MAX_AREAS}).`}
         {!showRefs
           ? ' Referentielijnen verschijnen alleen bij percentages en gemiddelden — totalen zouden de lijnen platdrukken.'
           : ''}
@@ -128,23 +126,24 @@ export function Trends({ ds, state }: { ds: Dataset; state: AppState }) {
           ))}
         </select>
 
-        {list.length > CHIP_LIMIT && (
-          <select
-            className="control"
-            value=""
-            onChange={(e) => e.target.value && toggle(e.target.value)}
-            aria-label="Gebied toevoegen"
-          >
-            <option value="">+ voeg toe…</option>
-            {list
-              .filter((a) => !shown.includes(a.code))
-              .map((a) => (
-                <option key={a.code} value={a.code}>
-                  {a.name}
-                </option>
-              ))}
-          </select>
-        )}
+        <select
+          className="control"
+          value=""
+          onChange={(e) => e.target.value && toggle(e.target.value)}
+          aria-label="Gebied toevoegen"
+          disabled={shown.length >= MAX_AREAS}
+        >
+          <option value="">
+            {shown.length >= MAX_AREAS ? `max. ${MAX_AREAS} bereikt` : '+ voeg toe…'}
+          </option>
+          {list
+            .filter((a) => !shown.includes(a.code))
+            .map((a) => (
+              <option key={a.code} value={a.code}>
+                {a.name}
+              </option>
+            ))}
+        </select>
 
         {focusDelta.delta != null && (
           <span className="view-sub" style={{ margin: 0 }}>
@@ -154,15 +153,18 @@ export function Trends({ ds, state }: { ds: Dataset; state: AppState }) {
       </div>
 
       <div className="chip-row">
-        {(list.length <= CHIP_LIMIT ? list : list.filter((a) => shown.includes(a.code))).map((a) => (
-          <button
-            key={a.code}
-            className={`chip${shown.includes(a.code) ? ' active' : ''}`}
-            onClick={() => toggle(a.code)}
-          >
-            {a.name}
-          </button>
-        ))}
+        {list
+          .filter((a) => shown.includes(a.code))
+          .map((a) => (
+            <button
+              key={a.code}
+              className="chip active"
+              onClick={() => toggle(a.code)}
+              title={`${a.name} verwijderen`}
+            >
+              {a.name} <span aria-hidden="true">×</span>
+            </button>
+          ))}
       </div>
 
       {coverageWarnings.length > 0 && (
@@ -197,6 +199,8 @@ export function Trends({ ds, state }: { ds: Dataset; state: AppState }) {
           ))}
         </div>
       </div>
+
+      <TabFootnote viewId="trends" ds={ds} state={state} />
     </>
   )
 }

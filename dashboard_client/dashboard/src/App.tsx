@@ -17,7 +17,7 @@ import { Verantwoording } from './views/Verantwoording'
 import dynamoLogo from './assets/dynamo.png'
 import ahtiLogo from './assets/ahti.png'
 
-const VIEWS = [
+export const VIEWS = [
   { id: 'inzichten', label: 'Inzichten' },
   { id: 'overzicht', label: 'Overzicht' },
   { id: 'kaart', label: 'Kaart' },
@@ -30,7 +30,7 @@ const VIEWS = [
   { id: 'bronnen', label: 'Bronnen' },
 ] as const
 
-type ViewId = (typeof VIEWS)[number]['id']
+export type ViewId = (typeof VIEWS)[number]['id']
 
 export interface GeoSet {
   wijk: GeoCollection | null
@@ -62,6 +62,11 @@ export interface AppState {
   /** open het Bronnen-tabblad, eventueel direct bij een specifieke dataset */
   openSource: (id?: string) => void
   clearSourceAnchor: () => void
+  /** id van de verantwoordingssectie die op dat tabblad in beeld gescrold moet worden */
+  verantwoordingAnchor: string | null
+  /** open het Verantwoording-tabblad, eventueel direct bij een specifieke sectie */
+  openVerantwoording: (id?: string) => void
+  clearVerantwoordingAnchor: () => void
 }
 
 export interface NavTarget {
@@ -156,6 +161,7 @@ export default function App() {
   const [level, setLevel] = useState<RegionLevel>(initial.current.level ?? 'wijk')
   const [pendingPair, setPendingPair] = useState<{ x: string; y: string } | null>(null)
   const [sourceAnchor, setSourceAnchor] = useState<string | null>(null)
+  const [verantwoordingAnchor, setVerantwoordingAnchor] = useState<string | null>(null)
   const pendingNav = useRef<NavTarget | null>(null)
 
   useEffect(() => {
@@ -286,14 +292,26 @@ export default function App() {
     window.scrollTo(0, 0)
   }, [])
 
+  // deep-link naar de verantwoording: open dat tabblad bij de betreffende sectie
+  const openVerantwoording = useCallback((id?: string) => {
+    setVerantwoordingAnchor(id ?? null)
+    setView('verantwoording')
+    window.scrollTo(0, 0)
+  }, [])
+
   const state: AppState = useMemo(
     () => ({
       year, setYear, themeId, setThemeId, indicatorId, setIndicatorId,
       selectedArea, setSelectedArea, scope, level, setLevel,
       pendingPair, clearPendingPair: () => setPendingPair(null), navigate,
       sourceAnchor, openSource, clearSourceAnchor: () => setSourceAnchor(null),
+      verantwoordingAnchor, openVerantwoording,
+      clearVerantwoordingAnchor: () => setVerantwoordingAnchor(null),
     }),
-    [year, themeId, indicatorId, selectedArea, scope, level, pendingPair, navigate, sourceAnchor, openSource],
+    [
+      year, themeId, indicatorId, selectedArea, scope, level, pendingPair, navigate,
+      sourceAnchor, openSource, verantwoordingAnchor, openVerantwoording,
+    ],
   )
 
   if (locked)

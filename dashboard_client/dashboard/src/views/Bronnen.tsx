@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import type { AppState } from '../App'
+import { VIEWS, type AppState } from '../App'
 import { SOURCES, STATUS_META, STATUS_ORDER, type Source } from '../lib/sources'
 
 function SourceCard({ src, highlighted }: { src: Source; highlighted: boolean }) {
@@ -11,6 +11,16 @@ function SourceCard({ src, highlighted }: { src: Source; highlighted: boolean })
       </header>
 
       <p className="bron-content">{src.content}</p>
+
+      {src.relatedViews && src.relatedViews.length > 0 && (
+        <div className="bron-usedin" aria-label="Gebruikt in tabbladen">
+          {src.relatedViews.map((v) => (
+            <span key={v} className="bron-usedin-tag">
+              {VIEWS.find((x) => x.id === v)?.label ?? v}
+            </span>
+          ))}
+        </div>
+      )}
 
       <dl className="bron-meta">
         {src.usedFor && (

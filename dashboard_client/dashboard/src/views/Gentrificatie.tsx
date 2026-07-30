@@ -6,6 +6,7 @@ import { ScatterPlot, type ScatterPoint } from '../components/ScatterPlot'
 import { BarChart, type BarRow } from '../components/BarChart'
 import { areas, regionName } from '../lib/data'
 import { computeGentrification, gentYears, type GentResult } from '../lib/gentrification'
+import { TabFootnote } from '../components/TabFootnote'
 
 const DIV = [
   'var(--div-neg-3)', 'var(--div-neg-2)', 'var(--div-neg-1)', 'var(--div-mid)',
@@ -319,6 +320,8 @@ export function Gentrificatie({ ds, geo, state }: { ds: Dataset; geo: GeoSet; st
           </p>
         </div>
       )}
+
+      <TabFootnote viewId="gentrificatie" ds={ds} state={state} />
     </>
   )
 }

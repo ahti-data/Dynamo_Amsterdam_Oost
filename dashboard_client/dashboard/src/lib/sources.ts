@@ -7,6 +7,8 @@
  * bronnen zijn de bronnen die de monitor daadwerkelijk verwerkt.
  */
 
+import type { ViewId } from '../App'
+
 export type SourceStatus = 'kern' | 'beschikbaar' | 'bekeken'
 
 export interface SourceLink {
@@ -26,6 +28,8 @@ export interface Source {
   links?: SourceLink[]
   /** waar in de tool deze bron wordt gebruikt (alleen kernbronnen) */
   usedFor?: string
+  /** structured versie van usedFor: welke tabbladen tonen deze bron in hun footnote */
+  relatedViews?: ViewId[]
   coverage: string
   content: string
   /** aandachtspunt / interpretatiewaarschuwing */
@@ -68,6 +72,7 @@ export const SOURCES: Source[] = [
     ],
     usedFor:
       'De volledige demografische en sociaaleconomische basis van de monitor: bevolking, leeftijd, huishoudens, herkomst, inkomen, vermogen, uitkeringen, armoede, opleiding, WOZ, woningvoorraad, Wmo en jeugdzorg — op alle niveaus (stadsdeel, gebied, wijk, buurt).',
+    relatedViews: ['overzicht', 'kaart', 'trends', 'vooruitblik', 'gentrificatie', 'samenhang', 'tabel', 'inzichten'],
     coverage: 'Nederland; gemeente, wijk en buurt; verslagjaren 2016–2025.',
     content:
       'Samenvattende jaarpublicatie met kerncijfers over demografische en sociaaleconomische thema’s per gemeente, wijk en buurt. De reekspagina biedt per jaar een Excelbestand; StatLine geeft de losse jaartabellen.',
@@ -87,6 +92,7 @@ export const SOURCES: Source[] = [
     ],
     usedFor:
       'De uitkomstindicatoren (met prefix o_) in het tabblad Samenhang: ervaren gezondheid, mentaal welzijn, eenzaamheid, mantelzorg, moeite met rondkomen en leefstijl.',
+    relatedViews: ['samenhang', 'inzichten'],
     coverage: 'Nederland; gemeente, wijk en buurt (indeling 2024); meetjaren 2012, 2016, 2020, 2022 en 2024.',
     content:
       'Kleine-gebiedsschattingen van gezondheid, welzijn en leefstijl: o.a. ervaren gezondheid, angst/depressie, stress, eenzaamheid, sociale steun, mantelzorg, moeite met rondkomen, roken, alcohol en bewegen.',
@@ -105,6 +111,7 @@ export const SOURCES: Source[] = [
     ],
     usedFor:
       'De leidende gebiedskeuze voor Amsterdam: 9 stadsdelen en de 25 GGW-gebieden (gebiedsgericht werken), waaraan elke CBS-wijk op code is gekoppeld. Opgeslagen in data-prep/gebieden_amsterdam.json.',
+    relatedViews: ['overzicht', 'kaart', 'trends', 'vooruitblik', 'gentrificatie', 'samenhang', 'tabel'],
     coverage: 'Heel Amsterdam; buurten, wijken, 25 GGW-gebieden en stadsdelen; actuele snapshot (10-7-2026).',
     content:
       'GeoJSON-grenzen en codes voor de officiële Amsterdamse gebiedsindeling. De GGW-laag bevat de 25 gebieden waarop Dynamo gebiedsgericht werkt.',
@@ -125,6 +132,7 @@ export const SOURCES: Source[] = [
     ],
     usedFor:
       'De kaartvlakken (choropleth) op de tabbladen Overzicht, Kaart, Vooruitblik en Gentrificatie: gegeneraliseerde CBS-grenzen van wijken en buurten.',
+    relatedViews: ['overzicht', 'kaart', 'vooruitblik', 'gentrificatie'],
     coverage: 'Nederland; gemeente, wijk en buurt; jaarlijkse edities.',
     content:
       'Geometrie van alle gemeenten, wijken en buurten met statistische kerncijfers als attribuut, te downloaden via WFS/ATOM/OGC API.',

@@ -10,6 +10,7 @@ import { areas, availableYears, indicatorById, regionName, nearestYear, getValue
 import { correlate, fisherCI, approxP, strength, type Method } from '../lib/correlation'
 import { fmtValue } from '../lib/format'
 import { BronLink } from '../components/BronLink'
+import { TabFootnote } from '../components/TabFootnote'
 
 // curated socio-demografische X-set (relatief; geen absolute aantallen)
 const X_DEFAULT = [
@@ -357,6 +358,8 @@ export function Samenhang({ ds, geo, state }: { ds: Dataset; geo: GeoSet; state:
           </div>
         </>
       )}
+
+      <TabFootnote viewId="samenhang" ds={ds} state={state} />
     </>
   )
 }
