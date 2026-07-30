@@ -62,8 +62,19 @@
 
 .nav {
   display: flex;
-  gap: 2px;
+  align-items: center;
+  gap: 0;
   margin-left: auto;
+}
+
+.nav-group {
+  display: flex;
+  gap: 2px;
+}
+.nav-group + .nav-group {
+  margin-left: 10px;
+  padding-left: 12px;
+  border-left: 1px solid var(--border);
 }
 
 .nav button {
@@ -87,6 +98,7 @@
 .theme-toggle {
   font-size: 16px;
   padding: 8px;
+  margin-left: 8px;
   border-radius: var(--radius-control);
   color: var(--text-muted);
 }
@@ -530,6 +542,30 @@
   background: var(--text-primary);
   border-color: var(--text-primary);
   color: var(--surface-1);
+}
+
+/* — verantwoording: inhoudsopgave — */
+.verant-toc {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  margin: 18px 0 6px;
+  padding: 12px 14px;
+  background: var(--surface-2);
+  border-radius: var(--radius-card);
+}
+.verant-toc-link {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px 10px;
+}
+.verant-toc-link:hover {
+  color: var(--text-primary);
+  border-color: var(--text-muted);
 }
 
 /* — aannames / verantwoording — */

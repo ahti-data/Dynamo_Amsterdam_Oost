@@ -7,7 +7,7 @@ import { Choropleth } from '../components/Choropleth'
 import { ForecastChart, type ForecastSeries } from '../components/ForecastChart'
 import { SegmentedPicker } from '../components/SegmentedPicker'
 import { TabFootnote } from '../components/TabFootnote'
-import { areas, regionName, coverageBreakYears } from '../lib/data'
+import { areas, regionName, coverageBreakYears, indicatorById } from '../lib/data'
 import { fmtValue, fmtDelta } from '../lib/format'
 import { forecastArea, forecastGroup, pctChange, absChange, HORIZONS } from '../lib/forecast'
 
@@ -42,6 +42,10 @@ export function Vooruitblik({ ds, geo, state }: { ds: Dataset; geo: GeoSet; stat
   const [horizon, setHorizon] = useState<number>(HORIZONS[HORIZONS.length - 1])
   const [hoverCode, setHoverCode] = useState<string | null>(null)
   const group = GROUPS.find((g) => g.id === groupId) ?? GROUPS[0]
+  // dezelfde 9 thema's als Overzicht/Kaart/Tabel — expliciete brug tussen de
+  // doelgroep-indeling hier en de thema-indeling elders (MECE-cleanup)
+  const groupThemeId = indicatorById(ds, group.id)?.theme
+  const groupTheme = groupThemeId ? ds.themes.find((t) => t.id === groupThemeId) : undefined
 
   const focusCode = state.scope || ds.meta.gemeente
   const focusName = regionName(ds, focusCode)
@@ -162,6 +166,26 @@ export function Vooruitblik({ ds, geo, state }: { ds: Dataset; geo: GeoSet; stat
       />
       <p className="view-sub" style={{ marginTop: -8 }}>
         <strong>{group.label}</strong> · stuurt op: {group.service.toLowerCase()}
+        {groupTheme && (
+          <>
+            {' · '}
+            <button
+              type="button"
+              className="bron-link"
+              onClick={() =>
+                state.navigate({
+                  view: 'overzicht',
+                  scope: state.scope,
+                  level: state.level,
+                  indicatorId: groupTheme.headline[0] ?? groupTheme.indicatorIds[0],
+                  year: state.year,
+                })
+              }
+            >
+              zelfde thema in Overzicht: {groupTheme.title} →
+            </button>
+          </>
+        )}
         <span style={{ marginLeft: 14 }}>
           <span className="seg" role="group" aria-label="Horizon" style={{ display: 'inline-flex', verticalAlign: 'middle' }}>
             {HORIZONS.map((h) => (

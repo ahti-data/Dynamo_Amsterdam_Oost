@@ -37,6 +37,19 @@ export function Verantwoording({ ds, state }: { ds: Dataset; state: AppState }) 
         <BronLink state={state}>Bronnen</BronLink>.
       </div>
 
+      <nav className="verant-toc" aria-label="Inhoudsopgave">
+        {VERANTWOORDING_SECTIONS.map((sec) => (
+          <button
+            key={sec.id}
+            type="button"
+            className="verant-toc-link"
+            onClick={() => state.openVerantwoording(sec.id)}
+          >
+            {sec.title}
+          </button>
+        ))}
+      </nav>
+
       {VERANTWOORDING_SECTIONS.map((sec) => (
         <section
           key={sec.id}

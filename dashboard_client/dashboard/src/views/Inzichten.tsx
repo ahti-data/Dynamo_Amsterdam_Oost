@@ -43,6 +43,9 @@ export function Inzichten({ ds, state }: { ds: Dataset; state: AppState }) {
   if (!doc) return <div className="loading">Inzichten laden…</div>
 
   const act = doc.activities.find((a) => a.activityId === active) ?? doc.activities[0]
+  // de Dynamo-activiteit-ids zijn 1-op-1 dezelfde ids als de thema's in
+  // Overzicht/Kaart/Tabel — expliciete brug tussen de twee indelingen (MECE-cleanup)
+  const linkedTheme = ds.themes.find((t) => t.id === act.activityId)
 
   const scopeLabel = (l: InsightLink) => (l.scope ? regionName(ds, l.scope) : regionName(ds, ds.meta.gemeente))
   const linkLabel = (l: InsightLink) => {
@@ -90,6 +93,26 @@ export function Inzichten({ ds, state }: { ds: Dataset; state: AppState }) {
         options={doc.activities.map((a) => ({ id: a.activityId, label: a.activity }))}
         onChange={setActive}
       />
+
+      {linkedTheme && (
+        <p className="view-sub" style={{ marginTop: -8 }}>
+          <button
+            type="button"
+            className="bron-link"
+            onClick={() =>
+              state.navigate({
+                view: 'overzicht',
+                scope: state.scope,
+                level: state.level,
+                indicatorId: linkedTheme.headline[0] ?? linkedTheme.indicatorIds[0],
+                year: state.year,
+              })
+            }
+          >
+            zelfde thema in Overzicht: {linkedTheme.title} →
+          </button>
+        </p>
+      )}
 
       <div className="insight-grid wide">
         {act.insights.map((ins, i) => (

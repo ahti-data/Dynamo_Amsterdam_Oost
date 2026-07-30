@@ -17,20 +17,33 @@ import { Verantwoording } from './views/Verantwoording'
 import dynamoLogo from './assets/dynamo.png'
 import ahtiLogo from './assets/ahti.png'
 
+// Volgorde bewust gegroepeerd (i.p.v. de oude vlakke rij) zodat de navigatie
+// zelf al laat zien welke tabbladen bij elkaar horen — zie NAV_GROUPS hieronder.
 export const VIEWS = [
-  { id: 'inzichten', label: 'Inzichten' },
-  { id: 'overzicht', label: 'Overzicht' },
-  { id: 'kaart', label: 'Kaart' },
-  { id: 'trends', label: 'Ontwikkeling' },
-  { id: 'vooruitblik', label: 'Vooruitblik' },
-  { id: 'gentrificatie', label: 'Gentrificatie' },
-  { id: 'samenhang', label: 'Samenhang' },
-  { id: 'tabel', label: 'Tabel' },
-  { id: 'verantwoording', label: 'Verantwoording' },
-  { id: 'bronnen', label: 'Bronnen' },
+  { id: 'inzichten', label: 'Inzichten', group: 'Narratief' },
+  { id: 'vooruitblik', label: 'Vooruitblik', group: 'Narratief' },
+  { id: 'overzicht', label: 'Overzicht', group: 'Verkennen' },
+  { id: 'kaart', label: 'Kaart', group: 'Verkennen' },
+  { id: 'trends', label: 'Ontwikkeling', group: 'Verkennen' },
+  { id: 'tabel', label: 'Tabel', group: 'Verkennen' },
+  { id: 'gentrificatie', label: 'Gentrificatie', group: 'Analyse' },
+  { id: 'samenhang', label: 'Samenhang', group: 'Analyse' },
+  { id: 'verantwoording', label: 'Verantwoording', group: 'Referentie' },
+  { id: 'bronnen', label: 'Bronnen', group: 'Referentie' },
 ] as const
 
 export type ViewId = (typeof VIEWS)[number]['id']
+
+/** VIEWS samengevoegd tot aaneengesloten clusters, voor de navigatiebalk. */
+const NAV_GROUPS: { group: string; views: (typeof VIEWS)[number][] }[] = (() => {
+  const out: { group: string; views: (typeof VIEWS)[number][] }[] = []
+  for (const v of VIEWS) {
+    const last = out[out.length - 1]
+    if (last && last.group === v.group) last.views.push(v)
+    else out.push({ group: v.group, views: [v] })
+  }
+  return out
+})()
 
 export interface GeoSet {
   wijk: GeoCollection | null
@@ -356,10 +369,14 @@ export default function App() {
           <span className="brand-sub">Demografische monitor</span>
         </div>
         <nav className="nav" aria-label="Hoofdnavigatie">
-          {VIEWS.map((v) => (
-            <button key={v.id} className={view === v.id ? 'active' : ''} onClick={() => setView(v.id)}>
-              {v.label}
-            </button>
+          {NAV_GROUPS.map((g) => (
+            <div key={g.group} className="nav-group" role="group" aria-label={g.group} title={g.group}>
+              {g.views.map((v) => (
+                <button key={v.id} className={view === v.id ? 'active' : ''} onClick={() => setView(v.id)}>
+                  {v.label}
+                </button>
+              ))}
+            </div>
           ))}
           <button
             className="theme-toggle"
