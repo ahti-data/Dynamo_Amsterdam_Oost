@@ -17,24 +17,26 @@ import { Verantwoording } from './views/Verantwoording'
 import dynamoLogo from './assets/dynamo.png'
 import ahtiLogo from './assets/ahti.png'
 
-// Volgorde bewust gegroepeerd (i.p.v. de oude vlakke rij) zodat de navigatie
-// zelf al laat zien welke tabbladen bij elkaar horen — zie NAV_GROUPS hieronder.
+// Drie hoofdgroepen, elk een top-level tabblad; Inzichten en Verantwoording &
+// Bronnen tonen hun (enkele of dubbele) view rechtstreeks, Verkennen & Analyse
+// toont eerst de gedeelde parameterbalk en daaronder een sub-tabbalk met de
+// losse analyseviews — zie NAV_GROUPS hieronder.
 export const VIEWS = [
-  { id: 'inzichten', label: 'Inzichten', group: 'Narratief' },
-  { id: 'vooruitblik', label: 'Vooruitblik', group: 'Narratief' },
-  { id: 'overzicht', label: 'Overzicht', group: 'Verkennen' },
-  { id: 'kaart', label: 'Kaart', group: 'Verkennen' },
-  { id: 'trends', label: 'Ontwikkeling', group: 'Verkennen' },
-  { id: 'tabel', label: 'Tabel', group: 'Verkennen' },
-  { id: 'gentrificatie', label: 'Gentrificatie', group: 'Analyse' },
-  { id: 'samenhang', label: 'Samenhang', group: 'Analyse' },
-  { id: 'verantwoording', label: 'Verantwoording', group: 'Referentie' },
-  { id: 'bronnen', label: 'Bronnen', group: 'Referentie' },
+  { id: 'inzichten', label: 'Inzichten', group: 'Inzichten' },
+  { id: 'overzicht', label: 'Overzicht', group: 'Verkennen & Analyse' },
+  { id: 'kaart', label: 'Kaart', group: 'Verkennen & Analyse' },
+  { id: 'trends', label: 'Ontwikkeling', group: 'Verkennen & Analyse' },
+  { id: 'tabel', label: 'Tabel', group: 'Verkennen & Analyse' },
+  { id: 'vooruitblik', label: 'Vooruitblik', group: 'Verkennen & Analyse' },
+  { id: 'gentrificatie', label: 'Gentrificatie', group: 'Verkennen & Analyse' },
+  { id: 'samenhang', label: 'Samenhang', group: 'Verkennen & Analyse' },
+  { id: 'verantwoording', label: 'Verantwoording', group: 'Verantwoording & Bronnen' },
+  { id: 'bronnen', label: 'Bronnen', group: 'Verantwoording & Bronnen' },
 ] as const
 
 export type ViewId = (typeof VIEWS)[number]['id']
 
-/** VIEWS samengevoegd tot aaneengesloten clusters, voor de navigatiebalk. */
+/** VIEWS samengevoegd tot aaneengesloten clusters — één cluster per top-level tabblad. */
 const NAV_GROUPS: { group: string; views: (typeof VIEWS)[number][] }[] = (() => {
   const out: { group: string; views: (typeof VIEWS)[number][] }[] = []
   for (const v of VIEWS) {
@@ -356,6 +358,19 @@ export default function App() {
   const groups = [...new Set(scopeOptions.map((o) => o.group))]
   const emptyDataset = ds.indicators.length === 0
 
+  // actief hoofdtabblad (cluster) + de sub-tabs daarbinnen, voor de 2-laags nav
+  const activeGroup = NAV_GROUPS.find((g) => g.views.some((v) => v.id === view)) ?? NAV_GROUPS[0]
+  const isVerkennenAnalyse = activeGroup.group === 'Verkennen & Analyse'
+  const subNav = activeGroup.views.length > 1 && (
+    <div className="subnav" role="group" aria-label={activeGroup.group}>
+      {activeGroup.views.map((v) => (
+        <button key={v.id} className={view === v.id ? 'active' : ''} onClick={() => setView(v.id)}>
+          {v.label}
+        </button>
+      ))}
+    </div>
+  )
+
   return (
     <div className="app">
       <a href="#main" className="skip-link">Naar de inhoud</a>
@@ -370,13 +385,15 @@ export default function App() {
         </div>
         <nav className="nav" aria-label="Hoofdnavigatie">
           {NAV_GROUPS.map((g) => (
-            <div key={g.group} className="nav-group" role="group" aria-label={g.group} title={g.group}>
-              {g.views.map((v) => (
-                <button key={v.id} className={view === v.id ? 'active' : ''} onClick={() => setView(v.id)}>
-                  {v.label}
-                </button>
-              ))}
-            </div>
+            <button
+              key={g.group}
+              className={activeGroup.group === g.group ? 'active' : ''}
+              onClick={() => {
+                if (activeGroup.group !== g.group) setView(g.views[0].id)
+              }}
+            >
+              {g.group}
+            </button>
           ))}
           <button
             className="theme-toggle"
@@ -389,7 +406,7 @@ export default function App() {
         </nav>
       </header>
 
-      {view !== 'verantwoording' && view !== 'inzichten' && view !== 'bronnen' && (
+      {isVerkennenAnalyse && (
         <div className="filterbar scopebar">
           <label>Gemeente</label>
           <select className="control" value={gm} onChange={(e) => setGm(e.target.value)} aria-label="Gemeente">
@@ -457,6 +474,8 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {subNav}
 
       <main className="main" id="main">
         <ErrorBoundary key={`${view}-${gm}`}>
