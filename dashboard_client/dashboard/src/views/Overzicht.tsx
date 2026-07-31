@@ -4,7 +4,6 @@ import type { AppState, GeoSet } from '../App'
 import { StatTile } from '../components/StatTile'
 import { BarChart, type BarRow } from '../components/BarChart'
 import { Choropleth } from '../components/Choropleth'
-import { SegmentedPicker } from '../components/SegmentedPicker'
 import { TabFootnote } from '../components/TabFootnote'
 import {
   areas, availableYears, getSeries, getValue, deltaOverPeriod,
@@ -112,19 +111,26 @@ export function Overzicht({ ds, geo, state }: { ds: Dataset; geo: GeoSet; state:
         </p>
       )}
 
-      <SegmentedPicker
-        ariaLabel="Thema's"
-        asTabs
-        value={theme.id}
-        options={themes.map((t) => ({ id: t.id, label: t.title }))}
-        onChange={(id) => {
-          state.setThemeId(id)
-          const first = ds.themes.find((x) => x.id === id)!
-          // behoud de indicator als die ook in het nieuwe thema zit
-          if (!first.indicatorIds.includes(state.indicatorId))
-            state.setIndicatorId(first.headline[0] ?? first.indicatorIds[0])
-        }}
-      />
+      <div className="filterbar" style={{ padding: 0, maxWidth: 'none', margin: '0 0 4px' }}>
+        <label htmlFor="overzicht-thema">Thema</label>
+        <select
+          id="overzicht-thema"
+          className="control"
+          value={theme.id}
+          onChange={(e) => {
+            const id = e.target.value
+            state.setThemeId(id)
+            const first = ds.themes.find((x) => x.id === id)!
+            // behoud de indicator als die ook in het nieuwe thema zit
+            if (!first.indicatorIds.includes(state.indicatorId))
+              state.setIndicatorId(first.headline[0] ?? first.indicatorIds[0])
+          }}
+        >
+          {themes.map((t) => (
+            <option key={t.id} value={t.id}>{t.title}</option>
+          ))}
+        </select>
+      </div>
 
       <p className="view-sub" style={{ marginTop: -8 }}>
         <strong>{theme.title}</strong> · sluit aan op: {theme.dynamoService.toLowerCase()}

@@ -5,7 +5,6 @@ import { StatTile } from '../components/StatTile'
 import { BarChart, type BarRow } from '../components/BarChart'
 import { Choropleth } from '../components/Choropleth'
 import { ForecastChart, type ForecastSeries } from '../components/ForecastChart'
-import { SegmentedPicker } from '../components/SegmentedPicker'
 import { TabFootnote } from '../components/TabFootnote'
 import { areas, regionName, coverageBreakYears, indicatorById } from '../lib/data'
 import { fmtValue, fmtDelta } from '../lib/format'
@@ -154,16 +153,19 @@ export function Vooruitblik({ ds, geo, state }: { ds: Dataset; geo: GeoSet; stat
         <strong>indicatief</strong> en verbreden richting {horizon} — zie de onzekerheidsband en de Verantwoording.
       </p>
 
-      {/* doelgroep-keuze, gekoppeld aan Dynamo-dienst. Geen role="tablist"/"tab":
-          er is geen bijbehorend tabpanel-DOM, dus dat vereist roving tabindex +
-          aria-controls die er niet is (A11Y-5-regressie) — dit is een filter,
-          geen tab-widget, dus role="group" met aria-pressed past beter. */}
-      <SegmentedPicker
-        ariaLabel="Doelgroep"
-        value={group.id}
-        options={GROUPS.map((g) => ({ id: g.id, label: g.label }))}
-        onChange={(id) => { setGroupId(id); state.setSelectedArea(null) }}
-      />
+      <div className="filterbar" style={{ padding: 0, maxWidth: 'none', margin: '0 0 4px' }}>
+        <label htmlFor="vooruitblik-doelgroep">Doelgroep</label>
+        <select
+          id="vooruitblik-doelgroep"
+          className="control"
+          value={group.id}
+          onChange={(e) => { setGroupId(e.target.value); state.setSelectedArea(null) }}
+        >
+          {GROUPS.map((g) => (
+            <option key={g.id} value={g.id}>{g.label}</option>
+          ))}
+        </select>
+      </div>
       <p className="view-sub" style={{ marginTop: -8 }}>
         <strong>{group.label}</strong> · stuurt op: {group.service.toLowerCase()}
         {groupTheme && (

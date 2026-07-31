@@ -4,7 +4,6 @@ import type { AppState } from '../App'
 import { indicatorById, regionName } from '../lib/data'
 import { loadData } from '../lib/crypto'
 import { BronLink } from '../components/BronLink'
-import { SegmentedPicker } from '../components/SegmentedPicker'
 import { TabFootnote } from '../components/TabFootnote'
 import { InsightCard, type InsightCardData, type InsightLink } from '../components/InsightCard'
 
@@ -70,7 +69,7 @@ export function Inzichten({ ds, state }: { ds: Dataset; state: AppState }) {
   return (
     <>
       <h1 className="view-title">Doelgroepdossiers voor Dynamo</h1>
-      <p className="view-sub">
+      <p className="view-sub view-sub-wide">
         Per Dynamo-activiteit een verdiepend onderzoek: precies gedefinieerde doelgroepen, hun
         meer-dimensionale sociaal-demografische profiel, en de multivariate koppeling aan zorg-,
         welzijns- en gezondheidsuitkomsten (regressie, buurttypologie, composietindex, partiële
@@ -87,12 +86,21 @@ export function Inzichten({ ds, state }: { ds: Dataset; state: AppState }) {
         ecologische samenhang, niet als bewezen oorzaak.
       </div>
 
-      <SegmentedPicker
-        ariaLabel="Kies een Dynamo-activiteit"
-        value={act.activityId}
-        options={doc.activities.map((a) => ({ id: a.activityId, label: a.activity }))}
-        onChange={setActive}
-      />
+      <div className="filterbar" style={{ padding: 0, maxWidth: 'none', margin: '0 0 4px' }}>
+        <label htmlFor="inzichten-activiteit">Dynamo-activiteit</label>
+        <select
+          id="inzichten-activiteit"
+          className="control"
+          value={act.activityId}
+          onChange={(e) => setActive(e.target.value)}
+        >
+          {doc.activities.map((a) => (
+            <option key={a.activityId} value={a.activityId}>
+              {a.activity}
+            </option>
+          ))}
+        </select>
+      </div>
 
       {linkedTheme && (
         <p className="view-sub" style={{ marginTop: -8 }}>

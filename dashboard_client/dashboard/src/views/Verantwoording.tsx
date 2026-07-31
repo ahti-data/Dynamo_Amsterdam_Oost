@@ -12,8 +12,13 @@ export function Verantwoording({ ds, state }: { ds: Dataset; state: AppState }) 
     if (!target) return
     if (scrolledFor.current === target) return
     scrolledFor.current = target
-    const el = document.getElementById(`verant-${target}`)
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    // imperatief i.p.v. een React-gecontroleerd `open`-prop: zo blokkeert dit
+    // niet het normale, onafhankelijke open/dicht-klikken van de andere secties
+    const el = document.getElementById(`verant-${target}`) as HTMLDetailsElement | null
+    if (el) {
+      el.open = true
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
     const t = setTimeout(() => state.clearVerantwoordingAnchor(), 2400)
     return () => clearTimeout(t)
   }, [target, state])
@@ -37,28 +42,17 @@ export function Verantwoording({ ds, state }: { ds: Dataset; state: AppState }) 
         <BronLink state={state}>Bronnen</BronLink>.
       </div>
 
-      <nav className="verant-toc" aria-label="Inhoudsopgave">
-        {VERANTWOORDING_SECTIONS.map((sec) => (
-          <button
-            key={sec.id}
-            type="button"
-            className="verant-toc-link"
-            onClick={() => state.openVerantwoording(sec.id)}
-          >
-            {sec.title}
-          </button>
-        ))}
-      </nav>
-
       {VERANTWOORDING_SECTIONS.map((sec) => (
-        <section
+        <details
           key={sec.id}
           id={`verant-${sec.id}`}
-          className={target === sec.id ? 'is-target' : undefined}
+          className={`verant-section${target === sec.id ? ' is-target' : ''}`}
         >
-          <h2>{sec.title}</h2>
-          {sec.render(state, ds)}
-        </section>
+          <summary>
+            <h2>{sec.title}</h2>
+          </summary>
+          <div className="verant-section-body">{sec.render(state, ds)}</div>
+        </details>
       ))}
     </div>
   )
