@@ -13,6 +13,7 @@
   padding: 0 28px;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 28px;
   flex-wrap: wrap;
   position: sticky;
@@ -55,16 +56,14 @@
 
 :root[data-theme='dark'] .logo-divider { background: rgba(11, 11, 11, 0.18); }
 
-.brand-sub {
-  font-size: 13px;
-  color: var(--text-secondary);
-}
-
 .nav {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
   display: flex;
   align-items: center;
   gap: 0;
-  margin-left: auto;
 }
 
 .nav button {
@@ -88,15 +87,39 @@
 .theme-toggle {
   font-size: 16px;
   padding: 8px;
-  margin-left: 8px;
   border-radius: var(--radius-control);
   color: var(--text-muted);
+  flex-shrink: 0;
 }
 .theme-toggle:hover { color: var(--text-primary); }
 
+/* — kolom die parameters, subtabs en de charts omvat: visueel apart van de
+   lege marges links/rechts van de pagina (--page) — */
+.content-shell {
+  max-width: 1280px;
+  width: 100%;
+  margin: 0 auto;
+  background: var(--surface-1);
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+/* — bevroren kop: parameterbalk + subtabs blijven zichtbaar bij scrollen,
+   met een merk-getinte achtergrond die duidelijk afsteekt tegen de
+   grafieken/kaarten daaronder — */
+.frozen-bar {
+  position: sticky;
+  top: 61px; /* hoogte van .topbar */
+  z-index: 25;
+  background: color-mix(in srgb, var(--surface-2) 88%, var(--brand) 12%);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
 /* — scopebalk (gemeente/focus/niveau, boven alle views) — */
 .scopebar {
-  background: var(--surface-2);
   border-bottom: 1px solid var(--border);
   padding: 10px 28px;
   max-width: none;
@@ -138,38 +161,52 @@
 
 /* — subnav: tweede-laags tabbalk binnen een hoofdtabblad (bv. Verkennen &
    Analyse: Overzicht/Kaart/Ontwikkeling/…; Verantwoording & Bronnen: de twee
-   deeltabbladen) — */
+   deeltabbladen) — dezelfde opmaak voor alle groepen, spant de volle breedte
+   van de kolom, met een geanimeerde indicator die naar de actieve tab schuift — */
 .subnav {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-wrap: wrap;
   padding: 8px 28px;
-  max-width: 1280px;
-  width: 100%;
-  margin: 0 auto;
   border-bottom: 1px solid var(--border);
 }
 
+.subnav-track {
+  position: relative;
+  display: flex;
+  width: 100%;
+}
+
+.subnav-indicator {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(100% / var(--sn-count, 1) * var(--sn-index, 0));
+  width: calc(100% / var(--sn-count, 1));
+  background: var(--surface-1);
+  border-radius: var(--radius-control);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  transition: left 0.25s cubic-bezier(0.4, 0, 0.2, 1), width 0.25s ease;
+  z-index: 0;
+}
+
 .subnav button {
+  position: relative;
+  z-index: 1;
+  flex: 1 1 0;
+  text-align: center;
   padding: 7px 14px;
   font-size: 13px;
   font-weight: 500;
   color: var(--text-secondary);
   border-radius: var(--radius-control);
-  transition: color 0.15s, background 0.15s;
+  transition: color 0.15s;
 }
 
 .subnav button:hover {
   color: var(--text-primary);
-  background: var(--surface-1);
 }
 
 .subnav button.active {
   color: var(--text-primary);
-  background: var(--surface-1);
   font-weight: 600;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
 }
 
 .seg {
@@ -219,9 +256,19 @@
 .main {
   flex: 1;
   width: 100%;
-  max-width: 1280px;
-  margin: 0 auto;
   padding: 20px 28px 60px;
+}
+
+/* — zachte overgang bij het wisselen van (sub)tabblad — */
+@keyframes viewFadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.view-fade {
+  animation: viewFadeIn 220ms ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  .view-fade { animation: none; }
 }
 
 .view-title {
@@ -892,11 +939,11 @@
   .brand {
     padding: 10px 0 4px;
   }
-  .brand-sub {
-    display: none;
-  }
   .nav {
-    margin-left: 0;
+    position: static;
+    top: auto;
+    left: auto;
+    transform: none;
     width: 100%;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
@@ -905,14 +952,24 @@
     padding: 10px 10px 8px;
     white-space: nowrap;
   }
+  .frozen-bar {
+    top: 0; /* topbar is niet meer sticky boven een vaste hoogte op mobiel (wrap) */
+  }
   .subnav {
     padding-left: 14px;
     padding-right: 14px;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
-    flex-wrap: nowrap;
+  }
+  .subnav-track {
+    width: max-content;
+    min-width: 100%;
+  }
+  .subnav-indicator {
+    display: none;
   }
   .subnav button {
+    flex: none;
     white-space: nowrap;
   }
   .main {

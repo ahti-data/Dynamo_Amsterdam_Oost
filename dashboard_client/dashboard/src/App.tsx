@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import type { Dataset, GemeenteIndex, GeoCollection, RegionLevel } from './types'
 import { levelsForScope, regionsOf } from './lib/data'
 import { detectEncryption, loadData } from './lib/crypto'
@@ -361,15 +361,24 @@ export default function App() {
   // actief hoofdtabblad (cluster) + de sub-tabs daarbinnen, voor de 2-laags nav
   const activeGroup = NAV_GROUPS.find((g) => g.views.some((v) => v.id === view)) ?? NAV_GROUPS[0]
   const isVerkennenAnalyse = activeGroup.group === 'Verkennen & Analyse'
+  const activeSubIndex = Math.max(0, activeGroup.views.findIndex((v) => v.id === view))
   const subNav = activeGroup.views.length > 1 && (
     <div className="subnav" role="group" aria-label={activeGroup.group}>
-      {activeGroup.views.map((v) => (
-        <button key={v.id} className={view === v.id ? 'active' : ''} onClick={() => setView(v.id)}>
-          {v.label}
-        </button>
-      ))}
+      <div
+        className="subnav-track"
+        style={{ '--sn-count': activeGroup.views.length, '--sn-index': activeSubIndex } as CSSProperties}
+      >
+        <span className="subnav-indicator" aria-hidden="true" />
+        {activeGroup.views.map((v) => (
+          <button key={v.id} className={view === v.id ? 'active' : ''} onClick={() => setView(v.id)}>
+            {v.label}
+          </button>
+        ))}
+      </div>
     </div>
   )
+  // frozen-bar alleen tonen als er iets in te tonen valt (Inzichten heeft geen van beide)
+  const hasFrozenBar = isVerkennenAnalyse || Boolean(subNav)
 
   return (
     <div className="app">
@@ -381,7 +390,6 @@ export default function App() {
             <span className="logo-divider" aria-hidden />
             <img src={ahtiLogo} alt="ahti — Amsterdam Health & Technology Institute" className="logo logo-ahti" />
           </span>
-          <span className="brand-sub">Demografische monitor</span>
         </div>
         <nav className="nav" aria-label="Hoofdnavigatie">
           {NAV_GROUPS.map((g) => (
@@ -395,113 +403,119 @@ export default function App() {
               {g.group}
             </button>
           ))}
-          <button
-            className="theme-toggle"
-            onClick={() => setDark((d) => !d)}
-            title={dark ? 'Licht thema' : 'Donker thema'}
-            aria-label="Thema wisselen"
-          >
-            {dark ? '☀' : '☾'}
-          </button>
         </nav>
+        <button
+          className="theme-toggle"
+          onClick={() => setDark((d) => !d)}
+          title={dark ? 'Licht thema' : 'Donker thema'}
+          aria-label="Thema wisselen"
+        >
+          {dark ? '☀' : '☾'}
+        </button>
       </header>
 
-      {isVerkennenAnalyse && (
-        <div className="filterbar scopebar">
-          <label>Gemeente</label>
-          <select className="control" value={gm} onChange={(e) => setGm(e.target.value)} aria-label="Gemeente">
-            {[...index.gemeenten]
-              .sort((a, b) => a.naam.localeCompare(b.naam, 'nl'))
-              .map((g) => (
-                <option key={g.code} value={g.code}>
-                  {g.naam}
-                </option>
-              ))}
-          </select>
+      <div className="content-shell">
+        {hasFrozenBar && (
+          <div className="frozen-bar">
+            {isVerkennenAnalyse && (
+              <div className="filterbar scopebar">
+                <label>Gemeente</label>
+                <select className="control" value={gm} onChange={(e) => setGm(e.target.value)} aria-label="Gemeente">
+                  {[...index.gemeenten]
+                    .sort((a, b) => a.naam.localeCompare(b.naam, 'nl'))
+                    .map((g) => (
+                      <option key={g.code} value={g.code}>
+                        {g.naam}
+                      </option>
+                    ))}
+                </select>
 
-          {scopeOptions.length > 0 && (
-            <>
-              <label>Focus</label>
-              <select
-                className="control"
-                value={scope}
-                onChange={(e) => changeScope(e.target.value)}
-                aria-label="Focusgebied"
-              >
-                <option value="">Hele gemeente</option>
-                {groups.map((grp) => (
-                  <optgroup key={grp} label={grp}>
-                    {scopeOptions
-                      .filter((o) => o.group === grp)
-                      .map((o) => (
-                        <option key={o.code} value={o.code}>
-                          {o.name}
-                        </option>
+                {scopeOptions.length > 0 && (
+                  <>
+                    <label>Focus</label>
+                    <select
+                      className="control"
+                      value={scope}
+                      onChange={(e) => changeScope(e.target.value)}
+                      aria-label="Focusgebied"
+                    >
+                      <option value="">Hele gemeente</option>
+                      {groups.map((grp) => (
+                        <optgroup key={grp} label={grp}>
+                          {scopeOptions
+                            .filter((o) => o.group === grp)
+                            .map((o) => (
+                              <option key={o.code} value={o.code}>
+                                {o.name}
+                              </option>
+                            ))}
+                        </optgroup>
                       ))}
-                  </optgroup>
-                ))}
-              </select>
-            </>
-          )}
+                    </select>
+                  </>
+                )}
 
-          <label>Peiljaar</label>
-          <select
-            className="control"
-            value={year}
-            onChange={(e) => setYear(Number(e.target.value))}
-            aria-label="Peiljaar"
-          >
-            {ds.years.map((y) => (
-              <option key={y} value={y}>
-                {y}
-              </option>
-            ))}
-          </select>
+                <label>Peiljaar</label>
+                <select
+                  className="control"
+                  value={year}
+                  onChange={(e) => setYear(Number(e.target.value))}
+                  aria-label="Peiljaar"
+                >
+                  {ds.years.map((y) => (
+                    <option key={y} value={y}>
+                      {y}
+                    </option>
+                  ))}
+                </select>
 
-          <div className="seg" role="group" aria-label="Niveau">
-            {levelsForScope(ds, scope).map((lv) => (
-              <button
-                key={lv}
-                className={level === lv ? 'active' : ''}
-                onClick={() => {
-                  setLevel(lv)
-                  setSelectedArea(null)
-                }}
-              >
-                {lv === 'stadsdeel' ? 'Stadsdelen' : lv === 'gebied' ? 'Gebieden' : lv === 'wijk' ? 'Wijken' : 'Buurten'}
-              </button>
-            ))}
+                <div className="seg" role="group" aria-label="Niveau">
+                  {levelsForScope(ds, scope).map((lv) => (
+                    <button
+                      key={lv}
+                      className={level === lv ? 'active' : ''}
+                      onClick={() => {
+                        setLevel(lv)
+                        setSelectedArea(null)
+                      }}
+                    >
+                      {lv === 'stadsdeel' ? 'Stadsdelen' : lv === 'gebied' ? 'Gebieden' : lv === 'wijk' ? 'Wijken' : 'Buurten'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {subNav}
           </div>
-        </div>
-      )}
+        )}
 
-      {subNav}
-
-      <main className="main" id="main">
-        <ErrorBoundary key={`${view}-${gm}`}>
-          {emptyDataset && view !== 'verantwoording' ? (
-            <div className="empty-state">
-              <p>
-                Voor {index.gemeenten.find((g) => g.code === gm)?.naam ?? gm} zijn geen bruikbare
-                indicatoren beschikbaar in de huidige databundel.
-              </p>
-            </div>
-          ) : (
-            <>
-              {view === 'inzichten' && <Inzichten ds={ds} state={state} />}
-              {view === 'overzicht' && <Overzicht ds={ds} geo={geo} state={state} />}
-              {view === 'kaart' && <Kaart ds={ds} geo={geo} state={state} />}
-              {view === 'trends' && <Trends ds={ds} state={state} />}
-              {view === 'vooruitblik' && <Vooruitblik ds={ds} geo={geo} state={state} />}
-              {view === 'gentrificatie' && <Gentrificatie ds={ds} geo={geo} state={state} />}
-              {view === 'samenhang' && <Samenhang ds={ds} geo={geo} state={state} />}
-              {view === 'tabel' && <Tabel ds={ds} state={state} />}
-              {view === 'bronnen' && <Bronnen state={state} />}
-              {view === 'verantwoording' && <Verantwoording ds={ds} state={state} />}
-            </>
-          )}
-        </ErrorBoundary>
-      </main>
+        <main className="main" id="main">
+          <ErrorBoundary key={`${view}-${gm}`}>
+            {emptyDataset && view !== 'verantwoording' ? (
+              <div className="empty-state">
+                <p>
+                  Voor {index.gemeenten.find((g) => g.code === gm)?.naam ?? gm} zijn geen bruikbare
+                  indicatoren beschikbaar in de huidige databundel.
+                </p>
+              </div>
+            ) : (
+              <div className="view-fade">
+                {view === 'inzichten' && <Inzichten ds={ds} state={state} />}
+                {view === 'overzicht' && <Overzicht ds={ds} geo={geo} state={state} />}
+                {view === 'kaart' && <Kaart ds={ds} geo={geo} state={state} />}
+                {view === 'trends' && <Trends ds={ds} state={state} />}
+                {view === 'vooruitblik' && <Vooruitblik ds={ds} geo={geo} state={state} />}
+                {view === 'gentrificatie' && <Gentrificatie ds={ds} geo={geo} state={state} />}
+                {view === 'samenhang' && <Samenhang ds={ds} geo={geo} state={state} />}
+                {view === 'tabel' && <Tabel ds={ds} state={state} />}
+                {view === 'bronnen' && <Bronnen state={state} />}
+                {view === 'verantwoording' && <Verantwoording ds={ds} state={state} />}
+              </div>
+            )}
+          </ErrorBoundary>
+        </main>
+      </div>
 
       <footer className="footer">
         <span>
