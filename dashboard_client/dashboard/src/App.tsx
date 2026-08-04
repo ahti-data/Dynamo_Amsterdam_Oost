@@ -4,11 +4,9 @@ import { levelsForScope, regionsOf } from './lib/data'
 import { detectEncryption, loadData } from './lib/crypto'
 import { UnlockGate } from './components/UnlockGate'
 import { ErrorBoundary } from './ErrorBoundary'
-import { Overzicht } from './views/Overzicht'
 import { Kaart } from './views/Kaart'
 import { Trends } from './views/Trends'
 import { Vooruitblik } from './views/Vooruitblik'
-import { Gentrificatie } from './views/Gentrificatie'
 import { Samenhang } from './views/Samenhang'
 import { Inzichten } from './views/Inzichten'
 import { Tabel } from './views/Tabel'
@@ -23,13 +21,11 @@ import ahtiLogo from './assets/ahti.png'
 // losse analyseviews — zie NAV_GROUPS hieronder.
 export const VIEWS = [
   { id: 'inzichten', label: 'Inzichten', group: 'Inzichten' },
-  { id: 'overzicht', label: 'Overzicht', group: 'Verkennen & Analyse' },
   { id: 'kaart', label: 'Kaart', group: 'Verkennen & Analyse' },
-  { id: 'trends', label: 'Ontwikkeling', group: 'Verkennen & Analyse' },
-  { id: 'tabel', label: 'Tabel', group: 'Verkennen & Analyse' },
+  { id: 'trends', label: 'Ontwikkeling over tijd', group: 'Verkennen & Analyse' },
   { id: 'vooruitblik', label: 'Vooruitblik', group: 'Verkennen & Analyse' },
-  { id: 'gentrificatie', label: 'Gentrificatie', group: 'Verkennen & Analyse' },
   { id: 'samenhang', label: 'Samenhang', group: 'Verkennen & Analyse' },
+  { id: 'tabel', label: 'Tabel', group: 'Verkennen & Analyse' },
   { id: 'verantwoording', label: 'Verantwoording', group: 'Verantwoording & Bronnen' },
   { id: 'bronnen', label: 'Bronnen', group: 'Verantwoording & Bronnen' },
 ] as const
@@ -85,7 +81,7 @@ export interface AppState {
 }
 
 export interface NavTarget {
-  view: 'overzicht' | 'kaart' | 'trends' | 'gentrificatie' | 'samenhang'
+  view: 'kaart' | 'trends' | 'vooruitblik' | 'samenhang' | 'tabel'
   gm?: string
   scope: string
   level: RegionLevel
@@ -502,11 +498,9 @@ export default function App() {
             ) : (
               <div className="view-fade">
                 {view === 'inzichten' && <Inzichten ds={ds} state={state} />}
-                {view === 'overzicht' && <Overzicht ds={ds} geo={geo} state={state} />}
                 {view === 'kaart' && <Kaart ds={ds} geo={geo} state={state} />}
                 {view === 'trends' && <Trends ds={ds} state={state} />}
                 {view === 'vooruitblik' && <Vooruitblik ds={ds} geo={geo} state={state} />}
-                {view === 'gentrificatie' && <Gentrificatie ds={ds} geo={geo} state={state} />}
                 {view === 'samenhang' && <Samenhang ds={ds} geo={geo} state={state} />}
                 {view === 'tabel' && <Tabel ds={ds} state={state} />}
                 {view === 'bronnen' && <Bronnen state={state} />}

@@ -6,8 +6,20 @@ import { BarChart, type BarRow } from '../components/BarChart'
 import { areas, availableYears, getValue, indicatorById, regionName, nearestYear, signalSort, noDataReason } from '../lib/data'
 import { fmtValue } from '../lib/format'
 import { TabFootnote } from '../components/TabFootnote'
+import type { Unit } from '../types'
 
 type Mode = 'abs' | 'rel'
+
+const UNIT_LABEL: Record<Unit, string> = {
+  aantal: 'aantal',
+  pct: '%',
+  euro: '€',
+  per_km2: 'per km²',
+  per_1000: 'per 1.000 inwoners',
+  km: 'km',
+  personen: 'aantal',
+  index: 'index',
+}
 
 export function Kaart({ ds, geo, state }: { ds: Dataset; geo: GeoSet; state: AppState }) {
   const [mode, setMode] = useState<Mode>('abs')
@@ -94,10 +106,11 @@ export function Kaart({ ds, geo, state }: { ds: Dataset; geo: GeoSet; state: App
     return { ...g, features: g.features.filter((f) => codes.has(f.properties.code)) }
   }, [geo, state.level, list])
 
-  const prevYear = [...availYears].reverse().find((y) => y < year)
-  const nextYear = availYears.find((y) => y > year)
-
   const levelNaam = state.level === 'buurt' ? 'buurten' : state.level === 'gebied' ? 'gebieden' : 'wijken'
+  const xAxisLabel =
+    effMode === 'rel'
+      ? `${indicator.shortLabel} · afwijking t.o.v. ${refName} (%)`
+      : `${indicator.shortLabel} (${UNIT_LABEL[indicator.unit]})`
   const richtingTekst =
     indicator.direction === 'laag'
       ? 'sterkste signaal = laagste waarde (donker op de kaart)'
@@ -108,10 +121,10 @@ export function Kaart({ ds, geo, state }: { ds: Dataset; geo: GeoSet; state: App
   return (
     <>
       <h1 className="view-title">Kaart — waar is het signaal het sterkst?</h1>
-      <p className="view-sub">
+      <p className="view-sub view-sub-wide">
         Donker = sterkste ondersteuningssignaal ({richtingTekst}). Schakel naar <em>relatief</em> om
         te zien waar een gebied boven of onder het gemiddelde van {refName} zit — dat onderscheidt
-        concentratie van omvang.
+        concentratie van omvang. Rechts staan de {levelNaam} met het sterkste signaal op een rij.
       </p>
 
       <div className="filterbar" style={{ padding: '0 0 14px', maxWidth: 'none' }}>
@@ -138,25 +151,6 @@ export function Kaart({ ds, geo, state }: { ds: Dataset; geo: GeoSet; state: App
             </optgroup>
           ))}
         </select>
-
-        <label>Jaar</label>
-        <div className="year-step">
-          <button
-            onClick={() => prevYear != null && state.setYear(prevYear)}
-            disabled={prevYear == null}
-            aria-label="Vorig jaar"
-          >
-            ‹
-          </button>
-          <span className="year-now">{year}</span>
-          <button
-            onClick={() => nextYear != null && state.setYear(nextYear)}
-            disabled={nextYear == null}
-            aria-label="Volgend jaar"
-          >
-            ›
-          </button>
-        </div>
 
         <div className="seg" role="group" aria-label="Weergave">
           <button className={effMode === 'abs' ? 'active' : ''} onClick={() => setMode('abs')}>
@@ -267,6 +261,8 @@ export function Kaart({ ds, geo, state }: { ds: Dataset; geo: GeoSet; state: App
               onSelect={(c) => state.setSelectedArea(c === state.selectedArea ? null : c)}
               onHover={setHoverCode}
               hovered={hoverCode}
+              xAxisLabel={xAxisLabel}
+              height={470}
             />
           </div>
         </div>

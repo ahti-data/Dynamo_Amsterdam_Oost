@@ -1,14 +1,12 @@
 import { useMemo, useState } from 'react'
 import type { Dataset } from '../types'
 import type { AppState, GeoSet } from '../App'
-import { StatTile } from '../components/StatTile'
 import { BarChart, type BarRow } from '../components/BarChart'
 import { Choropleth } from '../components/Choropleth'
 import { ForecastChart, type ForecastSeries } from '../components/ForecastChart'
 import { TabFootnote } from '../components/TabFootnote'
 import { areas, regionName, coverageBreakYears, indicatorById } from '../lib/data'
-import { fmtValue, fmtDelta } from '../lib/format'
-import { forecastArea, forecastGroup, pctChange, absChange, HORIZONS } from '../lib/forecast'
+import { forecastArea, forecastGroup, pctChange, HORIZONS } from '../lib/forecast'
 
 /** Dynamo-doelgroepen: CBS-indicator gekoppeld aan de dienst die erop stuurt. */
 interface TargetGroup {
@@ -27,15 +25,6 @@ const GROUPS: TargetGroup[] = [
   { id: 'a_hh', label: 'Huishoudens', short: 'huishoudens', service: 'Buurtwerk, Huizen van de Wijk, wonen', color: 'var(--series-6)' },
   { id: 'a_inw', label: 'Totaal inwoners', short: 'inwoners', service: 'Draagvlak en schaal van alle voorzieningen', color: 'var(--series-4)' },
 ]
-/** Leeftijdsbanden voor de opbouw-verschuiving (som + residu 25–44). */
-const AGE_BANDS = [
-  { id: 'a_00_14', label: '0–14', color: 'var(--series-1)' },
-  { id: 'a_15_24', label: '15–24', color: 'var(--series-2)' },
-  { id: '__mid', label: '25–44', color: 'var(--series-7)' },
-  { id: 'a_45_64', label: '45–64', color: 'var(--series-8)' },
-  { id: 'a_65_oo', label: '65+', color: 'var(--series-3)' },
-]
-
 export function Vooruitblik({ ds, geo, state }: { ds: Dataset; geo: GeoSet; state: AppState }) {
   const [groupId, setGroupId] = useState('a_65_oo')
   const [horizon, setHorizon] = useState<number>(HORIZONS[HORIZONS.length - 1])
@@ -106,37 +95,6 @@ export function Vooruitblik({ ds, geo, state }: { ds: Dataset; geo: GeoSet; stat
     return { ...g, features: g.features.filter((f) => codes.has(f.properties.code)) }
   }, [geo, state.level, list])
 
-  // leeftijdsopbouw-verschuiving voor het focusgebied (2025 → horizon), incl. residu 25–44
-  const ageShift = useMemo(() => {
-    const totNow = forecastArea(ds, 'a_inw', focusCode)
-    const bands = AGE_BANDS.map((b) => {
-      if (b.id === '__mid') return { ...b, now: 0, then: 0 }
-      const f = forecastArea(ds, b.id, focusCode)
-      return { ...b, now: f?.lastObsValue ?? 0, then: f?.projected[horizon] ?? 0 }
-    })
-    // residu 25–44 = totaal − overige banden (plausibiliteit: nooit negatief)
-    const sumNow = bands.reduce((s, b) => s + (b.id === '__mid' ? 0 : b.now), 0)
-    const sumThen = bands.reduce((s, b) => s + (b.id === '__mid' ? 0 : b.then), 0)
-    const mid = bands.find((b) => b.id === '__mid')!
-    mid.now = Math.max(0, (totNow?.lastObsValue ?? sumNow) - sumNow)
-    mid.then = Math.max(0, (totNow?.projected[horizon] ?? sumThen) - sumThen)
-    const tNow = bands.reduce((s, b) => s + b.now, 0) || 1
-    const tThen = bands.reduce((s, b) => s + b.then, 0) || 1
-    return { bands, tNow, tThen }
-  }, [ds, focusCode, horizon])
-
-  // conclusies: procentuele verandering per kernaandeelgroep voor het focusgebied
-  const focusChanges = useMemo(() => {
-    return GROUPS.map((g) => {
-      const f = forecastArea(ds, g.id, focusCode)
-      return { g, pct: f ? pctChange(f, horizon) : null, abs: f ? absChange(f, horizon) : null }
-    })
-  }, [ds, focusCode, horizon])
-
-  // koploper-gebied voor de geselecteerde doelgroep
-  const topMover = ranking[0]
-  const focusPct = focusFc ? pctChange(focusFc, horizon) : null
-  const focusAbs = focusFc ? absChange(focusFc, horizon) : null
   const period = `${lastYear}–${horizon}`
   const hasData = !!focusFc && focusFc.lastObsValue > 0
   // dekkingsbreuk (H1): een herindeling die naamkoppeling breekt geeft een
@@ -146,7 +104,7 @@ export function Vooruitblik({ ds, geo, state }: { ds: Dataset; geo: GeoSet; stat
   return (
     <>
       <h1 className="view-title">Vooruitblik {period}</h1>
-      <p className="view-sub">
+      <p className="view-sub view-sub-wide">
         Trendprognose van de omvang van Dynamo-doelgroepen per {levelNaam}, op basis van de reeks{' '}
         {ds.years[0]}–{lastYear}. De sociaal-demograaf van het team gebruikt log-lineaire extrapolatie met
         shrinkage naar het bovenliggende gebied, gedempte groei en top-down consistentie. Prognoses zijn{' '}
@@ -176,7 +134,7 @@ export function Vooruitblik({ ds, geo, state }: { ds: Dataset; geo: GeoSet; stat
               className="bron-link"
               onClick={() =>
                 state.navigate({
-                  view: 'overzicht',
+                  view: 'kaart',
                   scope: state.scope,
                   level: state.level,
                   indicatorId: groupTheme.headline[0] ?? groupTheme.indicatorIds[0],
@@ -184,7 +142,7 @@ export function Vooruitblik({ ds, geo, state }: { ds: Dataset; geo: GeoSet; stat
                 })
               }
             >
-              zelfde thema in Overzicht: {groupTheme.title} →
+              zelfde thema in Kaart: {groupTheme.title} →
             </button>
           </>
         )}
@@ -220,21 +178,6 @@ export function Vooruitblik({ ds, geo, state }: { ds: Dataset; geo: GeoSet; stat
               mee — zie Verantwoording.
             </p>
           )}
-          <div className="tile-row">
-            <StatTile label={`${group.short} · ${focusName} (${lastYear})`} value={focusFc!.lastObsValue} unit="aantal" trend={focusFc!.history} />
-            <StatTile label={`Prognose 2030`} value={focusFc!.projected[2030] ?? null} unit="aantal" />
-            <StatTile label={`Prognose ${horizon}`} value={focusFc!.projected[horizon] ?? null} unit="aantal" />
-            <StatTile
-              label={`Verandering ${period}`}
-              value={focusPct}
-              unit="pct"
-              delta={focusAbs}
-              deltaUnit="aantal"
-              deltaLabel="personen"
-              neutralDelta
-            />
-          </div>
-
           <div className="card">
             <h3 className="card-title">{group.label} — waarneming en prognose · {focusName}</h3>
             <p className="card-sub">
@@ -294,51 +237,6 @@ export function Vooruitblik({ ds, geo, state }: { ds: Dataset; geo: GeoSet; stat
             </div>
           </div>
 
-          <div className="grid-2">
-            <div className="card">
-              <h3 className="card-title">Leeftijdsopbouw verschuift · {focusName}</h3>
-              <p className="card-sub">
-                Verwachte samenstelling {lastYear} versus {horizon}. De 25–44-groep is afgeleid als restpost
-                (totaal − overige klassen).
-              </p>
-              <AgeShiftBars ageShift={ageShift} lastYear={lastYear} horizon={horizon} />
-            </div>
-
-            <div className="card">
-              <h3 className="card-title">Conclusies voor de programmering</h3>
-              <p className="card-sub">Automatisch afgeleid uit de prognose voor {focusName} · {period}.</p>
-              <ul className="conclusion-list">
-                {focusChanges
-                  .filter((c) => c.pct != null)
-                  .sort((a, b) => Math.abs(b.pct!) - Math.abs(a.pct!))
-                  .slice(0, 5)
-                  .map(({ g, pct, abs }) => (
-                    <li key={g.id}>
-                      <span
-                        className="conclusion-dot"
-                        style={{ background: pct! >= 3 ? 'var(--div-pos-2)' : pct! <= -3 ? 'var(--div-neg-2)' : 'var(--text-muted)' }}
-                      />
-                      <span>
-                        <strong>{g.label}:</strong> {pct! >= 0 ? 'groeit' : 'krimpt'} naar verwachting met{' '}
-                        <strong>{fmtValue(Math.abs(pct!), 'pct')}</strong> ({fmtDelta(abs, 'aantal')} personen) tot {horizon}.{' '}
-                        {conclusionAdvice(g.id, pct!)}
-                      </span>
-                    </li>
-                  ))}
-                {topMover && topMover.value != null && (
-                  <li>
-                    <span className="conclusion-dot" style={{ background: 'var(--brand)' }} />
-                    <span>
-                      Sterkste beweging voor {group.short} binnen {focusName}:{' '}
-                      <strong>{topMover.label}</strong> ({fmtValue(topMover.value, 'pct')} tot {horizon}) —{' '}
-                      overweeg hier als eerste te herprogrammeren.
-                    </span>
-                  </li>
-                )}
-              </ul>
-            </div>
-          </div>
-
           <p className="notice" role="note">
             ⚠ <strong>Voorbehoud.</strong> Dit is een trenddoortrekking, geen bevolkingsprognose van CBS/PBL of Primos.
             Er zijn geen geplande nieuwbouw, sloop of beleidswijzigingen meegenomen. Buurtcijfers zijn klein en ruizig;
@@ -349,85 +247,6 @@ export function Vooruitblik({ ds, geo, state }: { ds: Dataset; geo: GeoSet; stat
       )}
 
       <TabFootnote viewId="vooruitblik" ds={ds} state={state} />
-    </>
-  )
-}
-
-/** Dienstgericht advies per doelgroep, afhankelijk van de richting van de trend. */
-function conclusionAdvice(id: string, pct: number): string {
-  const up = pct >= 3
-  const down = pct <= -3
-  switch (id) {
-    case 'a_65_oo':
-      return up ? 'Schaal ouderenwerk en eenzaamheidsaanpak op.' : down ? 'Ruimte om ouderencapaciteit te verschuiven.' : 'Houd ouderenwerk op peil.'
-    case 'a_00_14':
-      return up ? 'Versterk kinderwerk en gezinsondersteuning.' : down ? 'Kinderwerk kan krimpen of gebundeld worden.' : 'Kinderwerk stabiel.'
-    case 'a_15_24':
-      return up ? 'Investeer in jongerenwerk en talentontwikkeling.' : down ? 'Jongerenwerk gerichter inzetten.' : 'Jongerenwerk stabiel.'
-    case 'a_1p_hh':
-      return up ? 'Sterker eenzaamheidssignaal — meer ontmoeting in de buurt.' : down ? 'Iets minder druk op ontmoetingsaanbod.' : 'Ontmoetingsaanbod op peil.'
-    case 'a_45_64':
-      return up ? 'Anticipeer op toekomstige vergrijzing en mantelzorgvraag.' : down ? 'Minder aankomende senioren.' : 'Stabiele middengroep.'
-    case 'a_hh':
-      return up ? 'Groeiende voorzieningendruk in de buurt.' : down ? 'Afnemende huishoudensdruk.' : 'Stabiel aantal huishoudens.'
-    default:
-      return up ? 'Groeiend draagvlak voor voorzieningen.' : down ? 'Krimpend draagvlak — heroverweeg schaal.' : 'Stabiel inwonertal.'
-  }
-}
-
-/** Twee 100%-gestapelde balken (nu vs. horizon) die de leeftijdsverschuiving tonen. */
-function AgeShiftBars({
-  ageShift,
-  lastYear,
-  horizon,
-}: {
-  ageShift: { bands: { id: string; label: string; color: string; now: number; then: number }[]; tNow: number; tThen: number }
-  lastYear: number
-  horizon: number
-}) {
-  const { bands, tNow, tThen } = ageShift
-  const bar = (key: 'now' | 'then', total: number, label: string) => (
-    <div style={{ marginBottom: 10 }}>
-      <div className="viz-axis-text" style={{ marginBottom: 3 }}>
-        {label} · {fmtValue(total, 'aantal')} personen
-      </div>
-      <div style={{ display: 'flex', height: 26, borderRadius: 5, overflow: 'hidden', border: '1px solid var(--border)' }}>
-        {bands.map((b) => {
-          const share = (b[key] / (total || 1)) * 100
-          if (share < 0.5) return null
-          return (
-            <div
-              key={b.id}
-              title={`${b.label}: ${fmtValue(b[key], 'aantal')} (${share.toFixed(0)}%)`}
-              style={{ width: `${share}%`, background: b.color, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-            >
-              {share >= 9 && <span style={{ fontSize: 10, color: '#fff', fontWeight: 600 }}>{share.toFixed(0)}%</span>}
-            </div>
-          )
-        })}
-      </div>
-    </div>
-  )
-  return (
-    <>
-      {bar('now', tNow, `${lastYear} (waarneming)`)}
-      {bar('then', tThen, `${horizon} (prognose)`)}
-      <div className="legend-row" style={{ marginTop: 6 }}>
-        {bands.map((b) => {
-          const sNow = (b.now / (tNow || 1)) * 100
-          const sThen = (b.then / (tThen || 1)) * 100
-          const dpp = sThen - sNow
-          return (
-            <span key={b.id} className="legend-item">
-              <span className="key-line" style={{ background: b.color }} />
-              {b.label}
-              <span style={{ color: Math.abs(dpp) < 0.3 ? 'var(--text-muted)' : dpp > 0 ? 'var(--delta-up)' : 'var(--delta-down)', marginLeft: 4 }}>
-                {dpp >= 0 ? '+' : ''}{dpp.toFixed(1)} pp
-              </span>
-            </span>
-          )
-        })}
-      </div>
     </>
   )
 }

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import type { Dataset } from '../types'
+import type { Dataset, Region } from '../types'
 import type { AppState } from '../App'
 import { LineChart, type LineSeries } from '../components/LineChart'
 import { areas, availableYears, getSeries, indicatorById, deltaOverPeriod, regionName, coverageBreakYears } from '../lib/data'
@@ -78,6 +78,23 @@ export function Trends({ ds, state }: { ds: Dataset; state: AppState }) {
   const focusDelta = deltaOverPeriod(ds, focusCode, indicator.id)
   const levelNaam = state.level === 'buurt' ? 'buurten' : state.level === 'gebied' ? 'gebieden' : state.level === 'stadsdeel' ? 'stadsdelen' : 'wijken'
 
+  // groepeer de "gebied toevoegen"-lijst onder het niveau erboven (net als de
+  // indicatorlijst per thema) — buurten onder hun wijk, wijken onder hun gebied,
+  // gebieden onder hun stadsdeel; val terug op een platte lijst als een parent-code ontbreekt
+  const parentField = state.level === 'buurt' ? 'wk' : state.level === 'wijk' ? 'gb' : state.level === 'gebied' ? 'sd' : null
+  const addOptions = list.filter((a) => !shown.includes(a.code))
+  const groupedAddOptions = useMemo(() => {
+    if (!parentField) return null
+    const groups = new Map<string, Region[]>()
+    for (const a of addOptions) {
+      const parent = a[parentField]
+      if (!parent) return null
+      if (!groups.has(parent)) groups.set(parent, [])
+      groups.get(parent)!.push(a)
+    }
+    return groups
+  }, [addOptions, parentField])
+
   // dekkingsbreuken (H1): waarschuw als een getoonde lijn een sprong in aantal
   // meetellende wijken heeft — dat geeft schijnverandering, geen echte trend
   const coverageWarnings = useMemo(() => {
@@ -90,9 +107,9 @@ export function Trends({ ds, state }: { ds: Dataset; state: AppState }) {
   return (
     <>
       <h1 className="view-title">
-        Ontwikkeling {ds.years[0]}–{ds.years[ds.years.length - 1]}
+        Ontwikkeling over tijd {ds.years[0]}–{ds.years[ds.years.length - 1]}
       </h1>
-      <p className="view-sub">
+      <p className="view-sub view-sub-wide">
         Volg per gebied hoe de doelgroep zich ontwikkelt
         {showRefs ? `, afgezet tegen ${regionName(ds, ds.meta.gemeente)} (gestippeld)` : ''}.
         {` Voeg ${levelNaam} toe via de keuzelijst (max ${MAX_AREAS}).`}
@@ -126,7 +143,9 @@ export function Trends({ ds, state }: { ds: Dataset; state: AppState }) {
           ))}
         </select>
 
+        <label htmlFor="trends-add-area">Gebied toevoegen</label>
         <select
+          id="trends-add-area"
           className="control"
           value=""
           onChange={(e) => e.target.value && toggle(e.target.value)}
@@ -136,13 +155,21 @@ export function Trends({ ds, state }: { ds: Dataset; state: AppState }) {
           <option value="">
             {shown.length >= MAX_AREAS ? `max. ${MAX_AREAS} bereikt` : '+ voeg toe…'}
           </option>
-          {list
-            .filter((a) => !shown.includes(a.code))
-            .map((a) => (
-              <option key={a.code} value={a.code}>
-                {a.name}
-              </option>
-            ))}
+          {groupedAddOptions
+            ? [...groupedAddOptions.entries()].map(([parentCode, group]) => (
+                <optgroup key={parentCode} label={regionName(ds, parentCode)}>
+                  {group.map((a) => (
+                    <option key={a.code} value={a.code}>
+                      {a.name}
+                    </option>
+                  ))}
+                </optgroup>
+              ))
+            : addOptions.map((a) => (
+                <option key={a.code} value={a.code}>
+                  {a.name}
+                </option>
+              ))}
         </select>
 
         {focusDelta.delta != null && (

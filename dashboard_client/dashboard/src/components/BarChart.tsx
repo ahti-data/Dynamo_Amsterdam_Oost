@@ -23,14 +23,27 @@ interface Props {
   onHover?: (code: string | null) => void
   /** koppeling met de kaart: licht deze rij op (hover elders) */
   hovered?: string | null
+  /** titel onder de x-as (bijv. de naam/eenheid van de indicator) */
+  xAxisLabel?: string
+  /** vaste totaalhoogte (bijv. om gelijk te lopen met een naastgelegen kaart); staven schalen mee */
+  height?: number
 }
 
 const BAR_H = 20
 const GAP = 8
-const M = { top: 4, right: 76, bottom: 4, left: 168 }
 
 /** Horizontale staafgrafiek voor wijkvergelijking, gesorteerd aanleveren. */
-export function BarChart({ rows, unit, color = 'var(--series-1)', referenceLine, onSelect, onHover, hovered }: Props) {
+export function BarChart({
+  rows,
+  unit,
+  color = 'var(--series-1)',
+  referenceLine,
+  onSelect,
+  onHover,
+  hovered,
+  xAxisLabel,
+  height: fixedHeight,
+}: Props) {
   const ref = useRef<HTMLDivElement>(null)
   const [w, setW] = useState(640)
   const { tip, show, hide } = useTooltip()
@@ -41,8 +54,14 @@ export function BarChart({ rows, unit, color = 'var(--series-1)', referenceLine,
     if (el && el.clientWidth !== w && el.clientWidth > 0) setW(el.clientWidth)
   }
 
+  const axisSpace = xAxisLabel ? 20 : 4
+  const M = { top: 4, right: 76, bottom: axisSpace, left: 168 }
   const iw = Math.max(w - M.left - M.right, 60)
-  const height = M.top + rows.length * (BAR_H + GAP) - GAP + M.bottom
+  const minHeight = M.top + rows.length * (BAR_H + GAP) - GAP + M.bottom
+  const height = Math.max(fixedHeight ?? minHeight, minHeight)
+  // extra ruimte boven de laatste rij evenredig verdelen zodat staven de vaste hoogte opvullen
+  const rowStep = rows.length > 0 ? (height - M.top - M.bottom + GAP) / rows.length : BAR_H + GAP
+  const barH = Math.max(rowStep - GAP, BAR_H)
   const vals = rows.map((r) => r.value).filter((v): v is number => v != null)
   // domein omvat 0 én negatieve waarden (relatieve afwijkingen onder referentie)
   const maxV = Math.max(...vals, referenceLine?.value ?? 0, 0.0001)
@@ -56,8 +75,8 @@ export function BarChart({ rows, unit, color = 'var(--series-1)', referenceLine,
     const bw = Math.max(Math.abs(xScale(v) - x0), 2)
     const r = Math.min(4, bw)
     if (v >= 0)
-      return `M${x0},0 h${bw - r} a${r},${r} 0 0 1 ${r},${r} v${BAR_H - 2 * r} a${r},${r} 0 0 1 -${r},${r} h${-(bw - r)} Z`
-    return `M${x0},0 h${-(bw - r)} a${r},${r} 0 0 0 -${r},${r} v${BAR_H - 2 * r} a${r},${r} 0 0 0 ${r},${r} h${bw - r} Z`
+      return `M${x0},0 h${bw - r} a${r},${r} 0 0 1 ${r},${r} v${barH - 2 * r} a${r},${r} 0 0 1 -${r},${r} h${-(bw - r)} Z`
+    return `M${x0},0 h${-(bw - r)} a${r},${r} 0 0 0 -${r},${r} v${barH - 2 * r} a${r},${r} 0 0 0 ${r},${r} h${bw - r} Z`
   }
 
   return (
@@ -65,7 +84,7 @@ export function BarChart({ rows, unit, color = 'var(--series-1)', referenceLine,
       <svg width="100%" height={height} viewBox={`0 0 ${w} ${height}`} role="img">
         <g transform={`translate(${M.left},${M.top})`}>
           {rows.map((r, i) => {
-            const yPos = i * (BAR_H + GAP)
+            const yPos = i * rowStep
             const isHover = hover === r.code || hovered === r.code
             const neg = (r.value ?? 0) < 0
             const tipX = r.value == null ? x0 : xScale(r.value)
@@ -92,10 +111,10 @@ export function BarChart({ rows, unit, color = 'var(--series-1)', referenceLine,
                 }}
                 onClick={onSelect ? () => onSelect(r.code) : undefined}
               >
-                <rect x={-M.left} y={-GAP / 2} width={w} height={BAR_H + GAP} fill="transparent" />
+                <rect x={-M.left} y={-GAP / 2} width={w} height={rowStep} fill="transparent" />
                 <text
                   x={-10}
-                  y={BAR_H / 2}
+                  y={barH / 2}
                   dy="0.32em"
                   textAnchor="end"
                   className={`viz-bar-label${r.highlight || isHover ? ' strong' : ''}${r.reference ? ' ref' : ''}`}
@@ -116,7 +135,7 @@ export function BarChart({ rows, unit, color = 'var(--series-1)', referenceLine,
                   return (
                     <text
                       x={inside ? tipX + 6 : neg ? tipX - 8 : tipX + 8}
-                      y={BAR_H / 2}
+                      y={barH / 2}
                       dy="0.32em"
                       textAnchor={neg && !inside ? 'end' : 'start'}
                       className={`viz-bar-value${inside ? ' inverse' : ''}`}
@@ -133,7 +152,7 @@ export function BarChart({ rows, unit, color = 'var(--series-1)', referenceLine,
               x1={x0}
               x2={x0}
               y1={-2}
-              y2={rows.length * (BAR_H + GAP) - GAP + 2}
+              y2={rows.length * rowStep - GAP + 2}
               stroke="var(--axisline)"
               strokeWidth={1}
             />
@@ -144,20 +163,30 @@ export function BarChart({ rows, unit, color = 'var(--series-1)', referenceLine,
                 x1={xScale(referenceLine.value)}
                 x2={xScale(referenceLine.value)}
                 y1={-2}
-                y2={rows.length * (BAR_H + GAP) - GAP + 2}
+                y2={rows.length * rowStep - GAP + 2}
                 stroke="var(--text-secondary)"
                 strokeWidth={1}
                 strokeDasharray="4 3"
               />
               <text
                 x={xScale(referenceLine.value)}
-                y={rows.length * (BAR_H + GAP) + 2}
+                y={rows.length * rowStep + 2}
                 textAnchor="middle"
                 className="viz-axis-text"
               >
                 {referenceLine.label}
               </text>
             </g>
+          )}
+          {xAxisLabel && (
+            <text
+              x={iw / 2}
+              y={rows.length * rowStep - GAP + 16}
+              textAnchor="middle"
+              className="viz-axis-text"
+            >
+              {xAxisLabel}
+            </text>
           )}
         </g>
       </svg>

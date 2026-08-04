@@ -162,7 +162,7 @@ export function Samenhang({ ds, geo, state }: { ds: Dataset; geo: GeoSet; state:
   return (
     <>
       <h1 className="view-title">Samenhang — gebiedskenmerken × uitkomsten</h1>
-      <p className="view-sub">
+      <p className="view-sub view-sub-wide">
         Correlatie tussen socio-demografische kenmerken (X) en zorg-/welzijns-/gezondheidsuitkomsten
         (Y), berekend <strong>over de {levelNaam}</strong> binnen de gekozen focus. RIVM-meetjaar{' '}
         <strong>{year}</strong>

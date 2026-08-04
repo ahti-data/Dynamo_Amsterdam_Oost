@@ -65,7 +65,7 @@ export const VERANTWOORDING_SECTIONS: VerantwoordingSection[] = [
   {
     id: 'databeschikbaarheid',
     title: 'Databeschikbaarheid',
-    relatedViews: ['overzicht', 'kaart', 'trends', 'tabel', 'vooruitblik'],
+    relatedViews: ['kaart', 'trends', 'tabel', 'vooruitblik'],
     render: () => (
       <ul>
         <li>
@@ -96,7 +96,7 @@ export const VERANTWOORDING_SECTIONS: VerantwoordingSection[] = [
   {
     id: 'conceptbreuken',
     title: 'Conceptbreuken in de CBS-reeksen',
-    relatedViews: ['overzicht', 'kaart', 'trends', 'tabel'],
+    relatedViews: ['kaart', 'trends', 'tabel'],
     render: () => (
       <ul>
         <li>
@@ -119,7 +119,7 @@ export const VERANTWOORDING_SECTIONS: VerantwoordingSection[] = [
   {
     id: 'richting',
     title: 'Richting van indicatoren',
-    relatedViews: ['kaart', 'overzicht', 'tabel'],
+    relatedViews: ['kaart', 'tabel'],
     render: () => (
       <ul>
         <li>
@@ -165,37 +165,6 @@ export const VERANTWOORDING_SECTIONS: VerantwoordingSection[] = [
           inkomen, opleiding of armoede meten deels dezelfde onderliggende factor en tellen niet als
           onafhankelijke bewijzen. Bij kleine N is het interval breed; kies dan buurtniveau of een
           ruimere focus.
-        </li>
-      </ul>
-    ),
-  },
-  {
-    id: 'gentrificatie-analyse',
-    title: 'Gentrificatie-analyse',
-    relatedViews: ['gentrificatie'],
-    render: () => (
-      <ul>
-        <li>
-          De <strong>gentrificatie-index</strong> combineert vier CBS-signalen over een instelbare
-          periode: stijgende <strong>WOZ-waarde</strong>, stijgend <strong>inkomen per inwoner</strong>,
-          krimpend aandeel <strong>corporatiewoningen</strong> en dalend aandeel{' '}
-          <strong>lage inkomens</strong> (verdringing). Elk signaal wordt gestandaardiseerd (z-score)
-          t.o.v. de andere gebieden op hetzelfde niveau; de index is het gemiddelde van de
-          beschikbare componenten. Positief = het gebied verandert sneller dan gemiddeld in de
-          richting van gentrificatie.
-        </li>
-        <li>
-          Het is een <strong>relatieve, signalerende maat</strong>, geen bewijs van individuele
-          verdringing: de index vergelijkt gebieden onderling, niet met een absolute norm. Het
-          verdringingsdiagram (WOZ-stijging × verandering aandeel lage inkomens) toont het patroon
-          per gebied; rechtsonder = prijzen omhoog én lage inkomens omlaag.
-        </li>
-        <li>
-          De WOZ-reeks is samengesteld uit <code>g_woz</code> (t/m 2019) en <code>g_wozbag</code>{' '}
-          (vanaf 2020); die lopen continu door. Op <strong>buurtniveau</strong> is inkomen sterk
-          door het CBS onderdrukt — daar rekent de index met de wél beschikbare signalen (WOZ,
-          sociale huur, lage inkomens). Werkt op alle niveaus; het rijkst voor Amsterdam op
-          wijk-/gebiedsniveau (10 jaar historie in Oost).
         </li>
       </ul>
     ),
@@ -251,7 +220,7 @@ export const VERANTWOORDING_SECTIONS: VerantwoordingSection[] = [
   {
     id: 'berekeningen',
     title: 'Berekeningen',
-    relatedViews: ['overzicht', 'kaart', 'trends', 'tabel'],
+    relatedViews: ['kaart', 'trends', 'tabel'],
     render: () => (
       <ul>
         <li>
@@ -283,7 +252,7 @@ export const VERANTWOORDING_SECTIONS: VerantwoordingSection[] = [
   {
     id: 'duiding',
     title: 'Duiding bij gebruik voor locatiekeuze',
-    relatedViews: ['inzichten', 'overzicht'],
+    relatedViews: ['inzichten', 'kaart'],
     render: (state) => (
       <ul>
         <li>

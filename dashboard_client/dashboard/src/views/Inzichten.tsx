@@ -20,8 +20,8 @@ interface InsightsDoc {
 }
 
 const VIEW_LABEL: Record<string, string> = {
-  overzicht: 'Overzicht', kaart: 'Kaart', trends: 'Ontwikkeling',
-  gentrificatie: 'Gentrificatie', samenhang: 'Samenhang',
+  kaart: 'Kaart', trends: 'Ontwikkeling over tijd',
+  vooruitblik: 'Vooruitblik', samenhang: 'Samenhang', tabel: 'Tabel',
 }
 
 export function Inzichten({ ds, state }: { ds: Dataset; state: AppState }) {
@@ -43,7 +43,7 @@ export function Inzichten({ ds, state }: { ds: Dataset; state: AppState }) {
 
   const act = doc.activities.find((a) => a.activityId === active) ?? doc.activities[0]
   // de Dynamo-activiteit-ids zijn 1-op-1 dezelfde ids als de thema's in
-  // Overzicht/Kaart/Tabel — expliciete brug tussen de twee indelingen (MECE-cleanup)
+  // Kaart/Tabel — expliciete brug tussen de twee indelingen (MECE-cleanup)
   const linkedTheme = ds.themes.find((t) => t.id === act.activityId)
 
   const scopeLabel = (l: InsightLink) => (l.scope ? regionName(ds, l.scope) : regionName(ds, ds.meta.gemeente))
@@ -109,7 +109,7 @@ export function Inzichten({ ds, state }: { ds: Dataset; state: AppState }) {
             className="bron-link"
             onClick={() =>
               state.navigate({
-                view: 'overzicht',
+                view: 'kaart',
                 scope: state.scope,
                 level: state.level,
                 indicatorId: linkedTheme.headline[0] ?? linkedTheme.indicatorIds[0],
@@ -117,7 +117,7 @@ export function Inzichten({ ds, state }: { ds: Dataset; state: AppState }) {
               })
             }
           >
-            zelfde thema in Overzicht: {linkedTheme.title} →
+            zelfde thema in Kaart: {linkedTheme.title} →
           </button>
         </p>
       )}

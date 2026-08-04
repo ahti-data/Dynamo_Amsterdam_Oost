@@ -72,7 +72,7 @@ export const SOURCES: Source[] = [
     ],
     usedFor:
       'De volledige demografische en sociaaleconomische basis van de monitor: bevolking, leeftijd, huishoudens, herkomst, inkomen, vermogen, uitkeringen, armoede, opleiding, WOZ, woningvoorraad, Wmo en jeugdzorg — op alle niveaus (stadsdeel, gebied, wijk, buurt).',
-    relatedViews: ['overzicht', 'kaart', 'trends', 'vooruitblik', 'gentrificatie', 'samenhang', 'tabel', 'inzichten'],
+    relatedViews: ['kaart', 'trends', 'vooruitblik', 'samenhang', 'tabel', 'inzichten'],
     coverage: 'Nederland; gemeente, wijk en buurt; verslagjaren 2016–2025.',
     content:
       'Samenvattende jaarpublicatie met kerncijfers over demografische en sociaaleconomische thema’s per gemeente, wijk en buurt. De reekspagina biedt per jaar een Excelbestand; StatLine geeft de losse jaartabellen.',
@@ -111,7 +111,7 @@ export const SOURCES: Source[] = [
     ],
     usedFor:
       'De leidende gebiedskeuze voor Amsterdam: 9 stadsdelen en de 25 GGW-gebieden (gebiedsgericht werken), waaraan elke CBS-wijk op code is gekoppeld. Opgeslagen in data-prep/gebieden_amsterdam.json.',
-    relatedViews: ['overzicht', 'kaart', 'trends', 'vooruitblik', 'gentrificatie', 'samenhang', 'tabel'],
+    relatedViews: ['kaart', 'trends', 'vooruitblik', 'samenhang', 'tabel'],
     coverage: 'Heel Amsterdam; buurten, wijken, 25 GGW-gebieden en stadsdelen; actuele snapshot (10-7-2026).',
     content:
       'GeoJSON-grenzen en codes voor de officiële Amsterdamse gebiedsindeling. De GGW-laag bevat de 25 gebieden waarop Dynamo gebiedsgericht werkt.',
@@ -131,8 +131,8 @@ export const SOURCES: Source[] = [
       { label: 'CBS Cartografie', url: 'https://www.cbs.nl/nl-nl/onze-diensten/open-data/statline-als-open-data/cartografie' },
     ],
     usedFor:
-      'De kaartvlakken (choropleth) op de tabbladen Overzicht, Kaart, Vooruitblik en Gentrificatie: gegeneraliseerde CBS-grenzen van wijken en buurten.',
-    relatedViews: ['overzicht', 'kaart', 'vooruitblik', 'gentrificatie'],
+      'De kaartvlakken (choropleth) op de tabbladen Kaart en Vooruitblik: gegeneraliseerde CBS-grenzen van wijken en buurten.',
+    relatedViews: ['kaart', 'vooruitblik'],
     coverage: 'Nederland; gemeente, wijk en buurt; jaarlijkse edities.',
     content:
       'Geometrie van alle gemeenten, wijken en buurten met statistische kerncijfers als attribuut, te downloaden via WFS/ATOM/OGC API.',
