@@ -77,6 +77,7 @@ export function Samenhang({ ds, geo, state }: { ds: Dataset; geo: GeoSet; state:
     cells.get(`${x}|${y}`) ?? { r: null, n: 0, ci: null, p: null, weak: true }
 
   const enoughAreas = list.length >= 8
+  const hasMatrix = enoughAreas && rows.length > 0 && cols.length > 0
 
   // sterkste verbanden: minstens 12 gebieden (kleine-N-toevalspieken weren, STAT-3)
   // en sorteren op de ondergrens van het 95%-interval i.p.v. op ruwe |r|
@@ -93,6 +94,23 @@ export function Samenhang({ ds, geo, state }: { ds: Dataset; geo: GeoSet; state:
     arr.sort((a, b) => b.lo - a.lo)
     return arr.slice(0, 10)
   }, [cells])
+
+  // toon de puntenwolk standaard met het sterkste verband i.p.v. pas na een
+  // klik op de matrix — anders was niet duidelijk dat de puntenwolk bestond
+  useEffect(() => {
+    if (sel || state.pendingPair || !hasMatrix) return
+    if (strongest.length > 0) {
+      setSel({ x: strongest[0].x, y: strongest[0].y })
+      return
+    }
+    const anyPair = [...cells.entries()].find(([, c]) => c.r != null)
+    if (anyPair) {
+      const [x, y] = anyPair[0].split('|')
+      setSel({ x, y })
+    } else if (xInds[0] && yInds[0]) {
+      setSel({ x: xInds[0].id, y: yInds[0].id })
+    }
+  }, [sel, state.pendingPair, hasMatrix, strongest, cells, xInds, yInds])
 
   // drilldown-selectie
   const xInd = sel ? indicatorById(ds, sel.x) : undefined

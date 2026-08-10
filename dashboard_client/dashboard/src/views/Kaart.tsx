@@ -1,14 +1,11 @@
 import { useMemo, useState } from 'react'
-import type { Dataset } from '../types'
-import type { AppState, GeoSet } from '../App'
+import type { Dataset, Unit } from '../types'
+import type { AppState, GeoSet, MapMode } from '../App'
 import { Choropleth } from '../components/Choropleth'
 import { BarChart, type BarRow } from '../components/BarChart'
 import { areas, availableYears, getValue, indicatorById, regionName, nearestYear, signalSort, noDataReason } from '../lib/data'
 import { fmtValue } from '../lib/format'
 import { TabFootnote } from '../components/TabFootnote'
-import type { Unit } from '../types'
-
-type Mode = 'abs' | 'rel'
 
 const UNIT_LABEL: Record<Unit, string> = {
   aantal: 'aantal',
@@ -22,7 +19,6 @@ const UNIT_LABEL: Record<Unit, string> = {
 }
 
 export function Kaart({ ds, geo, state }: { ds: Dataset; geo: GeoSet; state: AppState }) {
-  const [mode, setMode] = useState<Mode>('abs')
   const [refChoice, setRefChoice] = useState<'gemeente' | 'scope'>('gemeente')
   // hover-koppeling tussen kaart en top-ranglijst
   const [hoverCode, setHoverCode] = useState<string | null>(null)
@@ -30,7 +26,7 @@ export function Kaart({ ds, geo, state }: { ds: Dataset; geo: GeoSet; state: App
   const indicator = indicatorById(ds, state.indicatorId) ?? ds.indicators[0]
   // absolute aantallen niet indexeren (advies welzijnsspecialist)
   const relAllowed = indicator.unit !== 'aantal'
-  const effMode: Mode = relAllowed ? mode : 'abs'
+  const effMode: MapMode = relAllowed ? state.mode : 'abs'
 
   const list = useMemo(() => areas(ds, state.level, state.scope), [ds, state.level, state.scope])
 
@@ -127,51 +123,9 @@ export function Kaart({ ds, geo, state }: { ds: Dataset; geo: GeoSet; state: App
         concentratie van omvang. Rechts staan de {levelNaam} met het sterkste signaal op een rij.
       </p>
 
-      <div className="filterbar" style={{ padding: '0 0 14px', maxWidth: 'none' }}>
-        <label>Indicator</label>
-        <select
-          className="control"
-          value={indicator.id}
-          onChange={(e) => state.setIndicatorId(e.target.value)}
-          aria-label="Indicator"
-        >
-          {ds.themes.map((t) => (
-            <optgroup key={t.id} label={t.title}>
-              {t.indicatorIds.map((iid) => {
-                const ind = indicatorById(ds, iid)
-                if (!ind) return null
-                const ok = availableYears(ds, list, iid).length > 0
-                return (
-                  <option key={`${t.id}-${iid}`} value={iid} disabled={!ok}>
-                    {ind.label}
-                    {!ok ? ' — geen data op dit niveau' : ''}
-                  </option>
-                )
-              })}
-            </optgroup>
-          ))}
-        </select>
-
-        <div className="seg" role="group" aria-label="Weergave">
-          <button className={effMode === 'abs' ? 'active' : ''} onClick={() => setMode('abs')}>
-            Absoluut
-          </button>
-          <button
-            className={effMode === 'rel' ? 'active' : ''}
-            onClick={() => relAllowed && setMode('rel')}
-            disabled={!relAllowed}
-            style={relAllowed ? undefined : { opacity: 0.4, cursor: 'not-allowed' }}
-            title={
-              relAllowed
-                ? undefined
-                : 'Niet zinvol voor absolute aantallen — kies een percentage, gemiddelde of dichtheid'
-            }
-          >
-            Relatief
-          </button>
-        </div>
-
-        {effMode === 'rel' && state.scope && (
+      {effMode === 'rel' && state.scope && (
+        <div className="filterbar" style={{ padding: '0 0 14px', maxWidth: 'none' }}>
+          <label>Referentie</label>
           <div className="seg" role="group" aria-label="Referentie">
             <button className={refChoice === 'gemeente' ? 'active' : ''} onClick={() => setRefChoice('gemeente')}>
               t.o.v. {regionName(ds, ds.meta.gemeente)}
@@ -180,8 +134,8 @@ export function Kaart({ ds, geo, state }: { ds: Dataset; geo: GeoSet; state: App
               t.o.v. {regionName(ds, state.scope)}
             </button>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {year !== state.year && hasLevelData && (
         <p className="notice" role="status">

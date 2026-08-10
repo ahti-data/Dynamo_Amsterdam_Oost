@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { Dataset, Region } from '../types'
 import type { AppState } from '../App'
 import { LineChart, type LineSeries } from '../components/LineChart'
@@ -36,6 +36,9 @@ export function Trends({ ds, state }: { ds: Dataset; state: AppState }) {
   }, [ds, list, indicator, state.selectedArea])
 
   const [chosen, setChosen] = useState<string[] | null>(null)
+  // indicator wisselt via de gedeelde parameterbalk boven de subtabs — reset de
+  // handmatige gebiedsselectie dan naar de standaardselectie voor die indicator
+  useEffect(() => setChosen(null), [state.indicatorId])
   const active = (chosen ?? defaultSel).filter((c) => list.some((a) => a.code === c))
   const shown = active.length ? active : defaultSel
 
@@ -119,30 +122,6 @@ export function Trends({ ds, state }: { ds: Dataset; state: AppState }) {
       </p>
 
       <div className="filterbar" style={{ padding: '0 0 8px', maxWidth: 'none' }}>
-        <label>Indicator</label>
-        <select
-          className="control"
-          value={indicator.id}
-          onChange={(e) => {
-            state.setIndicatorId(e.target.value)
-            setChosen(null)
-          }}
-          aria-label="Indicator"
-        >
-          {ds.themes.map((t) => (
-            <optgroup key={t.id} label={t.title}>
-              {t.indicatorIds.map((iid) => {
-                const ind = indicatorById(ds, iid)
-                return ind ? (
-                  <option key={iid} value={iid}>
-                    {ind.label}
-                  </option>
-                ) : null
-              })}
-            </optgroup>
-          ))}
-        </select>
-
         <label htmlFor="trends-add-area">Gebied toevoegen</label>
         <select
           id="trends-add-area"

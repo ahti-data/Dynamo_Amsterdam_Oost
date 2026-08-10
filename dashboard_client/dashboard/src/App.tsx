@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import type { Dataset, GemeenteIndex, GeoCollection, RegionLevel } from './types'
-import { levelsForScope, regionsOf } from './lib/data'
+import { levelsForScope, regionsOf, areas, availableYears, indicatorById } from './lib/data'
 import { detectEncryption, loadData } from './lib/crypto'
 import { UnlockGate } from './components/UnlockGate'
 import { ErrorBoundary } from './ErrorBoundary'
@@ -56,6 +56,9 @@ export interface AppState {
   setThemeId: (t: string) => void
   indicatorId: string
   setIndicatorId: (i: string) => void
+  /** absoluut/relatief-weergave op de Kaart, gedeeld met de parameterbalk boven de subtabs */
+  mode: MapMode
+  setMode: (m: MapMode) => void
   selectedArea: string | null
   setSelectedArea: (w: string | null) => void
   /** analyse-scope: '' = hele gemeente, of code van stadsdeel/gebied */
@@ -79,6 +82,8 @@ export interface AppState {
   openVerantwoording: (id?: string) => void
   clearVerantwoordingAnchor: () => void
 }
+
+export type MapMode = 'abs' | 'rel'
 
 export interface NavTarget {
   view: 'kaart' | 'trends' | 'vooruitblik' | 'samenhang' | 'tabel'
@@ -167,6 +172,7 @@ export default function App() {
   const [year, setYear] = useState(initial.current.year ?? 0)
   const [themeId, setThemeId] = useState('')
   const [indicatorId, setIndicatorId] = useState('')
+  const [mode, setMode] = useState<MapMode>('abs')
   const [selectedArea, setSelectedArea] = useState<string | null>(null)
   const [scope, setScope] = useState('')
   const [level, setLevel] = useState<RegionLevel>(initial.current.level ?? 'wijk')
@@ -312,7 +318,7 @@ export default function App() {
 
   const state: AppState = useMemo(
     () => ({
-      year, setYear, themeId, setThemeId, indicatorId, setIndicatorId,
+      year, setYear, themeId, setThemeId, indicatorId, setIndicatorId, mode, setMode,
       selectedArea, setSelectedArea, scope, level, setLevel,
       pendingPair, clearPendingPair: () => setPendingPair(null), navigate,
       sourceAnchor, openSource, clearSourceAnchor: () => setSourceAnchor(null),
@@ -320,7 +326,7 @@ export default function App() {
       clearVerantwoordingAnchor: () => setVerantwoordingAnchor(null),
     }),
     [
-      year, themeId, indicatorId, selectedArea, scope, level, pendingPair, navigate,
+      year, themeId, indicatorId, mode, selectedArea, scope, level, pendingPair, navigate,
       sourceAnchor, openSource, verantwoordingAnchor, openVerantwoording,
     ],
   )
@@ -376,6 +382,14 @@ export default function App() {
   // frozen-bar alleen tonen als er iets in te tonen valt (Inzichten heeft geen van beide)
   const hasFrozenBar = isVerkennenAnalyse || Boolean(subNav)
 
+  // indicator + absoluut/relatief verhuizen naar de bevroren balk voor de views die
+  // erop leunen (Kaart en Ontwikkeling over tijd), zodat ze niet per tabblad
+  // opnieuw worden opgebouwd en altijd naast de andere parameters staan
+  const showViewParams = view === 'kaart' || view === 'trends'
+  const paramList = showViewParams ? areas(ds, level, scope) : []
+  const paramIndicator = showViewParams ? indicatorById(ds, indicatorId) ?? ds.indicators[0] : null
+  const paramRelAllowed = paramIndicator ? paramIndicator.unit !== 'aantal' : false
+
   return (
     <div className="app">
       <a href="#main" className="skip-link">Naar de inhoud</a>
@@ -413,8 +427,10 @@ export default function App() {
       <div className="content-shell">
         {hasFrozenBar && (
           <div className="frozen-bar">
+            {subNav}
+
             {isVerkennenAnalyse && (
-              <div className="filterbar scopebar">
+              <div className="scopebar">
                 <label>Gemeente</label>
                 <select className="control" value={gm} onChange={(e) => setGm(e.target.value)} aria-label="Gemeente">
                   {[...index.gemeenten]
@@ -482,7 +498,57 @@ export default function App() {
               </div>
             )}
 
-            {subNav}
+            {showViewParams && paramIndicator && (
+              <div className="view-params-bar">
+                <label>Indicator</label>
+                <select
+                  className="control"
+                  value={paramIndicator.id}
+                  onChange={(e) => setIndicatorId(e.target.value)}
+                  aria-label="Indicator"
+                >
+                  {ds.themes.map((t) => (
+                    <optgroup key={t.id} label={t.title}>
+                      {t.indicatorIds.map((iid) => {
+                        const ind = indicatorById(ds, iid)
+                        if (!ind) return null
+                        const ok = availableYears(ds, paramList, iid).length > 0
+                        return (
+                          <option key={`${t.id}-${iid}`} value={iid} disabled={!ok}>
+                            {ind.label}
+                            {!ok ? ' — geen data op dit niveau' : ''}
+                          </option>
+                        )
+                      })}
+                    </optgroup>
+                  ))}
+                </select>
+
+                {view === 'kaart' && (
+                  <div className="seg" role="group" aria-label="Weergave">
+                    <button
+                      className={mode === 'abs' || !paramRelAllowed ? 'active' : ''}
+                      onClick={() => setMode('abs')}
+                    >
+                      Absoluut
+                    </button>
+                    <button
+                      className={mode === 'rel' && paramRelAllowed ? 'active' : ''}
+                      onClick={() => paramRelAllowed && setMode('rel')}
+                      disabled={!paramRelAllowed}
+                      style={paramRelAllowed ? undefined : { opacity: 0.4, cursor: 'not-allowed' }}
+                      title={
+                        paramRelAllowed
+                          ? undefined
+                          : 'Niet zinvol voor absolute aantallen — kies een percentage, gemiddelde of dichtheid'
+                      }
+                    >
+                      Relatief
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -510,21 +576,6 @@ export default function App() {
           </ErrorBoundary>
         </main>
       </div>
-
-      <footer className="footer">
-        <span>
-          Bron:{' '}
-          <button type="button" className="bron-link" onClick={() => state.openSource('cbs-kwb')}>
-            {ds.meta.source}
-          </button>{' '}
-          · verslagjaren {ds.meta.yearsCovered.join(', ')} · {index.gemeenten.length} gemeenten (alle
-          ≥100.000 inwoners + Amsterdamse buurgemeenten) ·{' '}
-          <button type="button" className="bron-link" onClick={() => state.openSource()}>
-            alle bronnen
-          </button>
-        </span>
-        <span>Gegenereerd {ds.meta.generated} · Dynamo × ahti · signalerings- en verkenningsinstrument</span>
-      </footer>
     </div>
   )
 }
