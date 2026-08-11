@@ -203,6 +203,7 @@
   left: calc(100% / var(--sn-count, 1) * var(--sn-index, 0));
   width: calc(100% / var(--sn-count, 1));
   background: var(--surface-1);
+  border: 1px solid var(--border);
   border-radius: var(--radius-control);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
   transition: left 0.25s cubic-bezier(0.4, 0, 0.2, 1), width 0.25s ease;
@@ -248,8 +249,8 @@
 }
 
 .seg button.active {
-  background: var(--surface-1);
-  color: var(--text-primary);
+  background: var(--accent-lavender);
+  color: var(--accent-ink);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
 }
 
@@ -623,9 +624,73 @@
 .chip:hover { border-color: var(--text-muted); color: var(--text-primary); }
 
 .chip.active {
-  background: var(--text-primary);
-  border-color: var(--text-primary);
-  color: var(--surface-1);
+  background: var(--accent-yellow);
+  border-color: var(--accent-yellow);
+  color: var(--accent-ink);
+}
+
+/* — "gebied toevoegen": eigen open/dicht-panel i.p.v. een native <select>, zodat
+   het na elke keuze open blijft staan en je meteen meerdere gebieden achter
+   elkaar kunt toevoegen (in plaats van de lijst telkens te moeten heropenen) — */
+.multi-add {
+  position: relative;
+}
+
+.multi-add-panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 30;
+  min-width: 260px;
+  max-width: 340px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 6px;
+  background: var(--surface-1);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-control);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
+}
+
+.multi-add-group + .multi-add-group {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+
+.multi-add-group-label {
+  padding: 4px 8px 2px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--text-muted);
+}
+
+.multi-add-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 13.5px;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.multi-add-option:hover {
+  background: var(--surface-2);
+}
+
+.multi-add-option:has(input:disabled) {
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
+.multi-add-empty {
+  padding: 8px;
+  font-size: 13px;
+  color: var(--text-muted);
 }
 
 /* — aannames / verantwoording — */
@@ -838,8 +903,8 @@
 
 /* — meldingen & lege staten — */
 .notice {
-  background: var(--brand-wash);
-  border-left: 3px solid var(--brand);
+  background: var(--accent-orange-wash);
+  border-left: 3px solid var(--accent-orange);
   padding: 8px 14px;
   border-radius: 0 6px 6px 0;
   font-size: 13px;

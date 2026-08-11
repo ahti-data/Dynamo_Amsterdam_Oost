@@ -53,11 +53,14 @@ export function LineChart({ years, series, unit, height = 260, zeroBased = false
   const x = (i: number) => (years.length === 1 ? iw / 2 : (i / (years.length - 1)) * iw)
   const y = (v: number) => ih - ((v - yMin) / (yMax - yMin || 1)) * ih
 
+  // verbindt over ontbrekende jaren heen (bv. RIVM-meetjaren met gaten) i.p.v. de
+  // lijn daar te onderbreken — alleen vóór het allereerste datapunt is er niets om
+  // een lijn naar te trekken
   const path = (vals: (number | null)[]) => {
     let d = ''
     vals.forEach((v, i) => {
       if (v == null) return
-      d += (d === '' || vals[i - 1] == null ? 'M' : 'L') + `${x(i).toFixed(1)},${y(v).toFixed(1)} `
+      d += (d === '' ? 'M' : 'L') + `${x(i).toFixed(1)},${y(v).toFixed(1)} `
     })
     return d.trim()
   }
@@ -139,7 +142,7 @@ export function LineChart({ years, series, unit, height = 260, zeroBased = false
                 d={path(s.values)}
                 fill="none"
                 stroke={s.color}
-                strokeWidth={2}
+                strokeWidth={s.reference ? 3 : 2}
                 strokeLinejoin="round"
                 strokeLinecap="round"
                 strokeDasharray={s.reference ? '5 4' : undefined}

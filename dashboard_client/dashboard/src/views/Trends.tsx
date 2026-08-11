@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Dataset, Region } from '../types'
 import type { AppState } from '../App'
 import { LineChart, type LineSeries } from '../components/LineChart'
@@ -39,6 +39,27 @@ export function Trends({ ds, state }: { ds: Dataset; state: AppState }) {
   // indicator wisselt via de gedeelde parameterbalk boven de subtabs — reset de
   // handmatige gebiedsselectie dan naar de standaardselectie voor die indicator
   useEffect(() => setChosen(null), [state.indicatorId])
+
+  // "gebied toevoegen"-paneel: een eigen open/dicht-panel i.p.v. een native
+  // <select>, zodat het na elke keuze open blijft en je meteen meerdere
+  // gebieden achter elkaar kunt toevoegen
+  const [addOpen, setAddOpen] = useState(false)
+  const addRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!addOpen) return
+    const onOutside = (e: MouseEvent) => {
+      if (addRef.current && !addRef.current.contains(e.target as Node)) setAddOpen(false)
+    }
+    const onEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setAddOpen(false)
+    }
+    document.addEventListener('mousedown', onOutside)
+    document.addEventListener('keydown', onEscape)
+    return () => {
+      document.removeEventListener('mousedown', onOutside)
+      document.removeEventListener('keydown', onEscape)
+    }
+  }, [addOpen])
   const active = (chosen ?? defaultSel).filter((c) => list.some((a) => a.code === c))
   const shown = active.length ? active : defaultSel
 
@@ -115,7 +136,7 @@ export function Trends({ ds, state }: { ds: Dataset; state: AppState }) {
       <p className="view-sub view-sub-wide">
         Volg per gebied hoe de doelgroep zich ontwikkelt
         {showRefs ? `, afgezet tegen ${regionName(ds, ds.meta.gemeente)} (gestippeld)` : ''}.
-        {` Voeg ${levelNaam} toe via de keuzelijst (max ${MAX_AREAS}).`}
+        {` Voeg ${levelNaam} toe via de keuzelijst — blijft open zodat je er meteen meerdere kunt kiezen (max ${MAX_AREAS}).`}
         {!showRefs
           ? ' Referentielijnen verschijnen alleen bij percentages en gemiddelden — totalen zouden de lijnen platdrukken.'
           : ''}
@@ -123,33 +144,55 @@ export function Trends({ ds, state }: { ds: Dataset; state: AppState }) {
 
       <div className="filterbar" style={{ padding: '0 0 8px', maxWidth: 'none' }}>
         <label htmlFor="trends-add-area">Gebied toevoegen</label>
-        <select
-          id="trends-add-area"
-          className="control"
-          value=""
-          onChange={(e) => e.target.value && toggle(e.target.value)}
-          aria-label="Gebied toevoegen"
-          disabled={shown.length >= MAX_AREAS}
-        >
-          <option value="">
+        <div className="multi-add" ref={addRef}>
+          <button
+            type="button"
+            id="trends-add-area"
+            className="control"
+            aria-haspopup="listbox"
+            aria-expanded={addOpen}
+            onClick={() => setAddOpen((o) => !o)}
+            disabled={shown.length >= MAX_AREAS}
+          >
             {shown.length >= MAX_AREAS ? `max. ${MAX_AREAS} bereikt` : '+ voeg toe…'}
-          </option>
-          {groupedAddOptions
-            ? [...groupedAddOptions.entries()].map(([parentCode, group]) => (
-                <optgroup key={parentCode} label={regionName(ds, parentCode)}>
-                  {group.map((a) => (
-                    <option key={a.code} value={a.code}>
-                      {a.name}
-                    </option>
-                  ))}
-                </optgroup>
-              ))
-            : addOptions.map((a) => (
-                <option key={a.code} value={a.code}>
-                  {a.name}
-                </option>
-              ))}
-        </select>
+          </button>
+          {addOpen && (
+            <div className="multi-add-panel" role="listbox" aria-label="Gebied toevoegen">
+              {addOptions.length === 0 ? (
+                <p className="multi-add-empty">Alle {levelNaam} zijn al toegevoegd.</p>
+              ) : groupedAddOptions ? (
+                [...groupedAddOptions.entries()].map(([parentCode, group]) => (
+                  <div key={parentCode} className="multi-add-group">
+                    <div className="multi-add-group-label">{regionName(ds, parentCode)}</div>
+                    {group.map((a) => (
+                      <label key={a.code} className="multi-add-option">
+                        <input
+                          type="checkbox"
+                          checked={false}
+                          disabled={shown.length >= MAX_AREAS}
+                          onChange={() => toggle(a.code)}
+                        />
+                        {a.name}
+                      </label>
+                    ))}
+                  </div>
+                ))
+              ) : (
+                addOptions.map((a) => (
+                  <label key={a.code} className="multi-add-option">
+                    <input
+                      type="checkbox"
+                      checked={false}
+                      disabled={shown.length >= MAX_AREAS}
+                      onChange={() => toggle(a.code)}
+                    />
+                    {a.name}
+                  </label>
+                ))
+              )}
+            </div>
+          )}
+        </div>
 
         {focusDelta.delta != null && (
           <span className="view-sub" style={{ margin: 0 }}>

@@ -1,30 +1,45 @@
 /* ============================================================
    Dynamo · Monitor Amsterdam Oost — design tokens
-   Data-kleuren: gevalideerd referentiepalet (CVD-safe, zie
-   docs/AANNAMES.md). Chrome: warm papier, civic-editorial.
+   Chrome: huisstijl AHTI/Dynamo (maroon/teal/yellow/orange/
+   lavender/wit/perzik — zie ahti-huisstijl). Data-kleuren:
+   gevalideerd referentiepalet (CVD-safe, zie docs/AANNAMES.md) —
+   los van de huisstijl-chrome, met opzet ONgewijzigd.
    ============================================================ */
 
 :root {
-  /* — vlakken — */
-  --page: #f6f4ef;
-  --surface-1: #fcfcfb;
-  --surface-2: #f1efe8;
-  --border: rgba(11, 11, 11, 0.1);
-  --border-strong: rgba(11, 11, 11, 0.18);
+  /* — vlakken: wit + perzik uit de huisstijl — */
+  --page: #fed6cd;
+  --surface-1: #ffffff;
+  --surface-2: #fff4f1;
+  --border: rgba(110, 0, 54, 0.14);
+  --border-strong: rgba(110, 0, 54, 0.26);
 
-  /* — inkt — */
-  --text-primary: #0b0b0b;
-  --text-secondary: #52514e;
-  --text-muted: #6f6d67; /* >=4.5:1 op chart-surface (WCAG-review) */
+  /* — inkt: maroon als hoofdkleur voor tekst én contrast — */
+  --text-primary: #6e0036;
+  --text-secondary: #76274a;
+  --text-muted: #805561; /* >=4.5:1 op chart-surface (WCAG-review) */
 
-  /* — chart chrome — */
+  /* — chart chrome (neutraal, los van de huisstijl-chrome) — */
   --gridline: #e1e0d9;
   --axisline: #c3c2b7;
 
-  /* — merk (Dynamo-aubergine, uit het logo) : alleen UI, nooit data — */
-  --brand: #6e1c4b;
-  --brand-ink: #541238;
-  --brand-wash: rgba(110, 28, 75, 0.08);
+  /* — merk (huisstijl-maroon) : alleen UI, nooit data — */
+  --brand: #6e0036;
+  --brand-ink: #530029;
+  --brand-wash: rgba(110, 0, 54, 0.08);
+
+  /* — huisstijl-accenten (teal/yellow/orange/lavender): UI-accenten op
+     specifieke plekken (chips, actieve segmenten, meldingen, checkboxen),
+     nooit voor data-encodering. --accent-ink is een vaste maroon-tint voor
+     tekst/iconen op deze accentkleuren en verandert niet mee met het
+     donkere thema (de accenten zelf zijn in beide thema's hetzelfde). — */
+  --accent-teal: #64d2d1;
+  --accent-yellow: #f7e500;
+  --accent-orange: #fa7545;
+  --accent-lavender: #d2afff;
+  --accent-orange-wash: rgba(250, 117, 69, 0.16);
+  --accent-lavender-wash: rgba(210, 175, 255, 0.4);
+  --accent-ink: #6e0036;
 
   /* — categorisch palet (gevalideerd, vaste volgorde) — */
   --series-1: #2a78d6;
@@ -83,9 +98,11 @@
   --gridline: #2c2c2a;
   --axisline: #383835;
 
-  --brand: #d377ab;
-  --brand-ink: #e19cc4;
-  --brand-wash: rgba(211, 119, 171, 0.14);
+  /* zelfde huisstijl-maroon als het lichte thema, opgelicht zodat hij op
+     donkere vlakken leesbaar blijft (>=6:1 op --surface-1, geverifieerd) */
+  --brand: #be8ca5;
+  --brand-ink: #cca6b9;
+  --brand-wash: rgba(190, 140, 165, 0.16);
 
   --series-1: #3987e5;
   --series-2: #199e70;
@@ -162,10 +179,14 @@ input {
   color: inherit;
 }
 
+input[type='checkbox'] {
+  accent-color: var(--accent-teal);
+}
+
 svg text {
   font-family: var(--font-body);
 }
 
 ::selection {
-  background: var(--brand-wash);
+  background: var(--accent-lavender-wash);
 }
