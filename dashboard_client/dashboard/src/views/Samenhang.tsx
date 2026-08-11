@@ -3,8 +3,6 @@ import type { Dataset, Indicator } from '../types'
 import type { AppState, GeoSet } from '../App'
 import { Heatmap, type HeatCell, type HeatAxis } from '../components/Heatmap'
 import { ScatterPlot, type ScatterPoint } from '../components/ScatterPlot'
-import { LineChart, type LineSeries } from '../components/LineChart'
-import { DataTable, type TableColumn, type TableRowData } from '../components/DataTable'
 import { Choropleth } from '../components/Choropleth'
 import { areas, availableYears, indicatorById, regionName, nearestYear, getValue, toCsv, downloadCsv, noDataReason } from '../lib/data'
 import { correlate, fisherCI, approxP, strength, type Method } from '../lib/correlation'
@@ -141,15 +139,6 @@ export function Samenhang({ ds, geo, state }: { ds: Dataset; geo: GeoSet; state:
     return pts
   }, [ds, list, sel, changeMode, meetjaren, hoverCode])
 
-  // correlatie over tijd: r per meetjaar voor het gekozen paar
-  const overTime: LineSeries[] = useMemo(() => {
-    if (!sel) return []
-    const vals = ds.years.map((yr) =>
-      meetjaren.includes(yr) ? correlate(ds, list, sel.x, sel.y, yr, method).r : null,
-    )
-    return [{ id: 'r', label: `${method === 'spearman' ? 'Spearman ρ' : 'Pearson r'}`, color: 'var(--series-1)', values: vals }]
-  }, [ds, list, sel, method, meetjaren])
-
   // mini-kaart van de gekozen X over de gebieden
   const mapGeo = useMemo(() => {
     const g = state.level === 'buurt' ? geo.buurt : state.level === 'gebied' ? geo.gebied : geo.wijk
@@ -173,6 +162,27 @@ export function Samenhang({ ds, geo, state }: { ds: Dataset; geo: GeoSet; state:
         strength(c.r)])
     }
     downloadCsv(`samenhang-${ds.meta.gemeente}-${state.scope || 'gemeente'}-${state.level}-${year}.csv`, toCsv(header, body))
+  }
+
+  // ruwe onderliggende waarden (geen afgeleide coëfficiënten): per gebied alle
+  // X- en Y-indicatoren in het analysejaar, de data waarop de matrix hierboven is gebaseerd
+  const exportRawData = () => {
+    const header = ['Gebied', ...xInds.map((x) => x.label), ...yInds.map((y) => y.label)]
+    const body: (string | number)[][] = list.map((a) => [
+      a.name,
+      ...xInds.map((x) => {
+        const v = getValue(ds, a.code, x.id, year)
+        return v == null ? '' : String(v).replace('.', ',')
+      }),
+      ...yInds.map((y) => {
+        const v = getValue(ds, a.code, y.id, year)
+        return v == null ? '' : String(v).replace('.', ',')
+      }),
+    ])
+    downloadCsv(
+      `samenhang-data-${ds.meta.gemeente}-${state.scope || 'gemeente'}-${state.level}-${year}.csv`,
+      toCsv(header, body),
+    )
   }
 
   const levelNaam = state.level === 'buurt' ? 'buurten' : state.level === 'gebied' ? 'gebieden' : state.level === 'stadsdeel' ? 'stadsdelen' : 'wijken'
@@ -317,104 +327,18 @@ export function Samenhang({ ds, geo, state }: { ds: Dataset; geo: GeoSet; state:
                   )}
                 </div>
               </div>
-              <div style={{ marginTop: 12 }}>
-                <h3 className="card-title">Samenhang over tijd</h3>
-                <p className="card-sub">
-                  {method === 'spearman' ? 'Spearman ρ' : 'Pearson r'} per RIVM-meetjaar — stabiel,
-                  sterker wordend of verdwijnend verband?
-                </p>
-                <LineChart
-                  years={ds.years}
-                  series={overTime}
-                  unit="index"
-                  height={220}
-                  yDomain={[-1, 1]}
-                  zeroLine
-                />
-              </div>
             </div>
           )}
 
-          <div className="card">
-            <h3 className="card-title">Sterkste verbanden · {year}</h3>
-            <p className="card-sub">
-              gesorteerd op de ondergrens van het 95%-interval (n ≥ {STRONG_MIN_N}); let op
-              dubbeltelling van SES-achtige kenmerken (inkomen/opleiding/armoede meten deels hetzelfde)
-            </p>
-            <div className="strong-list">
-              {strongest.map((s) => {
-                const xi = indicatorById(ds, s.x), yi = indicatorById(ds, s.y)
-                return (
-                  <button
-                    key={`${s.x}|${s.y}`}
-                    className={`strong-row${sel?.x === s.x && sel?.y === s.y ? ' active' : ''}`}
-                    onClick={() => setSel({ x: s.x, y: s.y })}
-                  >
-                    <span className="strong-pair">{xi?.shortLabel} ↔ {yi?.shortLabel}</span>
-                    <span className="strong-bar">
-                      <span
-                        className="strong-fill"
-                        style={{
-                          width: `${Math.abs(s.r) * 100}%`,
-                          marginLeft: s.r < 0 ? `${(1 - Math.abs(s.r)) * 100}%` : '0',
-                          background: s.r >= 0 ? 'var(--div-pos-2)' : 'var(--div-neg-2)',
-                        }}
-                      />
-                    </span>
-                    <span className="strong-r">{fmtR(s.r)}</span>
-                  </button>
-                )
-              })}
-              {strongest.length === 0 && <p className="view-sub">Geen verbanden met voldoende gebieden.</p>}
-            </div>
-          </div>
-
-          <div className="card">
-            <h3 className="card-title">Alle coëfficiënten</h3>
-            <p className="card-sub">sorteerbaar; leeg = te weinig gebieden of geen data</p>
-            <CorrTable xInds={xInds} yInds={yInds} cellFor={cellFor} onSelect={(x, y) => setSel({ x, y })} />
+          <div className="filterbar" style={{ padding: '4px 0 0', maxWidth: 'none' }}>
+            <button className="control" onClick={exportRawData} style={{ backgroundImage: 'none' }}>
+              ↓ Download alle onderliggende data (CSV)
+            </button>
           </div>
         </>
       )}
 
       <TabFootnote viewId="samenhang" ds={ds} state={state} />
     </>
-  )
-}
-
-/** Platte tabel van alle X-Y-coëfficiënten (hergebruikt DataTable-styling niet 1:1;
- *  eigen compacte tabel omdat de cellen kruisverbanden zijn). */
-function CorrTable({
-  xInds, yInds, cellFor, onSelect,
-}: {
-  xInds: Indicator[]
-  yInds: Indicator[]
-  cellFor: (x: string, y: string) => HeatCell
-  onSelect: (x: string, y: string) => void
-}) {
-  const columns: TableColumn[] = [
-    { id: 'r', label: 'coëff.', unit: 'index' },
-    { id: 'n', label: 'n', unit: 'aantal' },
-  ]
-  const rows: TableRowData[] = []
-  for (const x of xInds)
-    for (const y of yInds) {
-      const c = cellFor(x.id, y.id)
-      if (c.r == null) continue
-      rows.push({
-        code: `${x.id}|${y.id}`,
-        name: `${x.shortLabel} ↔ ${y.shortLabel}`,
-        values: { r: c.r, n: c.n },
-      })
-    }
-  return (
-    <DataTable
-      columns={columns}
-      rows={rows}
-      onSelect={(code) => {
-        const [x, y] = code.split('|')
-        onSelect(x, y)
-      }}
-    />
   )
 }

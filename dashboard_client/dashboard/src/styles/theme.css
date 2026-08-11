@@ -7,10 +7,16 @@
    ============================================================ */
 
 :root {
+  /* — huisstijl-perzik: twee tinten. --peach voor secundaire vlakken bínnen
+     de kolom (scopebar/view-params-tint); --peach-pale, lichter, voor de
+     paginamarges búiten de kolom ("dode ruimte" aan weerszijden) — */
+  --peach: #fed6cd;
+  --peach-pale: #ffeeeb;
+
   /* — vlakken: wit + perzik uit de huisstijl — */
-  --page: #fed6cd;
+  --page: var(--peach-pale);
   --surface-1: #ffffff;
-  --surface-2: #fff4f1;
+  --surface-2: var(--peach);
   --border: rgba(110, 0, 54, 0.14);
   --border-strong: rgba(110, 0, 54, 0.26);
 

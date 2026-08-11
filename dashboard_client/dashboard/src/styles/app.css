@@ -202,8 +202,7 @@
   bottom: 0;
   left: calc(100% / var(--sn-count, 1) * var(--sn-index, 0));
   width: calc(100% / var(--sn-count, 1));
-  background: var(--surface-1);
-  border: 1px solid var(--border);
+  background: var(--brand);
   border-radius: var(--radius-control);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
   transition: left 0.25s cubic-bezier(0.4, 0, 0.2, 1), width 0.25s ease;
@@ -228,7 +227,7 @@
 }
 
 .subnav button.active {
-  color: var(--text-primary);
+  color: var(--surface-1);
   font-weight: 600;
 }
 

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import type { Dataset, GemeenteIndex, GeoCollection, RegionLevel } from './types'
 import { levelsForScope, regionsOf, areas, availableYears, indicatorById } from './lib/data'
+import { GROUPS } from './lib/targetGroups'
+import { HORIZONS } from './lib/forecast'
 import { detectEncryption, loadData } from './lib/crypto'
 import { UnlockGate } from './components/UnlockGate'
 import { ErrorBoundary } from './ErrorBoundary'
@@ -59,6 +61,11 @@ export interface AppState {
   /** absoluut/relatief-weergave op de Kaart, gedeeld met de parameterbalk boven de subtabs */
   mode: MapMode
   setMode: (m: MapMode) => void
+  /** doelgroep + prognosehorizon op Vooruitblik, gedeeld met de parameterbalk boven de subtabs */
+  groupId: string
+  setGroupId: (g: string) => void
+  horizon: number
+  setHorizon: (h: number) => void
   selectedArea: string | null
   setSelectedArea: (w: string | null) => void
   /** analyse-scope: '' = hele gemeente, of code van stadsdeel/gebied */
@@ -173,6 +180,8 @@ export default function App() {
   const [themeId, setThemeId] = useState('')
   const [indicatorId, setIndicatorId] = useState('')
   const [mode, setMode] = useState<MapMode>('abs')
+  const [groupId, setGroupId] = useState(GROUPS[0].id)
+  const [horizon, setHorizon] = useState<number>(HORIZONS[HORIZONS.length - 1])
   const [selectedArea, setSelectedArea] = useState<string | null>(null)
   const [scope, setScope] = useState('')
   const [level, setLevel] = useState<RegionLevel>(initial.current.level ?? 'wijk')
@@ -319,6 +328,7 @@ export default function App() {
   const state: AppState = useMemo(
     () => ({
       year, setYear, themeId, setThemeId, indicatorId, setIndicatorId, mode, setMode,
+      groupId, setGroupId, horizon, setHorizon,
       selectedArea, setSelectedArea, scope, level, setLevel,
       pendingPair, clearPendingPair: () => setPendingPair(null), navigate,
       sourceAnchor, openSource, clearSourceAnchor: () => setSourceAnchor(null),
@@ -326,7 +336,7 @@ export default function App() {
       clearVerantwoordingAnchor: () => setVerantwoordingAnchor(null),
     }),
     [
-      year, themeId, indicatorId, mode, selectedArea, scope, level, pendingPair, navigate,
+      year, themeId, indicatorId, mode, groupId, horizon, selectedArea, scope, level, pendingPair, navigate,
       sourceAnchor, openSource, verantwoordingAnchor, openVerantwoording,
     ],
   )
@@ -382,13 +392,16 @@ export default function App() {
   // frozen-bar alleen tonen als er iets in te tonen valt (Inzichten heeft geen van beide)
   const hasFrozenBar = isVerkennenAnalyse || Boolean(subNav)
 
-  // indicator + absoluut/relatief verhuizen naar de bevroren balk voor de views die
-  // erop leunen (Kaart en Ontwikkeling over tijd), zodat ze niet per tabblad
-  // opnieuw worden opgebouwd en altijd naast de andere parameters staan
-  const showViewParams = view === 'kaart' || view === 'trends'
-  const paramList = showViewParams ? areas(ds, level, scope) : []
-  const paramIndicator = showViewParams ? indicatorById(ds, indicatorId) ?? ds.indicators[0] : null
+  // indicator + absoluut/relatief (Kaart, Ontwikkeling over tijd) en doelgroep +
+  // horizon (Vooruitblik) verhuizen naar de bevroren balk voor de views die
+  // erop leunen, zodat ze niet per tabblad opnieuw worden opgebouwd en altijd
+  // naast de andere parameters staan
+  const showIndicatorParams = view === 'kaart' || view === 'trends'
+  const showGroupParams = view === 'vooruitblik'
+  const paramList = showIndicatorParams ? areas(ds, level, scope) : []
+  const paramIndicator = showIndicatorParams ? indicatorById(ds, indicatorId) ?? ds.indicators[0] : null
   const paramRelAllowed = paramIndicator ? paramIndicator.unit !== 'aantal' : false
+  const paramGroup = showGroupParams ? GROUPS.find((g) => g.id === groupId) ?? GROUPS[0] : null
 
   return (
     <div className="app">
@@ -498,7 +511,7 @@ export default function App() {
               </div>
             )}
 
-            {showViewParams && paramIndicator && (
+            {showIndicatorParams && paramIndicator && (
               <div className="view-params-bar">
                 <label>Indicator</label>
                 <select
@@ -547,6 +560,36 @@ export default function App() {
                     </button>
                   </div>
                 )}
+              </div>
+            )}
+
+            {showGroupParams && paramGroup && (
+              <div className="view-params-bar">
+                <label htmlFor="vooruitblik-doelgroep">Doelgroep</label>
+                <select
+                  id="vooruitblik-doelgroep"
+                  className="control"
+                  value={paramGroup.id}
+                  onChange={(e) => {
+                    setGroupId(e.target.value)
+                    setSelectedArea(null)
+                  }}
+                >
+                  {GROUPS.map((g) => (
+                    <option key={g.id} value={g.id}>
+                      {g.label}
+                    </option>
+                  ))}
+                </select>
+
+                <label>Prognosejaar</label>
+                <div className="seg" role="group" aria-label="Horizon">
+                  {HORIZONS.map((h) => (
+                    <button key={h} className={horizon === h ? 'active' : ''} onClick={() => setHorizon(h)}>
+                      {h}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
           </div>

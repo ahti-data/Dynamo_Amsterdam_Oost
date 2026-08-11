@@ -5,35 +5,14 @@ import { BarChart, type BarRow } from '../components/BarChart'
 import { Choropleth } from '../components/Choropleth'
 import { ForecastChart, type ForecastSeries } from '../components/ForecastChart'
 import { TabFootnote } from '../components/TabFootnote'
-import { areas, regionName, coverageBreakYears, indicatorById } from '../lib/data'
-import { forecastArea, forecastGroup, pctChange, HORIZONS } from '../lib/forecast'
+import { areas, regionName, coverageBreakYears } from '../lib/data'
+import { forecastArea, forecastGroup, pctChange } from '../lib/forecast'
+import { GROUPS } from '../lib/targetGroups'
 
-/** Dynamo-doelgroepen: CBS-indicator gekoppeld aan de dienst die erop stuurt. */
-interface TargetGroup {
-  id: string
-  label: string
-  short: string
-  service: string
-  color: string
-}
-const GROUPS: TargetGroup[] = [
-  { id: 'a_65_oo', label: 'Ouderen (65-plus)', short: '65-plus', service: 'Ouderenwerk, seniorenactiviteiten, welzijn op recept', color: 'var(--series-3)' },
-  { id: 'a_00_14', label: 'Kinderen (0–14 jaar)', short: '0–14 jr', service: 'Kinderwerk en jeugdwerk', color: 'var(--series-1)' },
-  { id: 'a_15_24', label: 'Jongeren (15–24 jaar)', short: '15–24 jr', service: 'Jongerenwerk en talentontwikkeling', color: 'var(--series-2)' },
-  { id: 'a_1p_hh', label: 'Alleenwonenden', short: 'alleenwonend', service: 'Buurtwerk en eenzaamheidsbestrijding', color: 'var(--series-5)' },
-  { id: 'a_45_64', label: 'Aankomende senioren (45–64 jr)', short: '45–64 jr', service: 'Mantelzorg en voorbereiding op vergrijzing', color: 'var(--series-8)' },
-  { id: 'a_hh', label: 'Huishoudens', short: 'huishoudens', service: 'Buurtwerk, Huizen van de Wijk, wonen', color: 'var(--series-6)' },
-  { id: 'a_inw', label: 'Totaal inwoners', short: 'inwoners', service: 'Draagvlak en schaal van alle voorzieningen', color: 'var(--series-4)' },
-]
 export function Vooruitblik({ ds, geo, state }: { ds: Dataset; geo: GeoSet; state: AppState }) {
-  const [groupId, setGroupId] = useState('a_65_oo')
-  const [horizon, setHorizon] = useState<number>(HORIZONS[HORIZONS.length - 1])
   const [hoverCode, setHoverCode] = useState<string | null>(null)
-  const group = GROUPS.find((g) => g.id === groupId) ?? GROUPS[0]
-  // dezelfde 9 thema's als Overzicht/Kaart/Tabel — expliciete brug tussen de
-  // doelgroep-indeling hier en de thema-indeling elders (MECE-cleanup)
-  const groupThemeId = indicatorById(ds, group.id)?.theme
-  const groupTheme = groupThemeId ? ds.themes.find((t) => t.id === groupThemeId) : undefined
+  const group = GROUPS.find((g) => g.id === state.groupId) ?? GROUPS[0]
+  const horizon = state.horizon
 
   const focusCode = state.scope || ds.meta.gemeente
   const focusName = regionName(ds, focusCode)
@@ -111,50 +90,8 @@ export function Vooruitblik({ ds, geo, state }: { ds: Dataset; geo: GeoSet; stat
         <strong>indicatief</strong> en verbreden richting {horizon} — zie de onzekerheidsband en de Verantwoording.
       </p>
 
-      <div className="filterbar" style={{ padding: 0, maxWidth: 'none', margin: '0 0 4px' }}>
-        <label htmlFor="vooruitblik-doelgroep">Doelgroep</label>
-        <select
-          id="vooruitblik-doelgroep"
-          className="control"
-          value={group.id}
-          onChange={(e) => { setGroupId(e.target.value); state.setSelectedArea(null) }}
-        >
-          {GROUPS.map((g) => (
-            <option key={g.id} value={g.id}>{g.label}</option>
-          ))}
-        </select>
-      </div>
       <p className="view-sub" style={{ marginTop: -8 }}>
         <strong>{group.label}</strong> · stuurt op: {group.service.toLowerCase()}
-        {groupTheme && (
-          <>
-            {' · '}
-            <button
-              type="button"
-              className="bron-link"
-              onClick={() =>
-                state.navigate({
-                  view: 'kaart',
-                  scope: state.scope,
-                  level: state.level,
-                  indicatorId: groupTheme.headline[0] ?? groupTheme.indicatorIds[0],
-                  year: state.year,
-                })
-              }
-            >
-              zelfde thema in Kaart: {groupTheme.title} →
-            </button>
-          </>
-        )}
-        <span style={{ marginLeft: 14 }}>
-          <span className="seg" role="group" aria-label="Horizon" style={{ display: 'inline-flex', verticalAlign: 'middle' }}>
-            {HORIZONS.map((h) => (
-              <button key={h} className={horizon === h ? 'active' : ''} onClick={() => setHorizon(h)}>
-                {h}
-              </button>
-            ))}
-          </span>
-        </span>
       </p>
 
       {!hasData ? (
