@@ -87,7 +87,7 @@ export function ForecastChart({ series, lastObsYear, height = 340 }: Props) {
       M.top + ih / 2,
       <>
         <div className="viz-tip-title">
-          {nearest} {nearest > lastObsYear ? '· prognose' : ''}
+          {nearest} {nearest > lastObsYear ? (rows.some((r) => r.p!.source === 'official') ? '· officiële prognose' : '· trendprognose') : ''}
         </div>
         {rows.map(({ s, p }) => (
           <TipRow
@@ -95,7 +95,7 @@ export function ForecastChart({ series, lastObsYear, height = 340 }: Props) {
             color={s.color}
             label={s.label}
             value={
-              p!.forecast && s.showBand
+              p!.forecast && s.showBand && p!.source !== 'official'
                 ? `${fmtValue(p!.value, 'aantal')} (${fmtValue(p!.lo, 'aantal')}–${fmtValue(p!.hi, 'aantal')})`
                 : fmtValue(p!.value, 'aantal')
             }
@@ -175,7 +175,9 @@ export function ForecastChart({ series, lastObsYear, height = 340 }: Props) {
                     key={p.year}
                     cx={x(p.year)}
                     cy={y(p.value)}
-                    r={hoverYear === p.year ? 4 : p.forecast ? 0 : 2.6}
+                    // officiële prognosepunten blijven zichtbaar (het zijn harde getallen,
+                    // geen model-doortrekking) — trendprognosepunten alleen bij hover
+                    r={hoverYear === p.year ? 4 : !p.forecast || p.source === 'official' ? 2.6 : 0}
                     fill={s.color}
                     stroke="var(--surface-1)"
                     strokeWidth={1.5}

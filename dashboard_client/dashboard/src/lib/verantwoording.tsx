@@ -252,7 +252,7 @@ export const VERANTWOORDING_SECTIONS: VerantwoordingSection[] = [
   {
     id: 'duiding',
     title: 'Duiding bij gebruik voor locatiekeuze',
-    relatedViews: ['inzichten', 'kaart'],
+    relatedViews: ['kaart'],
     render: (state) => (
       <ul>
         <li>

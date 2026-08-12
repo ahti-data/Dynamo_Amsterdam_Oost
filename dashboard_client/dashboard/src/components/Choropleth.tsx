@@ -74,6 +74,12 @@ export function Choropleth({
     if (el && el.clientWidth !== w && el.clientWidth > 0) setW(el.clientWidth)
   }
 
+  // `height` is de totale voetafdruk (svg + legenda), zodat hij naast een
+  // BarChart met dezelfde height-prop (die geen legenda heeft) evenveel
+  // ruimte inneemt — trek de legenda's eigen hoogte (.viz-map-legend: padding
+  // 8+2 + één regel 11px-tekst) er hier af, vóór de svg hem gebruikt.
+  const svgHeight = Math.max(height - 27, 120)
+
   /* projectie: equirectangular met cos(lat)-correctie, gefit op viewBox */
   const proj = useMemo(() => {
     let minLon = Infinity, maxLon = -Infinity, minLat = Infinity, maxLat = -Infinity
@@ -97,14 +103,14 @@ export function Choropleth({
     const pad = 10
     const spanX = (maxLon - minLon) * cosLat
     const spanY = maxLat - minLat
-    const scale = Math.min((w - pad * 2) / spanX, (height - pad * 2) / spanY)
+    const scale = Math.min((w - pad * 2) / spanX, (svgHeight - pad * 2) / spanY)
     const offX = (w - spanX * scale) / 2
-    const offY = (height - spanY * scale) / 2
+    const offY = (svgHeight - spanY * scale) / 2
     return {
       x: (lon: number) => offX + (lon - minLon) * cosLat * scale,
       y: (lat: number) => offY + (maxLat - lat) * scale,
     }
-  }, [geo, w, height])
+  }, [geo, w, svgHeight])
 
   const paths = useMemo(() => {
     return geo.features.map((f) => {
@@ -177,8 +183,8 @@ export function Choropleth({
     <div className="viz-wrap" ref={measure}>
       <svg
         width="100%"
-        height={height}
-        viewBox={`0 0 ${w} ${height}`}
+        height={svgHeight}
+        viewBox={`0 0 ${w} ${svgHeight}`}
         role="group"
         aria-label={ariaLabel ?? 'Vlakkenkaart'}
       >

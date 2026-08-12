@@ -60,6 +60,13 @@ export interface Theme {
 /** values[regionCode][indicatorId][yearIndex] — null = niet beschikbaar/geheim */
 export type ValueStore = Record<string, Record<string, (number | null)[]>>
 
+/** officialForecast[regionCode][indicatorId][jaar] = puntwaarde uit een externe
+ *  officiële prognose (bijv. gemeentelijke O&S-bevolkingsprognose/BBGA), los van
+ *  de intern getrokken trendprognose in lib/forecast.ts. Alleen gevuld waar zo'n
+ *  bron bestaat (nu: Oost-stadsdeel/wijken). Geen onzekerheidsband: de bronnen
+ *  publiceren geen interval. */
+export type OfficialForecastStore = Record<string, Record<string, Record<number, number>>>
+
 export interface GentComponentCfg {
   id: string
   label: string
@@ -89,6 +96,7 @@ export interface Dataset {
   gentrification?: GentConfig
   outcomeIds?: string[]
   correlation?: { rivmMeetjaren: number[]; note: string }
+  officialForecast?: OfficialForecastStore
 }
 
 export interface GemeenteIndex {

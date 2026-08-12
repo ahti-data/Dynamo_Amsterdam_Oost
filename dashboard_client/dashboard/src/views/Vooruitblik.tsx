@@ -31,6 +31,16 @@ export function Vooruitblik({ ds, geo, state }: { ds: Dataset; geo: GeoSet; stat
     return s
   }, [focusFc, focusCode, focusName, group.color])
 
+  // is (een deel van) de getoonde prognose een officiële O&S/BBGA-puntprognose
+  // (nu alleen stadsdeel Oost + wijken) i.p.v. onze eigen trenddoortrekking?
+  const focusForecastPoints = useMemo(() => focusFc?.points.filter((p) => p.forecast) ?? [], [focusFc])
+  const focusOfficialCount = useMemo(
+    () => focusForecastPoints.filter((p) => p.source === 'official').length,
+    [focusForecastPoints],
+  )
+  const isOfficial = focusOfficialCount > 0 && focusOfficialCount === focusForecastPoints.length
+  const isMixedSource = focusOfficialCount > 0 && focusOfficialCount < focusForecastPoints.length
+
   // prognose per gebied binnen de scope, top-down gerakt naar het focusgebied
   const areaFc = useMemo(
     () => forecastGroup(ds, group.id, list, focusCode),
@@ -56,6 +66,13 @@ export function Vooruitblik({ ds, geo, state }: { ds: Dataset; geo: GeoSet; stat
   const compressedShown = useMemo(
     () => ranking.filter((r) => areaFc.get(r.code)?.compressed).map((r) => r.label),
     [ranking, areaFc],
+  )
+
+  // hoeveel gebieden in de ranking gebruiken voor dit horizonjaar een officiële
+  // O&S/BBGA-prognose (geen band) i.p.v. de eigen trenddoortrekking?
+  const officialShownCount = useMemo(
+    () => ranking.filter((r) => areaFc.get(r.code)?.points.find((p) => p.year === horizon)?.source === 'official').length,
+    [ranking, areaFc, horizon],
   )
 
   const mapValues = useMemo(() => {
@@ -118,8 +135,23 @@ export function Vooruitblik({ ds, geo, state }: { ds: Dataset; geo: GeoSet; stat
           <div className="card">
             <h3 className="card-title">{group.label} — waarneming en prognose · {focusName}</h3>
             <p className="card-sub">
-              Volle lijn = waarneming ({ds.years[0]}–{lastYear}); stippel + band = prognose (±68% aannemelijke marge).
-              De band verbreedt met de horizon: verder vooruit is onzekerder.
+              {isOfficial ? (
+                <>
+                  Volle lijn = waarneming ({ds.years[0]}–{lastYear}); stippel = officiële bevolkingsprognose
+                  (O&amp;S/BBGA, gemeente Amsterdam) voor {focusName}. Geen onzekerheidsband: deze bron publiceert
+                  geen interval — zie het voorbehoud onderaan.
+                </>
+              ) : isMixedSource ? (
+                <>
+                  Volle lijn = waarneming; stippel + band = eigen trendprognose, behalve waar een officiële
+                  O&amp;S/BBGA-prognose bestaat voor {focusName} (die punten staan zonder band).
+                </>
+              ) : (
+                <>
+                  Volle lijn = waarneming ({ds.years[0]}–{lastYear}); stippel + band = prognose (±68% aannemelijke marge).
+                  De band verbreedt met de horizon: verder vooruit is onzekerder.
+                </>
+              )}
             </p>
             <ForecastChart series={chartSeries} lastObsYear={lastYear} height={340} />
           </div>
@@ -132,6 +164,13 @@ export function Vooruitblik({ ds, geo, state }: { ds: Dataset; geo: GeoSet; stat
                   Verwachte procentuele verandering per {levelNaam} binnen {focusName}
                   {ranking.length < list.length ? ` (sterkste stijgers en dalers, ${ranking.length} van ${list.length})` : ''}.
                   Staven gesorteerd van meeste groei naar meeste krimp; de kaart kleurt blauw (krimp) tot rood (groei).
+                  {officialShownCount > 0 && (
+                    <>
+                      {' '}
+                      <strong>{officialShownCount} van de {ranking.length}</strong> gebruiken voor {horizon} de
+                      officiële O&amp;S/BBGA-prognose (zonder band) i.p.v. de eigen trendprognose.
+                    </>
+                  )}
                   {compressedShown.length > 0 && (
                     <>
                       {' '}
@@ -175,10 +214,29 @@ export function Vooruitblik({ ds, geo, state }: { ds: Dataset; geo: GeoSet; stat
           </div>
 
           <p className="notice" role="note">
-            ⚠ <strong>Voorbehoud.</strong> Dit is een trenddoortrekking, geen bevolkingsprognose van CBS/PBL of Primos.
-            Er zijn geen geplande nieuwbouw, sloop of beleidswijzigingen meegenomen. Buurtcijfers zijn klein en ruizig;
-            de betrouwbaarheid neemt af naar {horizon} en op fijner niveau. Cijfers zijn gebiedsgemiddelden (ecologisch
-            voorbehoud). Zie <em>Verantwoording → Vooruitblik</em> voor de volledige methode en aannames.
+            {isOfficial ? (
+              <>
+                ⚠ <strong>Voorbehoud.</strong> Dit zijn de officiële O&amp;S/BBGA-bevolkingsprognosecijfers voor{' '}
+                {focusName} (gemeente Amsterdam, prognose 2026) — géén eigen trenddoortrekking. Ze houden wel
+                rekening met geplande nieuwbouw en de verwachte woningvoorraad, maar er is geen onzekerheidsinterval
+                gepubliceerd: de lijn toont dus een puntschatting, niet een marge. Cijfers zijn gebiedsgemiddelden
+                (ecologisch voorbehoud). Zie <em>Verantwoording → Vooruitblik</em> voor de volledige bronnen.
+              </>
+            ) : (
+              <>
+                ⚠ <strong>Voorbehoud.</strong> Dit is een trenddoortrekking, geen bevolkingsprognose van CBS/PBL of Primos.
+                Er zijn geen geplande nieuwbouw, sloop of beleidswijzigingen meegenomen. Buurtcijfers zijn klein en ruizig;
+                de betrouwbaarheid neemt af naar {horizon} en op fijner niveau. Cijfers zijn gebiedsgemiddelden (ecologisch
+                voorbehoud). Zie <em>Verantwoording → Vooruitblik</em> voor de volledige methode en aannames.
+                {isMixedSource && (
+                  <>
+                    {' '}
+                    Voor {focusName} bestaat voor een deel van de prognosejaren een officiële O&amp;S/BBGA-prognose
+                    (gemeente Amsterdam); die punten zijn zonder band getoond en zijn géén eigen doortrekking.
+                  </>
+                )}
+              </>
+            )}
           </p>
         </>
       )}

@@ -23,6 +23,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from official_forecast import load_official_forecast
+
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "dashboard" / "public" / "data"
 GEO_SRC = ROOT / "data-prep" / "geo" / "gm"
@@ -688,6 +690,12 @@ def build_gemeente(gm_code, gm_name, frames, gebieden_cfg, rivm):
                     "(over gebieden), geen individueel of causaal verband.",
         },
     }
+    if is_ams:
+        # officiële puntprognoses (O&S/BBGA), alleen stadsdeel Oost + wijken —
+        # zie data-prep/official_forecast.py en AANNAMES.md §11
+        official = load_official_forecast()
+        if official:
+            bundle["officialForecast"] = official
     out_file = OUT / "gm" / f"{gm_code}.json"
     out_file.write_text(json.dumps(bundle, ensure_ascii=False), encoding="utf-8")
     print(f"OK {gm_code} ({gm_name}): {out_file.stat().st_size/1024:.0f} kB — "

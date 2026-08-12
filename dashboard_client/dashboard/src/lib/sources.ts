@@ -72,7 +72,7 @@ export const SOURCES: Source[] = [
     ],
     usedFor:
       'De volledige demografische en sociaaleconomische basis van de monitor: bevolking, leeftijd, huishoudens, herkomst, inkomen, vermogen, uitkeringen, armoede, opleiding, WOZ, woningvoorraad, Wmo en jeugdzorg — op alle niveaus (stadsdeel, gebied, wijk, buurt).',
-    relatedViews: ['kaart', 'trends', 'vooruitblik', 'samenhang', 'tabel', 'inzichten'],
+    relatedViews: ['kaart', 'trends', 'vooruitblik', 'samenhang', 'tabel'],
     coverage: 'Nederland; gemeente, wijk en buurt; verslagjaren 2016–2025.',
     content:
       'Samenvattende jaarpublicatie met kerncijfers over demografische en sociaaleconomische thema’s per gemeente, wijk en buurt. De reekspagina biedt per jaar een Excelbestand; StatLine geeft de losse jaartabellen.',
@@ -92,7 +92,7 @@ export const SOURCES: Source[] = [
     ],
     usedFor:
       'De uitkomstindicatoren (met prefix o_) in het tabblad Samenhang: ervaren gezondheid, mentaal welzijn, eenzaamheid, mantelzorg, moeite met rondkomen en leefstijl.',
-    relatedViews: ['samenhang', 'inzichten'],
+    relatedViews: ['samenhang'],
     coverage: 'Nederland; gemeente, wijk en buurt (indeling 2024); meetjaren 2012, 2016, 2020, 2022 en 2024.',
     content:
       'Kleine-gebiedsschattingen van gezondheid, welzijn en leefstijl: o.a. ervaren gezondheid, angst/depressie, stress, eenzaamheid, sociale steun, mantelzorg, moeite met rondkomen, roken, alcohol en bewegen.',

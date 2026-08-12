@@ -97,7 +97,10 @@ huishoudensprognose; Primos (ABF Research) / VNG-toepassingen.
    Oostelijk Havengebied) groeien sneller dan het model betrouwbaar extrapoleert; hun
    groeivoet wordt glad gecomprimeerd naar het plafond en hun prognose is een **getemde
    ondergrens** — de UI markeert deze gebieden expliciet als zodanig. In werkelijkheid
-   kunnen ze nog harder groeien of juist afvlakken.
+   kunnen ze nog harder groeien of juist afvlakken. **Uitzondering: stadsdeel Oost en
+   zijn 15 wijken** gebruiken voor `a_00_14`/`a_15_24`/`a_45_64`/`a_65_oo`/`a_inw` waar
+   beschikbaar een officiële O&S/BBGA-prognose in plaats van deze trenddoortrekking
+   (die houdt wél rekening met nieuwbouw/woningvoorraad) — zie §6.
 2. **Ecologisch voorbehoud.** Alle cijfers zijn gebiedsgemiddelden, geen
    individuen. De prognose stuurt *waar* je capaciteit verschuift, niet *wie*
    precies wordt bereikt (gedeeld met het inzichtenteam).
@@ -117,9 +120,62 @@ huishoudensprognose; Primos (ABF Research) / VNG-toepassingen.
 7. **Afronding.** Aantallen worden indicatief getoond; buurtprognoses zijn klein en
    ruizig en moeten als orde-van-grootte worden gelezen, niet als exacte tellingen.
 
-## 5. Waar te vinden in de code
+## 6. Officiële externe prognose (O&S/BBGA), alleen stadsdeel Oost
 
-- `dashboard/src/lib/forecast.ts` — prognose-engine (trend, shrinkage, demping, raking, band).
-- `dashboard/src/components/ForecastChart.tsx` — fan chart (waarneming + prognose + band).
+Sinds augustus 2026 vervangt een officiële gemeentelijke puntprognose de eigen
+trenddoortrekking (§3) **waar die bestaat** — dat is momenteel alleen stadsdeel
+Oost (`SD-M`) en zijn 15 wijken (`WK0363MA`–`WK0363MQ`); nergens op buurt- of
+gebiedsniveau, en nergens buiten Oost.
+
+**Twee bronnen, complementair:**
+
+- **O&S-bevolkingsprognose 2026** (Excel per wijk + stadsdeel, 5-jaars
+  leeftijdsklassen; `external-data/raw/amsterdam_ois_bevolkingsprognose_oost/`) →
+  `a_00_14` (som 0–4/5–9/10–14), `a_15_24` (som 15–19/20–24), `a_45_64` (som
+  45–49/…/60–64). Jaren 2026/2030/2035/2040/2050/2055.
+- **BBGA** (Basisbestand Gebieden Amsterdam, al gedownload voor de catalogus;
+  `external-data/raw/amsterdam_bbga/`) → `a_inw` (variabele `BEV_PROG`) en
+  `a_65_oo` (`BEV65PLUS_PROG`), jaarlijks 2027–2055. BBGA's eigen leeftijdsklassen
+  (0–17/18–64/65+/75+) sluiten niet aan op de Dynamo-doelgroepen, dus alleen de
+  twee variabelen die wél 1-op-1 matchen (totaal en 65+) worden gebruikt; de
+  0–14/15–24/45–64-klassen komen daarom uit de O&S-Excel, niet uit BBGA.
+- `a_1p_hh` (alleenwonenden) en `a_hh` (huishoudens) hebben in **geen van beide**
+  bronnen een prognosevariabele — die twee doelgroepen blijven overal, ook in
+  Oost, op de trenddoortrekking van §3.
+
+**Geen onzekerheidsband.** Beide bronnen publiceren een puntschatting, geen
+interval of scenario (hoog/laag) — gecontroleerd in de BBGA-metadata, er bestaat
+geen `*_PROG`-variant met een marge. De UI toont deze punten daarom bewust zonder
+band (`lo = hi = value`) in plaats van een zelf verzonnen bandbreedte te tonen:
+die zou schijnzekerheid suggereren over een controleerbaar officieel getal. Een
+mail is uitgezet naar O&S om te vragen of er alsnog een intern betrouwbaarheids-
+interval bestaat; zolang dat er niet is, blijft dit zo.
+
+**Raking naar het officiële getal.** Voor Oost-buurten (die geen eigen officiële
+regel hebben) blijft de trenddoortrekking van §3 gelden, maar de top-down raking
+(stap 4) schaalt hun som nu naar de *officiële* wijk-/stadsdeelprognose in plaats
+van naar een tweede modelmatige projectie van hetzelfde soort — het robuustere
+niveau is nu een hard getal, geen eigen schatting.
+
+**Verwerking:** `data-prep/official_forecast.py` (parser voor beide bronnen) →
+`bundle["officialForecast"][regiocode][indicatorId][jaar]` in `build_data.py`
+(alleen voor `GM0363`) → `dashboard/src/lib/forecast.ts` gebruikt dit veld direct
+i.p.v. de eigen trend zodra het bestaat, met `ForecastPoint.source: 'official'`
+zodat de UI (`Vooruitblik.tsx`, `ForecastChart.tsx`) het anders labelt en toont.
+Ontbreken de bronbestanden lokaal, dan valt de build terug op de trenddoortrekking
+voor heel Amsterdam inclusief Oost (waarschuwing in de build-log, geen harde fout).
+
+**Bewust niet gedaan (nu):** BBGA dekt feitelijk de hele gemeente (alle
+stadsdelen/gebieden/wijken) voor `a_inw`/`a_65_oo`, niet alleen Oost — dat is
+bewust nog niet aangezet buiten Oost, om de eerste stap klein te houden. De
+extra O&S/BBGA-jaren 2026/2040/2050/2055 zitten al in de data maar worden nog
+niet getoond: de horizon-keuze in de UI is nog beperkt tot 2030/2035 (`HORIZONS`
+in `forecast.ts`).
+
+## 7. Waar te vinden in de code
+
+- `dashboard/src/lib/forecast.ts` — prognose-engine (trend, shrinkage, demping, raking, band, officiële override).
+- `dashboard/src/components/ForecastChart.tsx` — fan chart (waarneming + prognose + band; officiële punten zonder band).
 - `dashboard/src/views/Vooruitblik.tsx` — het tabblad (doelgroepkeuze, tegels, ranking, kaart, leeftijdsopbouw, conclusies).
+- `data-prep/official_forecast.py` — parser voor de O&S-Excel en BBGA (§6).
 - In de tool: **Verantwoording → Vooruitblik (prognose)** vat methode en voorbehoud samen.

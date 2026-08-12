@@ -4,7 +4,7 @@ import { findSource } from '../lib/sources'
 /**
  * Inline, klikbare koppeling die het Bronnen-tabblad opent en direct naar de
  * betreffende dataset scrolt. Gebruikt overal in de tool op logische plekken
- * (Verantwoording, Samenhang, Inzichten, footer …).
+ * (Verantwoording, Samenhang, footer …).
  */
 export function BronLink({
   state,

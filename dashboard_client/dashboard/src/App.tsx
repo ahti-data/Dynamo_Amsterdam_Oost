@@ -10,19 +10,17 @@ import { Kaart } from './views/Kaart'
 import { Trends } from './views/Trends'
 import { Vooruitblik } from './views/Vooruitblik'
 import { Samenhang } from './views/Samenhang'
-import { Inzichten } from './views/Inzichten'
 import { Tabel } from './views/Tabel'
 import { Bronnen } from './views/Bronnen'
 import { Verantwoording } from './views/Verantwoording'
 import dynamoLogo from './assets/dynamo.png'
 import ahtiLogo from './assets/ahti.png'
 
-// Drie hoofdgroepen, elk een top-level tabblad; Inzichten en Verantwoording &
-// Bronnen tonen hun (enkele of dubbele) view rechtstreeks, Verkennen & Analyse
-// toont eerst de gedeelde parameterbalk en daaronder een sub-tabbalk met de
-// losse analyseviews — zie NAV_GROUPS hieronder.
+// Twee hoofdgroepen, elk een top-level tabblad; Verantwoording & Bronnen toont
+// zijn twee views rechtstreeks via de subnav, Verkennen & Analyse toont eerst
+// de gedeelde parameterbalk en daaronder een sub-tabbalk met de losse
+// analyseviews — zie NAV_GROUPS hieronder. (Inzichten: tijdelijk verwijderd.)
 export const VIEWS = [
-  { id: 'inzichten', label: 'Inzichten', group: 'Inzichten' },
   { id: 'kaart', label: 'Kaart', group: 'Verkennen & Analyse' },
   { id: 'trends', label: 'Ontwikkeling over tijd', group: 'Verkennen & Analyse' },
   { id: 'vooruitblik', label: 'Vooruitblik', group: 'Verkennen & Analyse' },
@@ -185,7 +183,7 @@ export default function App() {
   // ontgrendeling. `locked` toont het wachtwoordscherm.
   const [ready, setReady] = useState(false)
   const [locked, setLocked] = useState(false)
-  const [view, setView] = useState<ViewId>(initial.current.view ?? 'inzichten')
+  const [view, setView] = useState<ViewId>(initial.current.view ?? 'kaart')
   const [dark, setDark] = useState(
     () => window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false,
   )
@@ -403,7 +401,7 @@ export default function App() {
       </div>
     </div>
   )
-  // frozen-bar alleen tonen als er iets in te tonen valt (Inzichten heeft geen van beide)
+  // frozen-bar alleen tonen als er iets in te tonen valt
   const hasFrozenBar = isVerkennenAnalyse || Boolean(subNav)
   const activeAccent = SUBTAB_ACCENTS[view]
   const frozenBarStyle = activeAccent
@@ -628,7 +626,6 @@ export default function App() {
               </div>
             ) : (
               <div className="view-fade">
-                {view === 'inzichten' && <Inzichten ds={ds} state={state} />}
                 {view === 'kaart' && <Kaart ds={ds} geo={geo} state={state} />}
                 {view === 'trends' && <Trends ds={ds} state={state} />}
                 {view === 'vooruitblik' && <Vooruitblik ds={ds} geo={geo} state={state} />}

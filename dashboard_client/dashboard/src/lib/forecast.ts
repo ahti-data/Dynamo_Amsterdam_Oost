@@ -50,6 +50,11 @@ export interface ForecastPoint {
   hi: number
   /** true = geprognosticeerd jaar, false = waarneming */
   forecast: boolean
+  /** 'official' = puntwaarde uit een externe officiële prognose (O&S/BBGA,
+   *  nu alleen stadsdeel Oost + wijken) — bewust zonder band, want die bronnen
+   *  publiceren geen interval. 'trend' = eigen log-lineaire extrapolatie met
+   *  onzekerheidsband. Alleen relevant als forecast=true. */
+  source?: 'official' | 'trend'
 }
 
 export interface AreaForecast {
@@ -202,7 +207,10 @@ export function forecastGroup(
     for (const y of targetYears) {
       if (y <= lastYear) continue
       const h = y - anchorFit.lastYear
-      const anchorProj = grow(anchorFit.lastValue, softCap(anchorFit.rate), h)
+      // een officiële prognose voor het ankergebied zelf (O&S/BBGA, Oost) is
+      // betrouwbaarder dan onze eigen doortrekking — raak daar dan naar toe
+      const anchorOfficial = ds.officialForecast?.[anchor]?.[indicator]?.[y]
+      const anchorProj = anchorOfficial ?? grow(anchorFit.lastValue, softCap(anchorFit.rate), h)
       const sumChildren = raw.reduce((s, rf) => s + grow(rf.fit.lastValue, rf.rate, y - rf.fit.lastYear), 0)
       rakeFactor.set(y, sumChildren > 0 ? anchorProj / sumChildren : 1)
     }
@@ -219,6 +227,16 @@ export function forecastGroup(
     const projected: Record<number, number> = {}
     for (const y of targetYears) {
       if (y <= lastYear) continue
+      // een officiële puntprognose (O&S/BBGA, Oost) vervangt onze eigen
+      // doortrekking voor dit gebied/jaar — zonder band: de bron publiceert
+      // geen interval, en een geleende bandbreedte zou schijnzekerheid over
+      // een controleerbaar officieel getal suggereren die er niet is.
+      const official = ds.officialForecast?.[rf.code]?.[indicator]?.[y]
+      if (official != null) {
+        points.push({ year: y, value: official, lo: official, hi: official, forecast: true, source: 'official' })
+        projected[y] = official
+        continue
+      }
       const h = y - rf.fit.lastYear
       let value = grow(rf.fit.lastValue, rf.rate, h)
       const rk = rakeFactor.get(y)
@@ -237,6 +255,7 @@ export function forecastGroup(
         lo: value * Math.exp(-band),
         hi: value * Math.exp(band),
         forecast: true,
+        source: 'trend',
       })
       projected[y] = value
     }
