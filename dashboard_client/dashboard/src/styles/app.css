@@ -131,7 +131,10 @@
   gap: 10px;
   flex-wrap: wrap;
   padding: 10px 28px;
-  background: color-mix(in srgb, var(--surface-2) 88%, var(--brand) 12%);
+  /* --tab-fill-light: gezet op .frozen-bar, per actieve subtab (App.tsx) —
+     valt terug op de oude vaste merk-tint waar dat niet gezet is (Verantwoording & Bronnen) */
+  background: var(--tab-fill-light, color-mix(in srgb, var(--surface-2) 88%, var(--brand) 12%));
+  transition: background-color 0.2s;
 }
 
 .scopebar {
@@ -198,14 +201,18 @@
 
 .subnav-indicator {
   position: absolute;
-  top: 0;
-  bottom: 0;
+  /* -8px == .subnav's eigen padding: strekt het blok uit tot de rand van
+     .subnav, zodat het recht aansluit op de parameterbalk eronder i.p.v.
+     los te zweven als pil */
+  top: -8px;
+  bottom: -8px;
   left: calc(100% / var(--sn-count, 1) * var(--sn-index, 0));
   width: calc(100% / var(--sn-count, 1));
-  background: var(--brand);
-  border-radius: var(--radius-control);
+  /* --tab-fill/--tab-ink: gezet op .frozen-bar, per actieve subtab (App.tsx) */
+  background: var(--tab-fill, var(--brand));
+  border-radius: 0; /* rechte hoek i.p.v. pil — bewust: zie hierboven */
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
-  transition: left 0.25s cubic-bezier(0.4, 0, 0.2, 1), width 0.25s ease;
+  transition: left 0.25s cubic-bezier(0.4, 0, 0.2, 1), width 0.25s ease, background-color 0.2s;
   z-index: 0;
 }
 
@@ -227,7 +234,7 @@
 }
 
 .subnav button.active {
-  color: var(--surface-1);
+  color: var(--tab-ink, var(--surface-1));
   font-weight: 600;
 }
 

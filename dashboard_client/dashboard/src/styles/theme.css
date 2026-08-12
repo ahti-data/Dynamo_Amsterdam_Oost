@@ -33,16 +33,24 @@
   --brand: #6e0036;
   --brand-ink: #530029;
   --brand-wash: rgba(110, 0, 54, 0.08);
+  --brand-light: var(--peach); /* lichte tint voor de parameterbalk onder de actieve Tabel-subtab */
 
-  /* — huisstijl-accenten (teal/yellow/orange/lavender): UI-accenten op
-     specifieke plekken (chips, actieve segmenten, meldingen, checkboxen),
-     nooit voor data-encodering. --accent-ink is een vaste maroon-tint voor
-     tekst/iconen op deze accentkleuren en verandert niet mee met het
-     donkere thema (de accenten zelf zijn in beide thema's hetzelfde). — */
+  /* — huisstijl-accenten (teal/yellow/orange/lavender), elk met een lichte
+     tint ernaast voor de parameterbalk onder de bijbehorende actieve subtab
+     (Verkennen & Analyse). UI-accenten op specifieke plekken (chips, actieve
+     segmenten, subtabs, meldingen, checkboxen), nooit voor data-encodering.
+     --accent-ink is een vaste maroon-tint voor tekst/iconen op deze
+     accentkleuren en verandert niet mee met het donkere thema (de accenten
+     zelf zijn in beide thema's hetzelfde; alleen de lichte tinten wijken in
+     het donkere thema uit naar een berekende --surface-2-tint — zie onder). — */
   --accent-teal: #64d2d1;
+  --accent-teal-light: #e0f6f6;
   --accent-yellow: #f7e500;
+  --accent-yellow-light: #fdfacc;
   --accent-orange: #fa7545;
+  --accent-orange-light: #fee3da;
   --accent-lavender: #d2afff;
+  --accent-lavender-light: #f6efff;
   --accent-orange-wash: rgba(250, 117, 69, 0.16);
   --accent-lavender-wash: rgba(210, 175, 255, 0.4);
   --accent-ink: #6e0036;
@@ -109,6 +117,15 @@
   --brand: #be8ca5;
   --brand-ink: #cca6b9;
   --brand-wash: rgba(190, 140, 165, 0.16);
+  --brand-light: color-mix(in srgb, var(--surface-2) 88%, var(--brand) 12%);
+
+  /* lichte subtab-tinten: in het donkere thema geen platte pastel (te licht
+     op een donkere ondergrond) maar dezelfde berekende --surface-2-tint die
+     de parameterbalk hiervoor altijd al gebruikte, nu per accentkleur — */
+  --accent-teal-light: color-mix(in srgb, var(--surface-2) 88%, var(--accent-teal) 12%);
+  --accent-yellow-light: color-mix(in srgb, var(--surface-2) 88%, var(--accent-yellow) 12%);
+  --accent-lavender-light: color-mix(in srgb, var(--surface-2) 88%, var(--accent-lavender) 12%);
+  --accent-orange-light: color-mix(in srgb, var(--surface-2) 88%, var(--accent-orange) 12%);
 
   --series-1: #3987e5;
   --series-2: #199e70;

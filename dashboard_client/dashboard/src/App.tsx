@@ -45,6 +45,20 @@ const NAV_GROUPS: { group: string; views: (typeof VIEWS)[number][] }[] = (() => 
   return out
 })()
 
+/** Verkennen & Analyse-subtabs: elk een eigen huisstijl-accent als actieve
+ *  kleur, in vaste volgorde Kaart→Tabel (Tabel deelt de merkkleur/plum met
+ *  de bestaande hoofdnav-actief-styling). Gezet als CSS custom properties op
+ *  .frozen-bar (niet als aparte .subnav-CSS per navgroep — zie CLAUDE.md):
+ *  Verantwoording & Bronnen staat niet in deze lookup en valt dus terug op
+ *  de vaste merk-kleur die .subnav/.scopebar al als default hadden. */
+const SUBTAB_ACCENTS: Record<string, { fill: string; light: string; ink: string }> = {
+  kaart: { fill: 'var(--accent-teal)', light: 'var(--accent-teal-light)', ink: 'var(--accent-ink)' },
+  trends: { fill: 'var(--accent-yellow)', light: 'var(--accent-yellow-light)', ink: 'var(--accent-ink)' },
+  vooruitblik: { fill: 'var(--accent-lavender)', light: 'var(--accent-lavender-light)', ink: 'var(--accent-ink)' },
+  samenhang: { fill: 'var(--accent-orange)', light: 'var(--accent-orange-light)', ink: 'var(--accent-ink)' },
+  tabel: { fill: 'var(--brand)', light: 'var(--brand-light)', ink: 'var(--surface-1)' },
+}
+
 export interface GeoSet {
   wijk: GeoCollection | null
   buurt: GeoCollection | null
@@ -391,6 +405,14 @@ export default function App() {
   )
   // frozen-bar alleen tonen als er iets in te tonen valt (Inzichten heeft geen van beide)
   const hasFrozenBar = isVerkennenAnalyse || Boolean(subNav)
+  const activeAccent = SUBTAB_ACCENTS[view]
+  const frozenBarStyle = activeAccent
+    ? ({
+        '--tab-fill': activeAccent.fill,
+        '--tab-fill-light': activeAccent.light,
+        '--tab-ink': activeAccent.ink,
+      } as CSSProperties)
+    : undefined
 
   // indicator + absoluut/relatief (Kaart, Ontwikkeling over tijd) en doelgroep +
   // horizon (Vooruitblik) verhuizen naar de bevroren balk voor de views die
@@ -439,7 +461,7 @@ export default function App() {
 
       <div className="content-shell">
         {hasFrozenBar && (
-          <div className="frozen-bar">
+          <div className="frozen-bar" style={frozenBarStyle}>
             {subNav}
 
             {isVerkennenAnalyse && (
