@@ -8,8 +8,6 @@ export interface ForecastSeries {
   label: string
   color: string
   points: ForecastPoint[]
-  /** band alleen tonen voor de hoofdreeks (niet voor referenties) */
-  showBand?: boolean
   reference?: boolean
 }
 
@@ -23,9 +21,9 @@ interface Props {
 const M = { top: 16, right: 132, bottom: 28, left: 48 }
 
 /**
- * Fan chart op een echte jaar-as: waarnemingen als volle lijn, prognose als
- * stippellijn met onzekerheidsband. Een verticale "nu"-lijn markeert het laatste
- * waarnemingsjaar.
+ * Chart op een echte jaar-as: waarnemingen als volle lijn, officiële prognose
+ * als stippellijn (geen band — de bronnen publiceren geen interval). Een
+ * verticale "nu"-lijn markeert het laatste waarnemingsjaar.
  */
 export function ForecastChart({ series, lastObsYear, height = 340 }: Props) {
   const ref = useRef<HTMLDivElement>(null)
@@ -49,9 +47,7 @@ export function ForecastChart({ series, lastObsYear, height = 340 }: Props) {
   const xMin = allYears[0] ?? lastObsYear
   const xMax = allYears[allYears.length - 1] ?? lastObsYear
 
-  const allVals = series.flatMap((s) =>
-    s.points.flatMap((p) => (s.showBand ? [p.lo, p.hi, p.value] : [p.value])),
-  )
+  const allVals = series.flatMap((s) => s.points.map((p) => p.value))
   const dataMin = allVals.length ? Math.min(...allVals) : 0
   const dataMax = allVals.length ? Math.max(...allVals) : 1
   const pad = (dataMax - dataMin || Math.abs(dataMax) || 1) * 0.12
@@ -64,13 +60,6 @@ export function ForecastChart({ series, lastObsYear, height = 340 }: Props) {
 
   const line = (pts: { year: number; v: number }[]) =>
     pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(p.year).toFixed(1)},${y(p.v).toFixed(1)}`).join(' ')
-
-  const bandPath = (pts: ForecastPoint[]) => {
-    if (pts.length < 2) return ''
-    const top = pts.map((p) => `${x(p.year).toFixed(1)},${y(p.hi).toFixed(1)}`)
-    const bot = [...pts].reverse().map((p) => `${x(p.year).toFixed(1)},${y(p.lo).toFixed(1)}`)
-    return `M${top.join('L')}L${bot.join('L')}Z`
-  }
 
   const onMove = (e: React.PointerEvent<SVGRectElement>) => {
     const rect = e.currentTarget.getBoundingClientRect()
@@ -87,19 +76,10 @@ export function ForecastChart({ series, lastObsYear, height = 340 }: Props) {
       M.top + ih / 2,
       <>
         <div className="viz-tip-title">
-          {nearest} {nearest > lastObsYear ? (rows.some((r) => r.p!.source === 'official') ? '· officiële prognose' : '· trendprognose') : ''}
+          {nearest} {nearest > lastObsYear ? '· officiële prognose' : ''}
         </div>
         {rows.map(({ s, p }) => (
-          <TipRow
-            key={s.id}
-            color={s.color}
-            label={s.label}
-            value={
-              p!.forecast && s.showBand && p!.source !== 'official'
-                ? `${fmtValue(p!.value, 'aantal')} (${fmtValue(p!.lo, 'aantal')}–${fmtValue(p!.hi, 'aantal')})`
-                : fmtValue(p!.value, 'aantal')
-            }
-          />
+          <TipRow key={s.id} color={s.color} label={s.label} value={fmtValue(p!.value, 'aantal')} />
         ))}
       </>,
     )
@@ -131,16 +111,6 @@ export function ForecastChart({ series, lastObsYear, height = 340 }: Props) {
           <text x={x(lastObsYear)} y={-4} textAnchor="middle" className="viz-axis-text">
             nu
           </text>
-
-          {/* onzekerheidsbanden onderaan */}
-          {series
-            .filter((s) => s.showBand)
-            .map((s) => {
-              const fpts = s.points.filter((p) => p.forecast)
-              const bridge = s.points.filter((p) => !p.forecast).slice(-1)
-              const band = [...bridge.map((p) => ({ ...p, lo: p.value, hi: p.value })), ...fpts]
-              return <path key={`band-${s.id}`} d={bandPath(band)} fill={s.color} opacity={0.13} stroke="none" />
-            })}
 
           {/* lijnen: waarneming vol, prognose gestippeld */}
           {series.map((s) => {
@@ -175,9 +145,9 @@ export function ForecastChart({ series, lastObsYear, height = 340 }: Props) {
                     key={p.year}
                     cx={x(p.year)}
                     cy={y(p.value)}
-                    // officiële prognosepunten blijven zichtbaar (het zijn harde getallen,
-                    // geen model-doortrekking) — trendprognosepunten alleen bij hover
-                    r={hoverYear === p.year ? 4 : !p.forecast || p.source === 'official' ? 2.6 : 0}
+                    // elk punt (waarneming én officiële prognose) is een hard getal,
+                    // geen model-doortrekking — dus altijd een zichtbare marker
+                    r={hoverYear === p.year ? 4 : 2.6}
                     fill={s.color}
                     stroke="var(--surface-1)"
                     strokeWidth={1.5}

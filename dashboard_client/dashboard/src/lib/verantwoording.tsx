@@ -176,43 +176,39 @@ export const VERANTWOORDING_SECTIONS: VerantwoordingSection[] = [
     render: () => (
       <ul>
         <li>
-          Het tabblad <strong>Vooruitblik</strong> trekt de omvang van Dynamo-doelgroepen
-          (65-plus, 0–14, 15–24, alleenwonenden, 45–64, huishoudens, totaal inwoners) door naar{' '}
-          <strong>2030 en 2035</strong>, per stadsdeel, gebied, wijk of buurt. Het is een{' '}
-          <strong>trenddoortrekking</strong> op de CBS-reeks 2016–2025 — nadrukkelijk geen officiële
-          bevolkingsprognose van CBS/PBL of Primos.
+          Het tabblad <strong>Vooruitblik</strong> toont de omvang van Dynamo-doelgroepen (65-plus,
+          0–14, 15–24, alleenwonenden, 45–64, huishoudens, totaal inwoners) richting{' '}
+          <strong>2026 tot en met 2055</strong>, per gemeente, stadsdeel, gebied of wijk.
         </li>
         <li>
-          <strong>Methode</strong> (opgesteld door de sociaal-demograaf van het team):{' '}
-          <em>log-lineaire trendextrapolatie</em> per doelgroep per gebied (multiplicatief, blijft
-          niet-negatief), met vier correcties: (1) <strong>shrinkage</strong> van de groeivoet naar
-          het bovenliggende gebied — kleine, ruizige of korte buurtreeksen leunen zwaarder op de
-          robuustere wijk/stadsdeel-trend (omvang-gewogen, James-Stein-idee); (2){' '}
-          <strong>demping</strong> van de groeivoet over de horizon (0,9 per stap), zodat groei niet
-          oneindig doorloopt; (3) een <strong>plausibiliteitsgrens</strong> van ±6% per jaar; en (4){' '}
-          <strong>top-down raking</strong>, zodat de sub-gebieden optellen tot de (onafhankelijk
-          geprognosticeerde) omvang van het focusgebied.
+          <strong>Alleen officiële prognoses, geen eigen model.</strong> Tot augustus 2026 trok dit
+          tabblad zelf de CBS-reeks 2016–2025 door (log-lineaire extrapolatie met shrinkage, demping en
+          top-down raking). Dat eigen model is <em>volledig verwijderd</em>: het had geen
+          demografische onderbouwing (geen geboorte-/sterfte-/migratiecijfers, geen
+          woningbouwplanning) en liet overal een getal zien, ook waar dat weinig voorstelde. In plaats
+          daarvan toont dit tabblad nu uitsluitend de officiële bevolkingsprognose van{' '}
+          <strong>gemeente Amsterdam</strong> (O&amp;S en het Basisbestand Gebieden Amsterdam, BBGA) —
+          en expliciet <em>geen</em> prognose waar die bron niet bestaat.
         </li>
         <li>
-          <strong>Hamilton–Perry en cohort-component</strong> zijn bewust <em>niet</em> gebruikt: de
-          CBS-leeftijdsklassen zijn ongelijk van breedte en sluiten niet op een projectiestap aan, en
-          vitale statistieken (geboorte/sterfte/migratie) ontbreken op buurtniveau. Ze dienen hooguit
-          als plausibiliteitscheck op stadsdeelniveau.
+          <strong>Dekking is daardoor beperkt en ongelijk.</strong> Totaal inwoners en 65-plus hebben
+          een officiële prognose voor <em>heel Amsterdam</em> (gemeente, stadsdeel, gebied en wijk).
+          Kinderen (0–14), jongeren (15–24) en 45–64-jarigen hebben er alleen een voor{' '}
+          <strong>stadsdeel Oost en zijn 15 wijken</strong>. Alleenwonenden en huishoudens hebben in
+          geen van beide bronnen een prognosevariabele, en geen enkele bron publiceert op buurtniveau
+          of voor gemeenten buiten Amsterdam. Waar dekking ontbreekt, meldt de tool dat expliciet in
+          plaats van een geschat getal te tonen.
         </li>
         <li>
-          De <strong>onzekerheidsband</strong> (±68%) komt uit de historische trendruis (residuen van
-          de fit) en verbreedt met de wortel van de horizon; hij is ruimer voor kleine gebieden die
-          sterk op de parent leunen. <strong>De betrouwbaarheid neemt af naar 2035 en op fijner
-          niveau.</strong> De leeftijdsopbouw toont de 25–44-groep als <em>restpost</em> (totaal −
-          overige klassen), een afgeleide en dus ruizige grootheid.
+          <strong>Geen onzekerheidsband.</strong> De officiële bronnen publiceren een puntschatting,
+          geen interval of hoog/laag-scenario — de lijn toont dus het gepubliceerde cijfer zelf, niet
+          een bandbreedte eromheen.
         </li>
         <li>
-          <strong>Voorbehoud.</strong> Geen geplande nieuwbouw, sloop of beleidswijziging is
-          meegenomen — nieuwbouwgebieden (IJburg, Zeeburgereiland, Oostelijk Havengebied) lopen
-          daardoor vaak tegen de groeigrens aan. Cijfers zijn gebiedsgemiddelden (ecologisch
-          voorbehoud): een prognose stuurt <em>waar</em> je capaciteit verschuift, niet <em>wie</em>{' '}
-          precies wordt bereikt. Gebruik de vooruitblik als richtinggevend signaal, naast
-          gemeentelijke prognoses en lokale kennis.
+          <strong>Voorbehoud.</strong> Cijfers zijn gebiedsgemiddelden (ecologisch voorbehoud): een
+          prognose stuurt <em>waar</em> je capaciteit verschuift, niet <em>wie</em> precies wordt
+          bereikt. Zie <code>docs/VOORUITBLIK-TEAM.md</code> voor de volledige verantwoording,
+          inclusief wat het verwijderde model deed en waarom.
         </li>
       </ul>
     ),

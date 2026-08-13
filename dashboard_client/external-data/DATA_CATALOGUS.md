@@ -225,8 +225,12 @@ dezelfde onderliggende factoren dubbel wegen.
   vast in de applicatie.
 - **Sinds aug. 2026 deels geïntegreerd:** de prognosevariabelen `BEV_PROG` en
   `BEV65PLUS_PROG` (jaarlijks 2027–2055) worden gebruikt in het tabblad
-  *Vooruitblik*, samen met bron 19, uitsluitend voor stadsdeel Oost en zijn
-  wijken. De overige 916 variabelen zijn nog steeds alleen catalogus-context.
+  *Vooruitblik*, voor **heel Amsterdam** (gemeente, elk stadsdeel, elk gebied,
+  elke wijk — geen buurtniveau). Dit is sinds aug. 2026 de **enige**
+  prognosebron in dat tabblad: het eigen trendmodel is verwijderd, dus waar
+  BBGA (en, alleen voor Oost, bron 19) geen waarde heeft, toont de tool
+  expliciet geen prognose i.p.v. een geschat getal. De overige 916 variabelen
+  zijn nog steeds alleen catalogus-context.
 
 ### 11. BZK — Leefbaarometer 3.0, meting 2024
 
@@ -373,15 +377,18 @@ dezelfde onderliggende factoren dubbel wegen.
 - **Bron:** Amsterdam O&S/afdeling Ruimte en Duurzaamheid (aangeleverd door de
   gebruiker, aug. 2026; niet via een open-datapagina gedownload).
 - **Status: geïntegreerd** (in tegenstelling tot de meeste bronnen hierboven, die
-  alleen catalogus-context zijn). Samen met de al aanwezige **BBGA** (§10,
-  variabelen `BEV_PROG`/`BEV65PLUS_PROG`) vervangt dit de eigen trendprognose in
-  het tabblad *Vooruitblik*, uitsluitend voor stadsdeel Oost en zijn 15 wijken.
-  Zie `docs/VOORUITBLIK-TEAM.md` §6 voor de volledige verantwoording en
-  `data-prep/official_forecast.py` voor de parser.
+  alleen catalogus-context zijn). Vervangt, samen met de al aanwezige **BBGA**
+  (§10, variabelen `BEV_PROG`/`BEV65PLUS_PROG`, sinds aug. 2026 citywide
+  ingezet), het volledig verwijderde eigen trendmodel in het tabblad
+  *Vooruitblik*. Dit specifieke bestand dekt alleen `a_00_14`/`a_15_24`/
+  `a_45_64`, en alleen voor stadsdeel Oost en zijn 15 wijken — het bevat geen
+  andere geografie. Zie `docs/VOORUITBLIK-TEAM.md` §4 voor de volledige
+  verantwoording en `data-prep/official_forecast.py` voor de parser.
 - **Let op:** geen onzekerheidsinterval in de bron; geen buurt- of gebiedsniveau;
-  geen huishouden-/alleenwonend-variabele. Alleen Oost, niet de rest van
-  Amsterdam — BBGA dekt de andere bevolkings-/65+-variabelen wel citywide, maar
-  dat is bewust nog niet aangezet buiten Oost.
+  geen huishouden-/alleenwonend-variabele. Waar geen van beide bronnen een
+  waarde heeft, toont Vooruitblik expliciet geen prognose — er is geen
+  eigen model meer dat de rest van de gemeente of de ontbrekende doelgroepen
+  opvangt.
 - **Licentie:** aangeleverd door de gebruiker; herpublicatie-voorwaarden bij O&S
   navragen vóór extern gebruik.
 

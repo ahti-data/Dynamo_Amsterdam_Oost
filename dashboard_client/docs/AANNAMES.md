@@ -130,18 +130,22 @@ Dit document bevat **alle aannames en keuzes** die tijdens het bouwen van de mon
 
 ## 11. Vooruitblik (demografische prognose)
 
-Toegevoegd juli 2026. Het tabblad **Vooruitblik** trekt de omvang van
-Dynamo-doelgroepen door naar 2030 en 2035 op zo laag mogelijk geografisch niveau
-(t/m buurt). Volledige teamsamenstelling, methode en bronnen: **`docs/VOORUITBLIK-TEAM.md`**.
+Toegevoegd juli 2026, methode volledig vervangen augustus 2026. Het tabblad
+**Vooruitblik** toont de omvang van Dynamo-doelgroepen richting 2026–2055.
+Tot aug. 2026 deed dit zelf een trendextrapolatie; dat eigen model is op
+verzoek van de opdrachtgever **volledig verwijderd** ("te naïef": geen
+demografische drivers, liet overal een getal zien ook waar dat weinig
+voorstelde) en vervangen door **uitsluitend officiële gemeentelijke
+puntprognoses**. Volledige verantwoording: **`docs/VOORUITBLIK-TEAM.md`**
+(§3 = de verwijderde methode, ter archief; §4 = de huidige).
 
 | # | Aanname/keuze | Toelichting |
 |---|---------------|-------------|
-| 11.1 | **Methode: log-lineaire trendextrapolatie** per doelgroep × gebied op de reeks 2016–2025, met omvang-gewogen **shrinkage** naar het bovenliggende gebied, **demping** van de groeivoet (0,9/stap) en **top-down raking** zodat sub-gebieden optellen tot het focusgebied. Geen pijplijnwijziging: berekend client-side in `dashboard/src/lib/forecast.ts`. | Cohort-component en zuiver Hamilton–Perry vielen af (ongelijke leeftijdsklassen, geen vitale statistieken op buurtniveau). |
-| 11.2 | **Plausibiliteitsgrens op de groeivoet met gladde compressie.** Tot een knie van ±6%/jaar (`GROWTH_CAP`) blijft de trend onaangetast; daarboven verzadigt de groeivoet glad (`tanh`) naar een absoluut plafond van ±9%/jaar (`RATE_CEIL`) i.p.v. hard afgekapt. | Een eerdere *harde* knip op ±6% maakte álle snelle groeiers exact gelijk (nieuwbouwwijken IJburg/Zeeburgereiland/Oostelijk Havengebied kwamen allemaal op +47,9% uit), omdat de %-verandering alleen van de groeivoet afhangt. Met de gladde compressie houdt elke wijk een eigen, onderscheiden prognose, terwijl extremen (bv. +22%/jr) getemd blijven. Afgevlakte wijken worden in de UI gemarkeerd als *getemde ondergrens*. |
-| 11.3 | **Onzekerheidsband** uit de historische trendresiduen (≈±1σ), verbredend met √horizon en ruimer bij meer shrinkage. De band is **log-symmetrisch** (`value·exp(±band)`) en σ is gekapt op 0,25 (`SIGMA_CAP`). | Communicatie als band, niet als puntschatting. De log-symmetrie + σ-cap voorkomen een onmogelijke **negatieve** ondergrens bij volatiele kleine reeksen (was een bug: `value·(1−spread)` werd negatief zodra spread > 1). |
-| 11.4 | **Trendcontinuïteit verondersteld**: geen geplande nieuwbouw, sloop of beleid meegenomen. Doelgroepen sluiten aan op de activiteiten van het **inzichtenteam**; 25–44 als restpost afgeleid. | Trenddoortrekking, geen officiële CBS/PBL/Primos-prognose; ecologisch voorbehoud geldt onverkort. |
-| 11.5 | **Uitzondering (aug. 2026): stadsdeel Oost + wijken gebruiken een officiële puntprognose** i.p.v. §11.4's trenddoortrekking, waar beschikbaar: `a_00_14`/`a_15_24`/`a_45_64` uit de O&S-bevolkingsprognose 2026 (Excel, alleen Oost), `a_inw`/`a_65_oo` uit BBGA (`BEV_PROG`/`BEV65PLUS_PROG`, al gedownload voor de catalogus). `a_1p_hh`/`a_hh` hebben in geen van beide bronnen een prognosevariabele en blijven overal op de trenddoortrekking. Geen buurt-/gebiedsniveau (geen van beide bronnen publiceert dat). | Zie `docs/VOORUITBLIK-TEAM.md` §6 voor de volledige verantwoording, en `data-prep/official_forecast.py` voor de verwerking. |
-| 11.6 | **Geen onzekerheidsband voor deze officiële punten**: noch de O&S-Excel noch BBGA publiceert een interval of hoog/laag-scenario voor deze `*_PROG`-variabelen (gecontroleerd in de BBGA-metadata). De UI toont ze daarom als puntschatting zonder band (`ForecastPoint.source: 'official'`), in plaats van een zelf verzonnen bandbreedte te tonen. Een verzoek om O&S's eigen interval is uitgezet; zolang dat er niet is, blijft dit zo. | Schijnzekerheid over een controleerbaar officieel getal is erger dan geen band tonen — zelfde principe als de rest van deze catalogus. |
+| 11.1 | **Geen eigen model.** `dashboard/src/lib/forecast.ts` toont een prognosepunt alleen waar `officialForecast` (uit `data-prep/official_forecast.py`) een waarde heeft; anders expliciet geen punt. Geen shrinkage, demping, raking of band — die machinerie is verwijderd, niet uitgeschakeld. | Zie `docs/VOORUITBLIK-TEAM.md` §3 voor wat er was en waarom het is vervangen; git-commits `eeeee0e` (origineel) en `d9d9426` (tussenstap) bevatten de oude code. |
+| 11.2 | **Twee officiële bronnen, elk voor wat ze uniek toevoegen.** O&S-bevolkingsprognose 2026 (Excel) → `a_00_14`/`a_15_24`/`a_45_64`, **alleen stadsdeel Oost + zijn 15 wijken**. BBGA (al gedownload voor de catalogus) → `a_inw`/`a_65_oo` (`BEV_PROG`/`BEV65PLUS_PROG`), **heel Amsterdam** (gemeente/stadsdeel/gebied/wijk, via `gebiedcode15` opgelost met `gebieden_amsterdam.json`). | Zie `docs/VOORUITBLIK-TEAM.md` §4 en `data-prep/official_forecast.py`. |
+| 11.3 | **Blijvende, structurele gaten in dekking**: `a_1p_hh`/`a_hh` hebben in geen van beide bronnen een prognosevariabele (overal geen prognose); geen enkele bron publiceert op buurtniveau; geen bron dekt gemeenten buiten Amsterdam. `views/Vooruitblik.tsx` toont dat als expliciete lege staat, niet als afgeleid of geschat getal. | Bewuste keuze: "geen prognose" is eerlijker dan "een afgeleide prognose" waar geen bron zelf publiceert. |
+| 11.4 | **Geen onzekerheidsband**: geen van beide bronnen publiceert een interval of hoog/laag-scenario (gecontroleerd in de BBGA-metadata). Een verzoek om O&S's eigen interval is uitgezet; zolang dat er niet is, toont de tool alleen het punt. | Schijnzekerheid over een controleerbaar officieel getal is erger dan geen band tonen — zelfde principe als de rest van deze catalogus. |
+| 11.5 | **Horizon = alle jaren met dekking**: 2026, 2030, 2035, 2040, 2050, 2055 (`HORIZONS` in `forecast.ts`). | Voorheen beperkt tot 2030/2035 (het bereik van het oude trendmodel); nu simpelweg elk jaar dat een bron publiceert. |
 
 ---
 

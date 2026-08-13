@@ -1,27 +1,36 @@
 # -*- coding: utf-8 -*-
 """
-Officiële externe puntprognoses voor stadsdeel Oost, los van de intern
-getrokken trendprognose (dashboard/src/lib/forecast.ts). Twee bronnen, elk
-voor wat ze uniek toevoegen (zie docs/AANNAMES.md §11):
+Officiële externe puntprognoses, ter vervanging van de vroegere (te naïeve)
+interne trendextrapolatie in dashboard/src/lib/forecast.ts — zie
+docs/VOORUITBLIK-TEAM.md §6 en AANNAMES.md §11. Twee bronnen, elk voor wat ze
+uniek toevoegen:
 
 - O&S-bevolkingsprognose 2026 (Excel, per wijk + stadsdeel Oost, 5-jaars
   leeftijdsklassen): external-data/raw/amsterdam_ois_bevolkingsprognose_oost/
-  -> a_00_14 / a_15_24 / a_45_64 (klassen die niet 1-op-1 in BBGA bestaan).
+  -> a_00_14 / a_15_24 / a_45_64. **Alleen stadsdeel Oost + zijn 15 wijken** —
+  het bestand bevat geen andere geografie.
 - BBGA (al gedownload voor de catalogus, external-data/raw/amsterdam_bbga):
-  -> a_inw (BEV_PROG) en a_65_oo (BEV65PLUS_PROG), jaarlijks 2027-2055.
+  -> a_inw (BEV_PROG) en a_65_oo (BEV65PLUS_PROG), jaarlijks 2027-2055,
+  **heel Amsterdam**: gemeente, alle stadsdelen, alle 25 gebieden, alle wijken
+  (gebiedcode15-schema, 1-op-1 op te lossen met de bestaande
+  data-prep/gebieden_amsterdam.json — geen aparte mapping-tabel nodig).
+
+Geen van beide bronnen kent een buurtniveau of een huishouden-/alleenwonend-
+variabele — dat blijft dus altijd zonder officiële prognose (`a_1p_hh`,
+`a_hh`, en elke buurt, in heel de tool). Er is bewust **geen eigen
+trendmodel meer als vangnet**: Vooruitblik toont alleen een prognosepunt waar
+een van deze twee bronnen er echt een publiceert, en anders expliciet "geen
+officiële prognose beschikbaar".
 
 Beide bronnen publiceren geen onzekerheidsinterval — er is dus bewust geen
-band voor deze punten (zie Vooruitblik.tsx).
-
-Dekking is beperkt tot stadsdeel M (Oost) en zijn 15 wijken (WK0363MA..MQ);
-geen buurt- of gebiedsniveau (geen van beide bronnen publiceert dat, om
-privacy-/betrouwbaarheidsredenen). Ontbrekende bronbestanden geven een lege
-dict terug (met waarschuwing) zodat de build niet breekt voor wie deze
-optionele bronnen niet lokaal heeft.
+band voor deze punten (zie Vooruitblik.tsx). Ontbrekende bronbestanden geven
+een lege dict terug (met waarschuwing) zodat de build niet breekt voor wie
+deze optionele bronnen niet lokaal heeft.
 
 Retourneert: {regiocode: {indicatorId: {jaar: waarde}}}, te zetten onder
 bundle["officialForecast"] in build_data.py (alleen voor GM0363).
 """
+import json
 import re
 from pathlib import Path
 
@@ -33,8 +42,7 @@ OS_XLSX = (
     / "2026_bevolkingsprognose_stadsdeel_wijken_M_Oost.xlsx"
 )
 BBGA_CSV = ROOT / "external-data" / "raw" / "amsterdam_bbga" / "bbga-latest-and-greatest.csv"
-
-OOST_WIJK_LETTERS = "ABCDEFGHJKLMNPQ"  # WK0363MA..MQ (I ontbreekt, net als in build_data.py
+GEBIEDEN_CFG = ROOT / "data-prep" / "gebieden_amsterdam.json"
 
 # doelgroep (targetGroups.ts) -> (ondergrens, bovengrens) in hele jaren, inclusief
 AGE_GROUP_RANGES = {
@@ -43,8 +51,34 @@ AGE_GROUP_RANGES = {
     "a_45_64": (45, 64),
 }
 
-BBGA_TO_REGIO = {"M": "SD-M", **{f"M{l}": f"WK0363M{l}" for l in OOST_WIJK_LETTERS}}
 BBGA_VAR_TO_INDICATOR = {"BEV_PROG": "a_inw", "BEV65PLUS_PROG": "a_65_oo"}
+
+
+def _amsterdam_geo():
+    """Stadsdeel-letters en geldige gebied-codes uit gebieden_amsterdam.json —
+    hetzelfde bestand dat build_data.py gebruikt, zodat de regiocodes hier
+    gegarandeerd matchen met wat de bundel daadwerkelijk kent."""
+    if not GEBIEDEN_CFG.exists():
+        return set(), set()
+    cfg = json.loads(GEBIEDEN_CFG.read_text(encoding="utf-8"))
+    sd_letters = set(cfg["stadsdelen"])  # dict-keys, bijv. {'A','B','E',...,'M',...}
+    gebied_codes = {g["code"] for g in cfg["gebieden"]}  # bijv. {'GA01','GE03',...}
+    return sd_letters, gebied_codes
+
+
+def _bbga_code_to_regio(code: str, sd_letters: set, gebied_codes: set):
+    """BBGA's gebiedcode15 -> dashboard-regiocode (build_data.py-conventie:
+    SD-<letter>, GB-<code>, WK0363<letters>). None voor codes die geen van
+    deze drie patronen matchen (bijv. 'ZX99', een BBGA-restcategorie)."""
+    if code == "STAD":
+        return "GM0363"
+    if code in gebied_codes:
+        return f"GB-{code}"
+    if len(code) == 1 and code in sd_letters:
+        return f"SD-{code}"
+    if len(code) == 2 and code[0] in sd_letters and code.isalpha():
+        return f"WK0363{code}"
+    return None
 
 
 def _band_range(label: str):
@@ -60,9 +94,10 @@ def _band_range(label: str):
 
 
 def _wijk_sheet_code(sheet_name: str):
-    """'MA_Oostelijk Havengebied' -> 'WK0363MA'; None voor niet-Oost/onbekende sheets."""
+    """'MA_Oostelijk Havengebied' -> 'WK0363MA'. Dit bestand bevat sowieso alleen
+    Oost-wijken (letter 'M'), dus geen bredere validatie nodig dan de vorm."""
     letter = sheet_name.split("_", 1)[0]
-    if len(letter) == 2 and letter[0] == "M" and letter[1] in OOST_WIJK_LETTERS:
+    if len(letter) == 2 and letter[0] == "M" and letter.isalpha():
         return f"WK0363{letter}"
     return None
 
@@ -126,22 +161,28 @@ def load_os_xlsx() -> dict:
 
 def load_bbga() -> dict:
     if not BBGA_CSV.exists():
-        print(f"  !! {BBGA_CSV.name} ontbreekt — Oost-inwoners/65+-prognose (BBGA) overgeslagen")
+        print(f"  !! {BBGA_CSV.name} ontbreekt — inwoners/65+-prognose (BBGA) overgeslagen")
+        return {}
+    sd_letters, gebied_codes = _amsterdam_geo()
+    if not sd_letters:
+        print("  !! gebieden_amsterdam.json ontbreekt — BBGA-prognose kan niet naar regiocodes vertaald worden")
         return {}
     out: dict = {}
+    skipped: set[str] = set()
     for chunk in pd.read_csv(
         BBGA_CSV, usecols=["jaar", "gebiedcode15", "variabele", "waarde"],
         iterator=True, chunksize=300_000,
     ):
-        sel = chunk[
-            chunk["variabele"].isin(BBGA_VAR_TO_INDICATOR)
-            & chunk["gebiedcode15"].isin(BBGA_TO_REGIO)
-            & chunk["waarde"].notna()
-        ]
+        sel = chunk[chunk["variabele"].isin(BBGA_VAR_TO_INDICATOR) & chunk["waarde"].notna()]
         for _, r in sel.iterrows():
-            code = BBGA_TO_REGIO[r["gebiedcode15"]]
+            code = _bbga_code_to_regio(str(r["gebiedcode15"]), sd_letters, gebied_codes)
+            if code is None:
+                skipped.add(str(r["gebiedcode15"]))
+                continue
             group = BBGA_VAR_TO_INDICATOR[r["variabele"]]
             out.setdefault(code, {}).setdefault(group, {})[int(r["jaar"])] = float(r["waarde"])
+    if skipped:
+        print(f"  ·· BBGA-gebiedcode15 zonder regiomatch, overgeslagen: {sorted(skipped)}")
     return out
 
 

@@ -309,73 +309,54 @@ correlation: { rivmMeetjaren:[2016,2020,2022,2024], note }
 
 ## 6. Perspectief — Vooruitblik (demografische prognose)
 
-**Doel:** omvang van 7 Dynamo-doelgroepen doortrekken naar 2030 en 2035, t/m
-buurtniveau. **Volledig client-side; geen pijplijnwijziging.**
+**Doel:** omvang van 7 Dynamo-doelgroepen tonen richting 2026–2055.
+**Volledig client-side; geen pijplijnwijziging.**
 
-- **Input:** de reeks 2016–2025 van 7 absolute indicatoren:
-  `a_65_oo` (65+), `a_00_14` (kinderen), `a_15_24` (jongeren), `a_1p_hh`
-  (alleenwonenden), `a_45_64` (aankomende senioren), `a_hh` (huishoudens),
-  `a_inw` (totaal). De 25–44-groep = `a_inw − (a_00_14+a_15_24+a_45_64+a_65_oo)`
-  (restpost, alleen voor de leeftijdsopbouw, geen zelfstandige prognose).
+- **Input:** de historische reeks 2016–2025 van 7 absolute indicatoren
+  (`a_65_oo`, `a_00_14`, `a_15_24`, `a_1p_hh`, `a_45_64`, `a_hh`, `a_inw`) **plus**
+  `officialForecast[regiocode][indicatorId][jaar]`, gebouwd door
+  `../data-prep/official_forecast.py` uit twee gemeentelijke bronnen (O&S-Excel
+  voor Oost, BBGA voor heel Amsterdam) en toegevoegd aan de `GM0363`-bundel.
 - **Waar:** `../dashboard/src/lib/forecast.ts`, `../dashboard/src/components/ForecastChart.tsx`,
   `../dashboard/src/views/Vooruitblik.tsx`. Methode-verantwoording: `VOORUITBLIK-TEAM.md`.
 
-### 6.1 Rekenstappen (exact)
+### 6.1 Rekenstappen (exact, sinds aug. 2026)
 
-**Stap 1 — Log-lineaire trendfit** (`fitTrend`), per gebied × doelgroep:
-- Neem de gevulde punten, hooguit de **laatste 10 jaren**. Minimaal 2 punten.
-- Als alle waarden > 0: regressie op `ln(v)` tegen jaartal; anders lineair.
-- OLS-helling `b`, intercept `a`. Jaarlijkse groeivoet `r = exp(b) − 1` (log) resp.
-  `b / laatste_waarde` (lineair).
-- Residuruis `σ` = std van residuen (in log-ruimte), `= sqrt(Σresid² / (n−2))`.
+Er is **geen eigen trendmodel meer** — dat is volledig verwijderd (zie §6.2 voor
+wat er was). De huidige logica is bewust simpel:
 
-**Stap 2 — Shrinkage naar bovenliggend gebied** (ruis van kleine gebieden temmen):
-- `K` = mediane gebiedsomvang op dit niveau (schaalvrije constante).
-- `sizeW = laatste_waarde / (laatste_waarde + K)` — grote gebieden vertrouwen hun
-  eigen trend meer.
-- `dataW = min(1, (n − 1) / (MIN_POINTS − 1))` met `MIN_POINTS = 4` — korte reeksen
-  leunen op de parent.
-- `ownWeight = clamp(sizeW × dataW, 0, 1)`.
-- `parent` bepaald door `parentCode()`: buurt→wijk→gebied→stadsdeel→gemeente
-  (eerste bestaande).
-- **Gemengde groeivoet:** `blended = ownWeight × r_eigen + (1 − ownWeight) × r_parent`.
+1. **Waarneming.** Voor elk jaar in `ds.years` met een niet-lege waarde: toon het
+   punt (`forecast: false`).
+2. **Officiële prognose.** Voor elk jaar in `HORIZONS = [2026, 2030, 2035, 2040,
+   2050, 2055]` na het laatste waarnemingsjaar: als
+   `officialForecast[code][indicator][jaar]` bestaat, toon dat punt exact zoals
+   gepubliceerd (`forecast: true`). Bestaat het niet, dan wordt er **geen punt**
+   toegevoegd voor dat jaar — geen doorgetrokken trend, geen afgeleide waarde.
+3. **Geen band.** Elk punt is een los getal; er is geen `lo`/`hi`-interval, want
+   geen van beide bronnen publiceert er een.
+4. **Geen raking.** Sub-gebieden worden niet meer geschaald naar een
+   ankergebied — elk gebied toont uitsluitend zijn eigen waarneming/officiële
+   prognose, onafhankelijk van andere gebieden.
 
-**Stap 3 — Demping + gladde compressie van de groeivoet:**
-- `rate = softCap(blended)`: tot de knie `GROWTH_CAP = 0,06` (±6%/jaar) is `softCap`
-  de identiteit (normale trends onaangetast); daarboven verzadigt de groeivoet glad —
-  `sign(r)·(GROWTH_CAP + room·tanh((|r|−GROWTH_CAP)/room))` met `room = RATE_CEIL − GROWTH_CAP`
-  en `RATE_CEIL = 0,09` (absoluut plafond ±9%/jaar). Monotoon, dus de rangorde blijft
-  behouden. `compressed = |blended| > GROWTH_CAP` wordt bijgehouden voor de UI-markering.
-- **Waarom geen harde knip?** Een harde `clamp(±0,06)` zette álle snelle groeiers op
-  exact 6% → identieke %-prognoses (nieuwbouwwijken kwamen allemaal op +47,9% uit,
-  want de %-verandering hangt alleen van de groeivoet af, niet van de beginwaarde).
-  De gladde compressie houdt Zeeburgereiland (ruw +22%/jr → +9%), Oostelijk Havengebied
-  (+8,8% → +8,2%) en IJburg-West (+6,9% → +6,9%) elk onderscheiden.
-- **Demping** `DAMPING = 0,9`: cumulatieve groei over `h` stappen =
-  `v0 · Π_{k=0..h−1} (1 + rate · 0,9^k)` (elke stap telt de groeivoet zwakker mee).
+`views/Vooruitblik.tsx` rendert een expliciete lege staat zodra een
+(gebied, doelgroep, horizonjaar)-combinatie geen officieel punt heeft, in
+plaats van de grafiek stil leeg te laten of een geschat getal te tonen.
 
-**Stap 4 — Top-down raking** (consistentie: sub-gebieden optellen tot het anker):
-- Prognosticeer het ankergebied (de scope) onafhankelijk → `anchorProj`.
-- `rakeFactor(jaar) = anchorProj / Σ_kinderen(grow(...))`.
-- Elke kind-prognose × `rakeFactor`.
+### 6.2 Vroegere methode (verwijderd aug. 2026, hier alleen ter archief)
 
-**Stap 5 — Onzekerheidsband (≈±1σ), log-symmetrisch:**
-- `sigmaEff = min( max(σ, SIGMA_FLOOR=0,015) + (1 − ownWeight) × 0,01 , SIGMA_CAP=0,25 )`
-  — ruimer bij meer shrinkage, maar **gekapt** zodat kleine tellingen (CBS-afronding op
-  vijftallen → grote log-residuen) de band niet laten exploderen.
-- `band = sigmaEff · √h` (verbreedt met √horizon).
-- **Log-symmetrisch:** `lo = value · exp(−band)`, `hi = value · exp(+band)`. Hierdoor
-  blijft `lo` altijd strikt positief. (De oude vorm `value·(1−spread)` werd **negatief**
-  zodra `spread > 1`, wat een onmogelijke ondergrens voor een aantal/percentage gaf.)
+Tot augustus 2026 deed dit bestand zelf een log-lineaire trendextrapolatie per
+gebied × doelgroep, met omvang-gewogen shrinkage naar het bovenliggende gebied,
+gedempte en glad gecomprimeerde groeivoeten, top-down raking en een
+log-symmetrische onzekerheidsband. De volledige rekenstappen (fit, shrinkage-
+gewichten, `softCap`/`tanh`-compressie, demping, raking, bandbreedte) staan niet
+langer in dit document maar zijn te reproduceren uit de git-geschiedenis van
+`../dashboard/src/lib/forecast.ts` (commits `eeeee0e` en `d9d9426`).
 
-### 6.2 Aannames (hard)
-
-Trendcontinuïteit (geen geplande nieuwbouw/sloop/beleid); ecologisch (gebieden,
-geen individuen); onderdrukking ≠ nul; horizon max ~10 jaar. Nieuwbouwgebieden
-(IJburg, Zeeburgereiland, Oostelijk Havengebied) groeien sneller dan het model
-betrouwbaar extrapoleert; hun groeivoet wordt glad gecomprimeerd (stap 3) en hun
-prognose is een **getemde ondergrens** — de UI markeert deze gebieden als zodanig.
-Zie `VOORUITBLIK-TEAM.md` §4.
+**Waarom verwijderd:** geen demografische onderbouwing (geen vitale statistiek,
+geen woningbouwpijplijn) en het toonde overal een getal, ook waar de
+onderliggende reeks kort, ruizig of onderdrukt was — een schijn van dekking die
+de kwaliteit van de brondata niet had. Zie `VOORUITBLIK-TEAM.md` §3 voor de
+volledige toelichting.
 
 ### 6.3 Reproductie
 
