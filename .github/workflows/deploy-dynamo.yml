@@ -2,10 +2,15 @@ name: Deploy Dynamo monitor via SFTP
 
 # Adapted from dashboard/.github/workflows/deploy.yml. The Dynamo monitor is a
 # Vite SPA (not a Shiny app), so we build it first and upload the built dist/.
+#
+# Two long-lived branches map to two folders on the server:
+#   main_dev  -> /apps/dynamo/       (internal/dev copy)
+#   main_prod -> /apps/dynamo_prod/  (client-facing copy)
 on:
   push:
     branches:
-      - main
+      - main_dev
+      - main_prod
     paths:
       - 'dashboard_client/**'
   workflow_dispatch:
@@ -33,6 +38,15 @@ jobs:
       working-directory: dashboard_client/dashboard
       run: npm run build
 
+    - name: 🎯 Pick remote folder for this branch
+      id: target
+      run: |
+        if [ "${{ github.ref_name }}" = "main_prod" ]; then
+          echo "remote_path=/apps/dynamo_prod/" >> "$GITHUB_OUTPUT"
+        else
+          echo "remote_path=/apps/dynamo/" >> "$GITHUB_OUTPUT"
+        fi
+
     - name: 📂 Sync files via SFTP
       uses: wlixcc/SFTP-Deploy-Action@v1.2.4
       with:
@@ -41,6 +55,6 @@ jobs:
         password: ${{ secrets.FTP_PASSWORD }}
         port: 22
         local_path: './dashboard_client/dashboard/dist/*'
-        remote_path: '/apps/dynamo/'
+        remote_path: ${{ steps.target.outputs.remote_path }}
         sftp_only: true
         delete_remote_files: false
