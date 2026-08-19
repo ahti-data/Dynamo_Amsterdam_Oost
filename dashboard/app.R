@@ -13,6 +13,10 @@ rins <- dt_rins_agg_OT2
 shp_wc <- st_read("wc.shp") |> st_transform(4326) |> st_make_valid()
 shp_bc <- st_read("bc.shp") |> st_transform(4326) |> st_make_valid()
 
+# Sentinel for "no filter on this split variable". Deliberately not a plausible
+# category value, so it can never collide with a real level in the data.
+ALLE <- c("Alle" = "__alle__")
+
 ui <- fluidPage(
   titlePanel("Dynamo Oost — Dashboard"),
   sidebarLayout(
@@ -27,9 +31,9 @@ ui <- fluidPage(
       selectInput("metriek", "Metric", choices = NULL),
       selectInput("regionlvl", "Regionaal niveau", c("wc", "bc")),
       conditionalPanel("input.bron=='rins'",
-        selectInput(paste0("split_", split_vars[1]), label = split_vars[1], choices = NULL),
-        selectInput(paste0("split_", split_vars[2]), label = split_vars[2], choices = NULL),
-        selectInput(paste0("split_", split_vars[3]), label = split_vars[3], choices = NULL)
+        selectInput(paste0("split_", split_vars[1]), label = split_vars[1], choices = ALLE),
+        selectInput(paste0("split_", split_vars[2]), label = split_vars[2], choices = ALLE),
+        selectInput(paste0("split_", split_vars[3]), label = split_vars[3], choices = ALLE)
       ),
       hr(),
       p("Hover over gebieden voor waarden • Klik voor meer detail", class = "help-text")
@@ -115,12 +119,18 @@ server <- function(input, output, session) {
         warning("split_var '", svar, "' is not a column in rins")
         next
       }
-      vals <- d[[svar]]
-      choices <- sort(unique(vals[!is.na(vals)]))
+      vals <- as.character(d[[svar]])
+      lvls <- sort(unique(vals[!is.na(vals)]))
+      choices <- c(ALLE, setNames(lvls, lvls))
+
+      # Keep the current pick if it still exists, otherwise fall back to "Alle".
+      # observeEvent handlers are isolated, so reading the input is safe here.
+      cur <- input[[paste0("split_", svar)]]
+      sel <- if (!is.null(cur) && cur %in% choices) cur else unname(ALLE)
 
       freezeReactiveValue(input, paste0("split_", svar))
       updateSelectInput(session, paste0("split_", svar),
-                        choices = as.character(choices))
+                        choices = choices, selected = sel)
     }
   }, ignoreInit = FALSE)
 
@@ -162,10 +172,11 @@ server <- function(input, output, session) {
     if (input$bron == "huishoudens") {
       d <- d[variable_value == input$scoreval]
     } else if (input$bron == "rins") {
-      # Filter by split variables; an unset selector (NULL/"") is simply skipped
+      # Skip unset selectors and "Alle" — both mean: do not filter on this column
       for (svar in split_vars) {
         split_val <- input[[paste0("split_", svar)]]
         if (is.null(split_val) || !nzchar(split_val)) next
+        if (identical(split_val, unname(ALLE))) next
         d <- d[as.character(get(svar)) == split_val]
       }
     }
