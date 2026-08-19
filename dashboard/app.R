@@ -55,21 +55,14 @@ server <- function(input, output, session) {
     if (input$regionlvl == "wc") shp_wc else shp_bc
   })
 
-  # Get split_vars (should be defined in environment)
-  split_vars_cols <- reactive({
-    if (input$bron == "rins" && exists("split_vars")) {
-      split_vars
-    } else {
-      character(0)
-    }
-  })
-
   # Dynamic UI for split variable filters (rins only)
   output$split_var_filters <- renderUI({
-    svars <- split_vars_cols()
-    if (length(svars) == 0) return(NULL)
+    if (input$bron != "rins") return(NULL)
 
-    lapply(svars, function(svar) {
+    # Use split_vars from global environment
+    if (!exists("split_vars")) return(NULL)
+
+    lapply(split_vars, function(svar) {
       selectInput(
         inputId = paste0("split_", svar),
         label = svar,
@@ -109,8 +102,8 @@ server <- function(input, output, session) {
   observeEvent(list(input$varnaam, input$jaar), {
     req(input$varnaam, input$jaar)
     if (input$bron != "rins") return()
+    if (!exists("split_vars")) return()
 
-    svars <- split_vars_cols()
     jaar_num <- tryCatch(
       as.numeric(as.character(input$jaar)),
       error = function(e) NA_real_
@@ -121,7 +114,7 @@ server <- function(input, output, session) {
     d[, year := as.numeric(as.character(year))]
     d <- d[variable_name == input$varnaam & year == jaar_num]
 
-    for (svar in svars) {
+    for (svar in split_vars) {
       if (svar %in% names(d)) {
         choices <- sort(unique(d[[svar]][!is.na(d[[svar]])]))
         updateSelectInput(session, paste0("split_", svar), choices = choices)
@@ -168,10 +161,9 @@ server <- function(input, output, session) {
     ]
     if (input$bron == "huishoudens") {
       d <- d[variable_value == input$scoreval]
-    } else if (input$bron == "rins") {
+    } else if (input$bron == "rins" && exists("split_vars")) {
       # Filter by split variables for rins
-      svars <- split_vars_cols()
-      for (svar in svars) {
+      for (svar in split_vars) {
         split_val <- input[[paste0("split_", svar)]]
         if (!is.null(split_val) && split_val != "") {
           d <- d[d[[svar]] == split_val]
