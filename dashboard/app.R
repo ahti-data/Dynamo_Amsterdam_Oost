@@ -80,10 +80,13 @@ server <- function(input, output, session) {
 
   # Update year choices when data source changes
   observeEvent(input$bron, {
-    updateSelectInput(
-      session, "jaar",
-      choices = sort(unique(dt()$year), decreasing = TRUE)
-    )
+    years <- dt()$year
+    # Coerce to numeric and remove NAs/invalid values
+    years <- as.numeric(as.character(years))
+    years <- years[!is.na(years)]
+    years <- sort(unique(years), decreasing = TRUE)
+
+    updateSelectInput(session, "jaar", choices = years)
   })
 
   # Update variable choices when year changes
@@ -108,10 +111,15 @@ server <- function(input, output, session) {
     if (input$bron != "rins") return()
 
     svars <- split_vars_cols()
-    jaar_num <- as.numeric(input$jaar)
+    jaar_num <- tryCatch(
+      as.numeric(as.character(input$jaar)),
+      error = function(e) NA_real_
+    )
     if (is.na(jaar_num)) return()
 
-    d <- rins[variable_name == input$varnaam & year == jaar_num]
+    d <- rins
+    d[, year := as.numeric(as.character(year))]
+    d <- d[variable_name == input$varnaam & year == jaar_num]
 
     for (svar in svars) {
       if (svar %in% names(d)) {
@@ -135,10 +143,17 @@ server <- function(input, output, session) {
     req(input$varnaam, input$metriek, input$regionlvl, input$jaar)
     if (input$bron == "huishoudens") req(input$scoreval)
 
-    jaar_num <- as.numeric(input$jaar)
+    # Safely convert year to numeric
+    jaar_num <- tryCatch(
+      as.numeric(as.character(input$jaar)),
+      error = function(e) NA_real_
+    )
     if (is.na(jaar_num)) return(data.table())
 
-    d0 <- dt()[year == jaar_num]
+    # Get data and coerce year column to numeric
+    d0 <- dt()
+    d0[, year := as.numeric(as.character(year))]
+    d0 <- d0[year == jaar_num]
     if (nrow(d0) == 0) return(d0)
     if (!(input$varnaam %in% d0$variable_name)) return(d0[0])
     if (input$bron == "huishoudens" &&
