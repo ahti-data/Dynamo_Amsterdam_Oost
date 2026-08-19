@@ -59,31 +59,41 @@ server <- function(input, output, session) {
     if (input$regionlvl == "wc") shp_wc else shp_bc
   })
 
+  # The selectors form a cascade: bron -> jaar -> varnaam -> scoreval/split -> metriek.
+  # updateSelectInput() is a round trip to the browser, so input$X keeps its OLD
+  # value for one flush after the update is sent. freezeReactiveValue() marks the
+  # input stale so downstream reactives halt (like req()) until the new value
+  # arrives — without it, filtdata() runs the previous bron's varnaam against the
+  # new table.
+
   # Update year choices when data source changes
   observeEvent(input$bron, {
-    years <- dt()$year
-    # Coerce to numeric and remove NAs/invalid values
-    years <- as.numeric(as.character(years))
-    years <- years[!is.na(years)]
-    years <- sort(unique(years), decreasing = TRUE)
+    years <- suppressWarnings(as.numeric(as.character(dt()$year)))
+    years <- sort(unique(years[!is.na(years)]), decreasing = TRUE)
 
+    freezeReactiveValue(input, "jaar")
     updateSelectInput(session, "jaar", choices = years)
   })
 
-  # Update variable choices when year changes
+  # Update variable choices when bron or year changes
   observeEvent(list(input$bron, input$jaar), {
     req(input$jaar)
-    d <- dt()[year == as.numeric(input$jaar)]
+    d <- dt()[suppressWarnings(as.numeric(as.character(year))) == as.numeric(input$jaar)]
+
+    freezeReactiveValue(input, "varnaam")
     updateSelectInput(session, "varnaam", choices = sort(unique(d$variable_name)))
   })
 
   # Update score value choices (huishoudens only)
-  observeEvent(list(input$varnaam, input$jaar), {
+  observeEvent(list(input$bron, input$varnaam, input$jaar), {
+    if (input$bron != "huishoudens") return()
     req(input$varnaam, input$jaar)
-    if (input$bron == "huishoudens") {
-      sub <- hh[variable_name == input$varnaam & year == as.numeric(input$jaar)]
-      updateSelectInput(session, "scoreval", choices = sort(unique(sub$variable_value)))
-    }
+
+    sub <- hh[variable_name == input$varnaam &
+              suppressWarnings(as.numeric(as.character(year))) == as.numeric(input$jaar)]
+
+    freezeReactiveValue(input, "scoreval")
+    updateSelectInput(session, "scoreval", choices = sort(unique(sub$variable_value)))
   })
 
   # Update split variable choices (rins only)
@@ -107,17 +117,23 @@ server <- function(input, output, session) {
       }
       vals <- d[[svar]]
       choices <- sort(unique(vals[!is.na(vals)]))
+
+      freezeReactiveValue(input, paste0("split_", svar))
       updateSelectInput(session, paste0("split_", svar),
                         choices = as.character(choices))
     }
   }, ignoreInit = FALSE)
 
   # Update metric choices
-  observeEvent(list(input$varnaam, input$scoreval, input$bron, input$jaar), {
+  observeEvent(list(input$bron, input$varnaam, input$scoreval, input$jaar), {
     req(input$varnaam, input$jaar)
     if (input$bron == "huishoudens") req(input$scoreval)
-    d <- dt()[variable_name == input$varnaam & year == as.numeric(input$jaar)]
+
+    d <- dt()[variable_name == input$varnaam &
+              suppressWarnings(as.numeric(as.character(year))) == as.numeric(input$jaar)]
     if (input$bron == "huishoudens") d <- d[variable_value == input$scoreval]
+
+    freezeReactiveValue(input, "metriek")
     updateSelectInput(session, "metriek", choices = sort(unique(d$metric_name)))
   })
 
