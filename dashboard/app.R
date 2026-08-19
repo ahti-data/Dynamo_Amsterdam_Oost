@@ -55,10 +55,10 @@ server <- function(input, output, session) {
     if (input$regionlvl == "wc") shp_wc else shp_bc
   })
 
-  # Get unique split_vars for rins data (when rins is selected)
-  split_vars_list <- reactive({
-    if (input$bron == "rins") {
-      sort(unique(rins$split_vars[!is.na(rins$split_vars)]))
+  # Get split_vars (should be defined in environment)
+  split_vars_cols <- reactive({
+    if (input$bron == "rins" && exists("split_vars")) {
+      split_vars
     } else {
       character(0)
     }
@@ -66,13 +66,13 @@ server <- function(input, output, session) {
 
   # Dynamic UI for split variable filters (rins only)
   output$split_var_filters <- renderUI({
-    svars <- split_vars_list()
+    svars <- split_vars_cols()
     if (length(svars) == 0) return(NULL)
 
     lapply(svars, function(svar) {
       selectInput(
         inputId = paste0("split_", svar),
-        label = paste0("Split: ", svar),
+        label = svar,
         choices = NULL
       )
     })
@@ -107,11 +107,11 @@ server <- function(input, output, session) {
     req(input$varnaam, input$jaar)
     if (input$bron != "rins") return()
 
-    svars <- split_vars_list()
+    svars <- split_vars_cols()
     d <- rins[variable_name == input$varnaam & year == as.numeric(input$jaar)]
 
     for (svar in svars) {
-      choices <- sort(unique(d[split_vars == svar]$split_value))
+      choices <- sort(unique(d[[svar]][!is.na(d[[svar]])]))
       updateSelectInput(session, paste0("split_", svar), choices = choices)
     }
   })
@@ -146,11 +146,11 @@ server <- function(input, output, session) {
       d <- d[variable_value == input$scoreval]
     } else if (input$bron == "rins") {
       # Filter by split variables for rins
-      svars <- split_vars_list()
+      svars <- split_vars_cols()
       for (svar in svars) {
         split_val <- input[[paste0("split_", svar)]]
         if (!is.null(split_val)) {
-          d <- d[split_vars == svar & split_value == split_val]
+          d <- d[get(svar) == split_val]
         }
       }
     }
