@@ -13,9 +13,9 @@ rins <- dt_rins_agg_OT2
 shp_wc <- st_read("wc.shp") |> st_transform(4326) |> st_make_valid()
 shp_bc <- st_read("bc.shp") |> st_transform(4326) |> st_make_valid()
 
-# Sentinel for "no filter on this split variable". Deliberately not a plausible
-# category value, so it can never collide with a real level in the data.
-ALLE <- c("Alle" = "__alle__")
+# The split columns carry their own total level; select it by default so the map
+# shows totals until a subgroup is explicitly chosen.
+ALL_LEVEL <- "all"
 
 ui <- fluidPage(
   titlePanel("Dynamo Oost — Dashboard"),
@@ -31,9 +31,9 @@ ui <- fluidPage(
       selectInput("metriek", "Metric", choices = NULL),
       selectInput("regionlvl", "Regionaal niveau", c("wc", "bc")),
       conditionalPanel("input.bron=='rins'",
-        selectInput(paste0("split_", split_vars[1]), label = split_vars[1], choices = ALLE),
-        selectInput(paste0("split_", split_vars[2]), label = split_vars[2], choices = ALLE),
-        selectInput(paste0("split_", split_vars[3]), label = split_vars[3], choices = ALLE)
+        selectInput(paste0("split_", split_vars[1]), label = split_vars[1], choices = NULL),
+        selectInput(paste0("split_", split_vars[2]), label = split_vars[2], choices = NULL),
+        selectInput(paste0("split_", split_vars[3]), label = split_vars[3], choices = NULL)
       ),
       hr(),
       p("Hover over gebieden voor waarden • Klik voor meer detail", class = "help-text")
@@ -121,16 +121,22 @@ server <- function(input, output, session) {
       }
       vals <- as.character(d[[svar]])
       lvls <- sort(unique(vals[!is.na(vals)]))
-      choices <- c(ALLE, setNames(lvls, lvls))
+      if (length(lvls) == 0) next
 
-      # Keep the current pick if it still exists, otherwise fall back to "Alle".
+      if (!ALL_LEVEL %in% lvls) {
+        warning("no '", ALL_LEVEL, "' level in rins$", svar,
+                "; defaulting to '", lvls[1], "'")
+      }
+      # Keep the current pick if it survives the new varnaam/jaar, else total.
       # observeEvent handlers are isolated, so reading the input is safe here.
       cur <- input[[paste0("split_", svar)]]
-      sel <- if (!is.null(cur) && cur %in% choices) cur else unname(ALLE)
+      sel <- if (!is.null(cur) && cur %in% lvls) cur
+             else if (ALL_LEVEL %in% lvls) ALL_LEVEL
+             else lvls[1]
 
       freezeReactiveValue(input, paste0("split_", svar))
       updateSelectInput(session, paste0("split_", svar),
-                        choices = choices, selected = sel)
+                        choices = lvls, selected = sel)
     }
   }, ignoreInit = FALSE)
 
@@ -172,11 +178,11 @@ server <- function(input, output, session) {
     if (input$bron == "huishoudens") {
       d <- d[variable_value == input$scoreval]
     } else if (input$bron == "rins") {
-      # Skip unset selectors and "Alle" — both mean: do not filter on this column
+      # ALL_LEVEL is a real level in the data (the total), so it is filtered on
+      # like any other value. Only an unset selector is skipped.
       for (svar in split_vars) {
         split_val <- input[[paste0("split_", svar)]]
         if (is.null(split_val) || !nzchar(split_val)) next
-        if (identical(split_val, unname(ALLE))) next
         d <- d[as.character(get(svar)) == split_val]
       }
     }
