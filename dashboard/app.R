@@ -108,11 +108,16 @@ server <- function(input, output, session) {
     if (input$bron != "rins") return()
 
     svars <- split_vars_cols()
-    d <- rins[variable_name == input$varnaam & year == as.numeric(input$jaar)]
+    jaar_num <- as.numeric(input$jaar)
+    if (is.na(jaar_num)) return()
+
+    d <- rins[variable_name == input$varnaam & year == jaar_num]
 
     for (svar in svars) {
-      choices <- sort(unique(d[[svar]][!is.na(d[[svar]])]))
-      updateSelectInput(session, paste0("split_", svar), choices = choices)
+      if (svar %in% names(d)) {
+        choices <- sort(unique(d[[svar]][!is.na(d[[svar]])]))
+        updateSelectInput(session, paste0("split_", svar), choices = choices)
+      }
     }
   })
 
@@ -130,7 +135,11 @@ server <- function(input, output, session) {
     req(input$varnaam, input$metriek, input$regionlvl, input$jaar)
     if (input$bron == "huishoudens") req(input$scoreval)
 
-    d0 <- dt()[year == as.numeric(input$jaar)]
+    jaar_num <- as.numeric(input$jaar)
+    if (is.na(jaar_num)) return(data.table())
+
+    d0 <- dt()[year == jaar_num]
+    if (nrow(d0) == 0) return(d0)
     if (!(input$varnaam %in% d0$variable_name)) return(d0[0])
     if (input$bron == "huishoudens" &&
         !(input$scoreval %in% d0[variable_name == input$varnaam]$variable_value)) {
@@ -149,8 +158,8 @@ server <- function(input, output, session) {
       svars <- split_vars_cols()
       for (svar in svars) {
         split_val <- input[[paste0("split_", svar)]]
-        if (!is.null(split_val)) {
-          d <- d[get(svar) == split_val]
+        if (!is.null(split_val) && split_val != "") {
+          d <- d[d[[svar]] == split_val]
         }
       }
     }
