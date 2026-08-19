@@ -26,6 +26,7 @@ ui <- fluidPage(
       ),
       selectInput("metriek", "Metric", choices = NULL),
       selectInput("regionlvl", "Regionaal niveau", c("wc", "bc")),
+      uiOutput("split_var_filters"),
       hr(),
       p("Hover over gebieden voor waarden • Klik voor meer detail", class = "help-text")
     ),
@@ -54,6 +55,29 @@ server <- function(input, output, session) {
     if (input$regionlvl == "wc") shp_wc else shp_bc
   })
 
+  # Get unique split_vars for rins data (when rins is selected)
+  split_vars_list <- reactive({
+    if (input$bron == "rins") {
+      sort(unique(rins$split_vars[!is.na(rins$split_vars)]))
+    } else {
+      character(0)
+    }
+  })
+
+  # Dynamic UI for split variable filters (rins only)
+  output$split_var_filters <- renderUI({
+    svars <- split_vars_list()
+    if (length(svars) == 0) return(NULL)
+
+    lapply(svars, function(svar) {
+      selectInput(
+        inputId = paste0("split_", svar),
+        label = paste0("Split: ", svar),
+        choices = NULL
+      )
+    })
+  })
+
   # Update year choices when data source changes
   observeEvent(input$bron, {
     updateSelectInput(
@@ -75,6 +99,20 @@ server <- function(input, output, session) {
     if (input$bron == "huishoudens") {
       sub <- hh[variable_name == input$varnaam & year == as.numeric(input$jaar)]
       updateSelectInput(session, "scoreval", choices = sort(unique(sub$variable_value)))
+    }
+  })
+
+  # Update split variable choices (rins only)
+  observeEvent(list(input$varnaam, input$jaar), {
+    req(input$varnaam, input$jaar)
+    if (input$bron != "rins") return()
+
+    svars <- split_vars_list()
+    d <- rins[variable_name == input$varnaam & year == as.numeric(input$jaar)]
+
+    for (svar in svars) {
+      choices <- sort(unique(d[split_vars == svar]$split_value))
+      updateSelectInput(session, paste0("split_", svar), choices = choices)
     }
   })
 
@@ -104,7 +142,18 @@ server <- function(input, output, session) {
       metric_name == input$metriek &
       region_agg_level == input$regionlvl
     ]
-    if (input$bron == "huishoudens") d <- d[variable_value == input$scoreval]
+    if (input$bron == "huishoudens") {
+      d <- d[variable_value == input$scoreval]
+    } else if (input$bron == "rins") {
+      # Filter by split variables for rins
+      svars <- split_vars_list()
+      for (svar in svars) {
+        split_val <- input[[paste0("split_", svar)]]
+        if (!is.null(split_val)) {
+          d <- d[split_vars == svar & split_value == split_val]
+        }
+      }
+    }
 
     d[, metric_value := as.numeric(metric_value)]
     d <- unique(d, by = "region_code")
@@ -146,8 +195,8 @@ server <- function(input, output, session) {
     d <- filtdata()
     s <- shp()
 
-    # Merge data with shapes
-    m <- merge(s, d[, .(region_code, metric_value)],
+    # Merge data with shapes (include n_totaal)
+    m <- merge(s, d[, .(region_code, metric_value, n_totaal)],
                by.x = "regioncode", by.y = "region_code", all.x = TRUE)
     m <- st_as_sf(m)
 
@@ -162,35 +211,49 @@ server <- function(input, output, session) {
     labels <- lapply(seq_len(nrow(m)), function(i) {
       region <- m$regioncode[i]
       value <- m$metric_value[i]
+      n_tot <- m$n_totaal[i]
+
       if (is.na(value)) {
-        paste0(region, " — Geen data")
+        label_text <- paste0(region, " — Geen data")
       } else {
-        paste0(region, ": ", round(value, 2))
+        label_text <- paste0(region, ": ", round(value, 2))
       }
+
+      if (!is.na(n_tot)) {
+        label_text <- paste0(label_text, " (n=", n_tot, ")")
+      }
+
+      label_text
     })
 
     # Build popups for click
     popups <- lapply(seq_len(nrow(m)), function(i) {
       region <- m$regioncode[i]
       value <- m$metric_value[i]
+      n_tot <- m$n_totaal[i]
       metric <- input$metriek
       jaar <- input$jaar
 
+      popup_html <- paste0(
+        "<b>", region, "</b><br/>",
+        "Metriek: ", metric, "<br/>",
+        "Jaar: ", jaar, "<br/>"
+      )
+
       if (is.na(value)) {
-        HTML(paste0(
-          "<b>", region, "</b><br/>",
-          "Metriek: ", metric, "<br/>",
-          "Jaar: ", jaar, "<br/>",
-          "Waarde: Geen data"
-        ))
+        popup_html <- paste0(popup_html, "Waarde: Geen data")
       } else {
-        HTML(paste0(
-          "<b>", region, "</b><br/>",
-          "Metriek: ", metric, "<br/>",
-          "Jaar: ", jaar, "<br/>",
+        popup_html <- paste0(
+          popup_html,
           "Waarde: <strong>", round(value, 2), "</strong>"
-        ))
+        )
       }
+
+      if (!is.na(n_tot)) {
+        popup_html <- paste0(popup_html, "<br/>n: ", n_tot)
+      }
+
+      HTML(popup_html)
     })
 
     # Render map
