@@ -87,28 +87,30 @@ server <- function(input, output, session) {
   })
 
   # Update split variable choices (rins only)
-  observeEvent(list(input$varnaam, input$jaar), {
-    req(input$varnaam, input$jaar)
+  # NB: input$bron MUST be a trigger here — switching bron often leaves
+  # varnaam/jaar unchanged, and observeEvent only fires on change.
+  observeEvent(list(input$bron, input$varnaam, input$jaar), {
     if (input$bron != "rins") return()
-    if (!exists("split_vars")) return()
+    req(input$varnaam, input$jaar)
 
-    jaar_num <- tryCatch(
-      as.numeric(as.character(input$jaar)),
-      error = function(e) NA_real_
-    )
+    jaar_num <- suppressWarnings(as.numeric(as.character(input$jaar)))
     if (is.na(jaar_num)) return()
 
-    d <- rins
-    d[, year := as.numeric(as.character(year))]
-    d <- d[variable_name == input$varnaam & year == jaar_num]
+    # No `:=` here: `rins` is not copied, so := would mutate the source table.
+    d <- rins[variable_name == input$varnaam &
+              suppressWarnings(as.numeric(as.character(year))) == jaar_num]
 
     for (svar in split_vars) {
-      if (svar %in% names(d)) {
-        choices <- sort(unique(d[[svar]][!is.na(d[[svar]])]))
-        updateSelectInput(session, paste0("split_", svar), choices = choices)
+      if (!svar %in% names(rins)) {
+        warning("split_var '", svar, "' is not a column in rins")
+        next
       }
+      vals <- d[[svar]]
+      choices <- sort(unique(vals[!is.na(vals)]))
+      updateSelectInput(session, paste0("split_", svar),
+                        choices = as.character(choices))
     }
-  })
+  }, ignoreInit = FALSE)
 
   # Update metric choices
   observeEvent(list(input$varnaam, input$scoreval, input$bron, input$jaar), {
@@ -124,17 +126,11 @@ server <- function(input, output, session) {
     req(input$varnaam, input$metriek, input$regionlvl, input$jaar)
     if (input$bron == "huishoudens") req(input$scoreval)
 
-    # Safely convert year to numeric
-    jaar_num <- tryCatch(
-      as.numeric(as.character(input$jaar)),
-      error = function(e) NA_real_
-    )
-    if (is.na(jaar_num)) return(data.table())
+    jaar_num <- suppressWarnings(as.numeric(as.character(input$jaar)))
+    if (is.na(jaar_num)) return(dt()[0])
 
-    # Get data and coerce year column to numeric
-    d0 <- dt()
-    d0[, year := as.numeric(as.character(year))]
-    d0 <- d0[year == jaar_num]
+    # No `:=` on dt(): it is not a copy, so := would mutate hh/rins in place.
+    d0 <- dt()[suppressWarnings(as.numeric(as.character(year))) == jaar_num]
     if (nrow(d0) == 0) return(d0)
     if (!(input$varnaam %in% d0$variable_name)) return(d0[0])
     if (input$bron == "huishoudens" &&
@@ -149,16 +145,16 @@ server <- function(input, output, session) {
     ]
     if (input$bron == "huishoudens") {
       d <- d[variable_value == input$scoreval]
-    } else if (input$bron == "rins" && exists("split_vars")) {
-      # Filter by split variables for rins
+    } else if (input$bron == "rins") {
+      # Filter by split variables; an unset selector (NULL/"") is simply skipped
       for (svar in split_vars) {
         split_val <- input[[paste0("split_", svar)]]
-        if (!is.null(split_val) && split_val != "") {
-          d <- d[d[[svar]] == split_val]
-        }
+        if (is.null(split_val) || !nzchar(split_val)) next
+        d <- d[as.character(get(svar)) == split_val]
       }
     }
 
+    d <- copy(d)
     d[, metric_value := as.numeric(metric_value)]
     d <- unique(d, by = "region_code")
     d
