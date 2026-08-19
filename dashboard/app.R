@@ -124,13 +124,6 @@ server <- function(input, output, session) {
     req(input$varnaam, input$metriek, input$regionlvl, input$jaar)
     if (input$bron == "huishoudens") req(input$scoreval)
 
-    # For rins, require split variables to be selected
-    if (input$bron == "rins" && exists("split_vars")) {
-      for (svar in split_vars) {
-        req(input[[paste0("split_", svar)]])
-      }
-    }
-
     # Safely convert year to numeric
     jaar_num <- tryCatch(
       as.numeric(as.character(input$jaar)),
