@@ -123,7 +123,9 @@ server <- function(input, output, session) {
       lvls <- sort(unique(vals[!is.na(vals)]))
       if (length(lvls) == 0) next
 
-      if (!ALL_LEVEL %in% lvls) {
+      if (ALL_LEVEL %in% lvls) {
+        lvls <- c(ALL_LEVEL, setdiff(lvls, ALL_LEVEL))  # keep the total on top
+      } else {
         warning("no '", ALL_LEVEL, "' level in rins$", svar,
                 "; defaulting to '", lvls[1], "'")
       }
