@@ -26,7 +26,11 @@ ui <- fluidPage(
       ),
       selectInput("metriek", "Metric", choices = NULL),
       selectInput("regionlvl", "Regionaal niveau", c("wc", "bc")),
-      uiOutput("split_var_filters"),
+      conditionalPanel("input.bron=='rins'",
+        selectInput(paste0("split_", split_vars[1]), label = split_vars[1], choices = NULL),
+        selectInput(paste0("split_", split_vars[2]), label = split_vars[2], choices = NULL),
+        selectInput(paste0("split_", split_vars[3]), label = split_vars[3], choices = NULL)
+      ),
       hr(),
       p("Hover over gebieden voor waarden • Klik voor meer detail", class = "help-text")
     ),
@@ -53,22 +57,6 @@ server <- function(input, output, session) {
 
   shp <- reactive({
     if (input$regionlvl == "wc") shp_wc else shp_bc
-  })
-
-  # Dynamic UI for split variable filters (rins only)
-  output$split_var_filters <- renderUI({
-    if (input$bron != "rins") return(NULL)
-
-    # Use split_vars from global environment
-    if (!exists("split_vars")) return(NULL)
-
-    lapply(split_vars, function(svar) {
-      selectInput(
-        inputId = paste0("split_", svar),
-        label = svar,
-        choices = NULL
-      )
-    })
   })
 
   # Update year choices when data source changes
