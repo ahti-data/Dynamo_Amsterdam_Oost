@@ -17,6 +17,28 @@ shp_bc <- st_read("bc.shp") |> st_transform(4326) |> st_make_valid()
 # shows totals until a subgroup is explicitly chosen.
 ALL_LEVEL <- "all"
 
+# Split-var choices are computed once from the full rins table and used as
+# static UI choices, never refreshed via updateSelectInput. This is what makes
+# a user's split selection persist across variable/year changes: Shiny only
+# resets a selectInput's value when server code calls update*Input on it, so
+# leaving these alone is what "sticky" filters require.
+build_split_choices <- function(svar) {
+  vals <- as.character(rins[[svar]])
+  lvls <- sort(unique(vals[!is.na(vals)]))
+  if (ALL_LEVEL %in% lvls) {
+    lvls <- c(ALL_LEVEL, setdiff(lvls, ALL_LEVEL))  # keep the total on top
+  } else {
+    warning("no '", ALL_LEVEL, "' level in rins$", svar,
+            "; defaulting to '", lvls[1], "'")
+  }
+  lvls
+}
+split_var_choices <- setNames(lapply(split_vars, build_split_choices), split_vars)
+split_var_default <- function(svar) {
+  lvls <- split_var_choices[[svar]]
+  if (ALL_LEVEL %in% lvls) ALL_LEVEL else lvls[1]
+}
+
 ui <- fluidPage(
   titlePanel("Dynamo Oost — Dashboard"),
   sidebarLayout(
@@ -31,9 +53,15 @@ ui <- fluidPage(
       selectInput("metriek", "Metric", choices = NULL),
       selectInput("regionlvl", "Regionaal niveau", c("wc", "bc")),
       conditionalPanel("input.bron=='rins'",
-        selectInput(paste0("split_", split_vars[1]), label = split_vars[1], choices = NULL),
-        selectInput(paste0("split_", split_vars[2]), label = split_vars[2], choices = NULL),
-        selectInput(paste0("split_", split_vars[3]), label = split_vars[3], choices = NULL)
+        selectInput(paste0("split_", split_vars[1]), label = split_vars[1],
+                    choices = split_var_choices[[split_vars[1]]],
+                    selected = split_var_default(split_vars[1])),
+        selectInput(paste0("split_", split_vars[2]), label = split_vars[2],
+                    choices = split_var_choices[[split_vars[2]]],
+                    selected = split_var_default(split_vars[2])),
+        selectInput(paste0("split_", split_vars[3]), label = split_vars[3],
+                    choices = split_var_choices[[split_vars[3]]],
+                    selected = split_var_default(split_vars[3]))
       ),
       hr(),
       p("Hover over gebieden voor waarden • Klik voor meer detail", class = "help-text")
@@ -100,47 +128,9 @@ server <- function(input, output, session) {
     updateSelectInput(session, "scoreval", choices = sort(unique(sub$variable_value)))
   })
 
-  # Update split variable choices (rins only)
-  # NB: input$bron MUST be a trigger here — switching bron often leaves
-  # varnaam/jaar unchanged, and observeEvent only fires on change.
-  observeEvent(list(input$bron, input$varnaam, input$jaar), {
-    if (input$bron != "rins") return()
-    req(input$varnaam, input$jaar)
-
-    jaar_num <- suppressWarnings(as.numeric(as.character(input$jaar)))
-    if (is.na(jaar_num)) return()
-
-    # No `:=` here: `rins` is not copied, so := would mutate the source table.
-    d <- rins[variable_name == input$varnaam &
-              suppressWarnings(as.numeric(as.character(year))) == jaar_num]
-
-    for (svar in split_vars) {
-      if (!svar %in% names(rins)) {
-        warning("split_var '", svar, "' is not a column in rins")
-        next
-      }
-      vals <- as.character(d[[svar]])
-      lvls <- sort(unique(vals[!is.na(vals)]))
-      if (length(lvls) == 0) next
-
-      if (ALL_LEVEL %in% lvls) {
-        lvls <- c(ALL_LEVEL, setdiff(lvls, ALL_LEVEL))  # keep the total on top
-      } else {
-        warning("no '", ALL_LEVEL, "' level in rins$", svar,
-                "; defaulting to '", lvls[1], "'")
-      }
-      # Keep the current pick if it survives the new varnaam/jaar, else total.
-      # observeEvent handlers are isolated, so reading the input is safe here.
-      cur <- input[[paste0("split_", svar)]]
-      sel <- if (!is.null(cur) && cur %in% lvls) cur
-             else if (ALL_LEVEL %in% lvls) ALL_LEVEL
-             else lvls[1]
-
-      freezeReactiveValue(input, paste0("split_", svar))
-      updateSelectInput(session, paste0("split_", svar),
-                        choices = lvls, selected = sel)
-    }
-  }, ignoreInit = FALSE)
+  # Split-var selectors (split_<svar>) are static — see build_split_choices()
+  # above — so there is deliberately no observer here to refresh them; that is
+  # what keeps a user's pick fixed across variable/year changes.
 
   # Update metric choices
   observeEvent(list(input$bron, input$varnaam, input$scoreval, input$jaar), {
