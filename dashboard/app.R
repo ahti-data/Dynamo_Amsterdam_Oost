@@ -13,10 +13,6 @@ rins <- dt_rins_agg_OT2
 shp_wc <- st_read("wc.shp") |> st_transform(4326) |> st_make_valid()
 shp_bc <- st_read("bc.shp") |> st_transform(4326) |> st_make_valid()
 
-# The split columns carry their own total level; select it by default so the map
-# shows totals until a subgroup is explicitly chosen.
-ALL_LEVEL <- "all"
-
 # Split-var choices are computed once from the full rins table and used as
 # static UI choices, never refreshed via updateSelectInput. This is what makes
 # a user's split selection persist across variable/year changes: Shiny only
@@ -24,20 +20,9 @@ ALL_LEVEL <- "all"
 # leaving these alone is what "sticky" filters require.
 build_split_choices <- function(svar) {
   vals <- as.character(rins[[svar]])
-  lvls <- sort(unique(vals[!is.na(vals)]))
-  if (ALL_LEVEL %in% lvls) {
-    lvls <- c(ALL_LEVEL, setdiff(lvls, ALL_LEVEL))  # keep the total on top
-  } else {
-    warning("no '", ALL_LEVEL, "' level in rins$", svar,
-            "; defaulting to '", lvls[1], "'")
-  }
-  lvls
+  sort(unique(vals[!is.na(vals)]))
 }
 split_var_choices <- setNames(lapply(split_vars, build_split_choices), split_vars)
-split_var_default <- function(svar) {
-  lvls <- split_var_choices[[svar]]
-  if (ALL_LEVEL %in% lvls) ALL_LEVEL else lvls[1]
-}
 
 ui <- fluidPage(
   titlePanel("Dynamo Oost — Dashboard"),
@@ -54,14 +39,11 @@ ui <- fluidPage(
       selectInput("regionlvl", "Regionaal niveau", c("wc", "bc")),
       conditionalPanel("input.bron=='rins'",
         selectInput(paste0("split_", split_vars[1]), label = split_vars[1],
-                    choices = split_var_choices[[split_vars[1]]],
-                    selected = split_var_default(split_vars[1])),
+                    choices = split_var_choices[[split_vars[1]]]),
         selectInput(paste0("split_", split_vars[2]), label = split_vars[2],
-                    choices = split_var_choices[[split_vars[2]]],
-                    selected = split_var_default(split_vars[2])),
+                    choices = split_var_choices[[split_vars[2]]]),
         selectInput(paste0("split_", split_vars[3]), label = split_vars[3],
-                    choices = split_var_choices[[split_vars[3]]],
-                    selected = split_var_default(split_vars[3]))
+                    choices = split_var_choices[[split_vars[3]]])
       ),
       hr(),
       p("Hover over gebieden voor waarden • Klik voor meer detail", class = "help-text")
@@ -170,8 +152,7 @@ server <- function(input, output, session) {
     if (input$bron == "huishoudens") {
       d <- d[variable_value == input$scoreval]
     } else if (input$bron == "rins") {
-      # ALL_LEVEL is a real level in the data (the total), so it is filtered on
-      # like any other value. Only an unset selector is skipped.
+      # Only an unset selector is skipped; any other value filters like normal.
       for (svar in split_vars) {
         split_val <- input[[paste0("split_", svar)]]
         if (is.null(split_val) || !nzchar(split_val)) next
