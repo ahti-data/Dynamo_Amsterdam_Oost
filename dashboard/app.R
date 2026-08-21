@@ -13,16 +13,15 @@ rins <- dt_rins_agg_OT2
 shp_wc <- st_read("wc.shp") |> st_transform(4326) |> st_make_valid()
 shp_bc <- st_read("bc.shp") |> st_transform(4326) |> st_make_valid()
 
-# Split-var choices are computed once from the full rins table and used as
-# static UI choices, never refreshed via updateSelectInput. This is what makes
-# a user's split selection persist across variable/year changes: Shiny only
-# resets a selectInput's value when server code calls update*Input on it, so
-# leaving these alone is what "sticky" filters require.
-build_split_choices <- function(svar) {
+# Split-var choices, computed once from the full rins table and used as static
+# UI choices below. Nothing ever calls updateSelectInput() on split_*, so a
+# user's pick persists across variable/year changes (Shiny only resets a
+# selectInput when server code updates it).
+split_var_choices <- lapply(split_vars, function(svar) {
   vals <- as.character(rins[[svar]])
   sort(unique(vals[!is.na(vals)]))
-}
-split_var_choices <- setNames(lapply(split_vars, build_split_choices), split_vars)
+})
+names(split_var_choices) <- split_vars
 
 ui <- fluidPage(
   titlePanel("Dynamo Oost — Dashboard"),
@@ -110,9 +109,9 @@ server <- function(input, output, session) {
     updateSelectInput(session, "scoreval", choices = sort(unique(sub$variable_value)))
   })
 
-  # Split-var selectors (split_<svar>) are static — see build_split_choices()
-  # above — so there is deliberately no observer here to refresh them; that is
-  # what keeps a user's pick fixed across variable/year changes.
+  # Split-var selectors (split_<svar>) are static — see split_var_choices above
+  # — so there is deliberately no observer here to refresh them; that is what
+  # keeps a user's pick fixed across variable/year changes.
 
   # Update metric choices
   observeEvent(list(input$bron, input$varnaam, input$scoreval, input$jaar), {
