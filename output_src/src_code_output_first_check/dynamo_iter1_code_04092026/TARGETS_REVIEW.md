@@ -207,7 +207,9 @@ body is invisible to it — if you edit `toeslagen_thresholds.csv` next month,
 `tar_outdated()` will happily tell you the pipeline is up to date, and you'll
 ship stale numbers without realizing it.
 
-Fix is mechanical:
+Fix is mechanical for the three literal, fixed paths (thresholds, crosswalk,
+the two quality-check files) — no branching or `tar_map()` needed, this is
+purely local:
 
 ```r
 tar_target(path_thresholds, "data/toeslagen_thresholds.csv", format = "file"),
@@ -215,7 +217,65 @@ tar_target(dt_stapeling_enriched, enrich_stapeling(dt_stapeling_filtered_clean, 
 # and inside enrich_stapeling(): dt_thresholds <- fread(path_thresholds)
 ```
 
-Same pattern for the crosswalk and the two quality-check reference files.
+**The trickier case: paths resolved via `get_path_newest()`.** Several loads
+don't read a fixed filename at all — `load_filter_clean_stapeling()`
+(`01_load_and_filter.R:109`) and `load_filter_clean_inhatab()`
+(`01_load_and_filter.R:311,330`) call `get_path_newest()` to find whichever
+CBS release is newest, and that resolved filename changes over time. That
+doesn't need a different mechanism, though — `format = "file"`'s target
+*command* doesn't have to be a string literal, it just has to *return* a
+path; `targets` reruns the command every `tar_make()` (cheap — it's a
+directory scan, not a data load) and hashes whichever concrete file it
+resolves to *right now*:
+
+```r
+tar_target(
+  path_stapeling_labels_sav,
+  get_path_newest(glue("G:/Maatwerk/STAPELINGSMONITOR/2023"), 2023, extension = ".sav"),
+  format = "file"
+),
+tar_target(
+  dt_stapeling_filtered_clean,
+  load_filter_clean_stapeling(dt_rins, path_stapeling_labels_sav)  # takes the resolved path as an arg now
+)
+```
+
+If CBS ships a new `.sav` release, the target reruns, resolves to the new
+file, gets a different hash, and correctly invalidates everything
+downstream; if nothing changed, no rerun — exactly the behavior that's
+currently missing.
+
+`load_filter_clean_inhatab()` is the one place this touches §1's branching,
+since it calls `get_path_newest()` *inside* the per-year loop (twice: KOPPEL
+and INHA) — there isn't one file, there's one per year. That's not a second
+mechanism stacked on top of branching, though, it's the same
+`pattern = map(years)` doing double duty — resolving the path becomes its
+own tracked step in the same per-year loop:
+
+```r
+tar_target(years, base_years),
+tar_target(
+  path_koppel_yr,
+  get_path_newest("G:/InkomenBestedingen/INHATAB", string_pattern = paste0("(?=.*KOPPEL)(?=.*", years, ")"), extension = ".csv"),
+  pattern = map(years), format = "file"
+),
+tar_target(
+  path_inhatab_yr,
+  get_path_newest("G:/InkomenBestedingen/INHATAB", string_pattern = paste0("(?=.*INHA)(?=.*", years, ")"), extension = ".csv"),
+  pattern = map(years), format = "file"
+),
+tar_target(
+  dt_inhatab_yr,
+  load_one_year_inhatab(years, path_koppel_yr, path_inhatab_yr, dt_rins),
+  pattern = map(years, path_koppel_yr, path_inhatab_yr)  # zips all three in lockstep, one branch per year
+)
+```
+
+So: 3 of the 4 files in this section need nothing beyond the plain
+`format = "file"` wrap, no `tar_map()`/branching in sight; only the
+per-year `get_path_newest()` calls intersect §1, and there it's one
+mechanism (`pattern = map()`) doing what it was already going to do for
+that dataset, not an extra layer of complexity on top.
 
 ## 4. Nothing configured for parallel execution
 
