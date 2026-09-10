@@ -59,7 +59,7 @@ Why it matters in an RA context specifically:
   and isolated (`tar_workspace()` on that one branch).
 - **Parallelism.** Branches are the unit `targets` schedules across workers.
   Without them, loading 7 years of `stapelingsmonitor` is inherently
-  sequential even if you configure a `crew` controller (see §4).
+  sequential even once you have `tar_make_future()` running (see §4).
 
 This is a genuinely bigger refactor than the others below — I'd treat it as a
 "iter2" item rather than something to bolt on today, but it's the one with
@@ -219,69 +219,78 @@ Same pattern for the crosswalk and the two quality-check reference files.
 
 ## 4. Nothing configured for parallel execution
 
-Everything runs through the default sequential backend. The modern way to
-fix this is a `crew` controller
-(`tar_option_set(controller = crew::crew_controller_local(workers = 4))`) —
-**but if `crew` (or `mirai`, which it depends on) isn't installed in the RA
-and you can't get it added, it's not usable, full stop.** `targets`' older
-parallel backend, `tar_make_future()`, has the same problem: it needs the
-`future` package (plus usually `future.callr`), which may equally not be on
-the RA's approved list. Check what you actually have before planning around
-either:
+Everything runs through the default sequential backend. `tar_option_set(controller = ...)`
+itself only accepts a `crew` controller object, and `crew` (or the `mirai`
+package it depends on) isn't installed in this RA — so that specific API is
+out.
+
+`future` **is** installed here, though, and `targets` has an older but still
+fully functional parallel backend built directly on it:
+`tar_make_future()`. Use it instead of `tar_make()`:
 
 ```r
-rownames(installed.packages())[grepl("^(crew|mirai|future|callr|parallel)", rownames(installed.packages()))]
+library(future)
+plan(multisession, workers = 4)   # background R sessions; works on the RA's Windows VM,
+                                   # no future.callr needed — multisession ships with future
+tar_make_future(workers = 4)
 ```
 
-If neither `crew` nor `future` is available, `parallel` almost certainly is —
-it ships with every base R installation, so it needs no RA approval at all.
-It's not a `targets` *controller* (there's no `tar_option_set(controller = ...)`
-equivalent for bare `parallel`), so you lose per-target scheduling/caching of
-the parallel work — but you can still parallelize *inside* one target's
-function body, which recovers most of the wall-clock win for the "load N
-years/datasets independently" pattern in §1. On the RA's Windows VM, use a
-PSOCK cluster (`makeCluster()` — fork-based `mclapply()` doesn't work on
-Windows):
+This is real per-target scheduling, not just parallelizing inside one
+function body: `targets` distributes independent targets — and, once §1's
+branching exists, independent year-branches — across the `plan()`'s worker
+sessions, and still tracks/caches each one individually, same as it would
+with `tar_make()`. `tar_make_future()` is soft-deprecated in favor of `crew`
+upstream (crew manages worker lifecycle more robustly), but it isn't going
+away and is the right tool given what's actually installed here.
 
-```r
-load_stapeling_all_years <- function(base_years, dt_rins) {
-  cl <- parallel::makeCluster(min(length(base_years), parallel::detectCores() - 1))
-  on.exit(parallel::stopCluster(cl))
-  parallel::clusterExport(cl, c("dt_rins", "all_cols_to_load_stapeling"), envir = environment())
-  parallel::clusterEvalQ(cl, { library(data.table); library(glue) })
-
-  dt_list <- parallel::parLapply(cl, base_years, function(yr) {
-    load_dataset(yr - 1, "stapelingsmonitor", ...)  # same body as today's lapply
-  })
-  rbindlist(dt_list, fill = TRUE)
-}
-```
-
-This is a worse tool than a real `crew`/`future` controller (no per-year
-caching, you re-load all years together as one target again — so it actually
-trades away some of §1's branching benefit for the parallelism), but it's a
-realistic fallback if the RA package set genuinely won't budge, and it costs
-nothing to try since `parallel` is already there.
+If it turns out `future` isn't usable either for some reason, base
+`parallel` (ships with every R install, needs no RA approval) is a
+last-resort fallback — but only *inside* one target's function body via a
+PSOCK cluster (`parallel::makeCluster()`/`parLapply()`; fork-based
+`mclapply()` doesn't work on Windows), which loses per-branch caching and
+is a genuinely worse option than `tar_make_future()`.
 
 ## 5. Large data.table targets use the default `format = "rds"`
 
 For the bigger intermediate tables (`dt_rins`, `dt_stapeling_filtered_clean`,
-`dt_rins_merged`, `dt_rins_with_vars`) it's worth setting
-`tar_option_set(format = "qs")` (or per-target `format = "qs"`) — `qs` is
-usually noticeably faster to read/write than base `rds` for exactly this
-"wide data.table with a few million rows" shape, and every `tar_make()` skip
-of an up-to-date target still has to *read* the target to hash/pass it
-downstream, so this compounds.
+`dt_rins_merged`, `dt_rins_with_vars`) a faster-than-`rds` format is worth
+having — every `tar_make()` skip of an up-to-date target still has to *read*
+it to hash/pass it downstream, so serialization speed compounds across a
+pipeline this size.
 
-**Use `format = "qs"`, not `format = "qs2"`.** Recent `targets` versions added
-a newer `"qs2"` format backed by the separate `qs2` package (a rewrite of
-`qs` with a different API) and nudge you towards it in messages/docs — but
-it's a genuinely different package, not just a newer version of the same one.
-If only `qs` is installed in the RA, `format = "qs"` is the right (and still
-fully supported) option; don't chase the `qs2` install just because `targets`
-suggests it. No entry needs to be added to `tar_option_set(packages = ...)`
-for this — that list is for packages your target *commands* call, and format
-packages are loaded internally by `targets` regardless.
+**Important correction: `format = "qs"` is not a safe recommendation on a
+current `targets` install, and doesn't actually avoid the `qs2` dependency.**
+Since `targets` 1.8.0.9014 (Nov 2024), `format = "qs"` writes new targets
+using `qs2::qs_save()` internally — the old `qs` package is kept only as a
+*fallback reader* for stores written before that change, not used for new
+writes at all. So on any reasonably current `targets`, requesting
+`format = "qs"` still hard-requires `qs2` to be installed; the format *name*
+staying "qs" is misleading here. If `qs2` genuinely isn't available in the
+RA and can't be added, `format = "qs"` is off the table — check
+`packageVersion("targets")` to confirm you're on ≥ 1.8.0.9014 before ruling
+it out, but assume you are unless proven otherwise.
+
+Options that don't need `qs2`, in order of preference:
+
+- **`format = "fst_dt"`** (needs the `fst` package) — best fit for this
+  pipeline specifically: fast like `qs` was, and — unlike plain `"fst"`,
+  which coerces to a regular data frame — `fst_dt` preserves the
+  `data.table` class through the read, so none of the existing `dt[...]`/
+  `:=` code needs to change.
+- **`format = "parquet"`** (needs `arrow`) — confirmed available here, since
+  `load_filter_clean_inhatab()` (`01_load_and_filter.R:319`) already uses
+  `arrow::open_csv_dataset()`. The catch: `targets`' parquet format reads
+  back as a plain data frame, not a `data.table`, so you'd need
+  `data.table::setDT()` right after `tar_load()` (or at the top of any
+  downstream target function) to get `[`/`:=` syntax working again.
+- **`format = "rds"`** (the current default) — zero extra dependencies,
+  always available, just the slowest of the three.
+
+Check what's actually there before picking:
+
+```r
+rownames(installed.packages())[grepl("^(fst|arrow|qs2)$", rownames(installed.packages()))]
+```
 
 ## 6. Memory: `memory` and garbage collection aren't tuned
 
@@ -351,10 +360,10 @@ before an output check.
    correctness risks, not just style, and are cheap to fix.
 2. §7 (track output files) and §9 (put QC in the DAG) — same category, and
    both matter a lot for an output-check pipeline specifically.
-3. §5/§6 (`qs` format, `memory = "transient"`) — five-minute changes, likely
-   noticeable speedup in the RA session.
-4. §4 (parallelism) — check what's actually installed first; `crew` is the
-   real fix but only if the RA has it, otherwise the `parallel`-based
-   fallback is worth a try once §1 exists.
+3. §5/§6 (`fst_dt`/`parquet` format, `memory = "transient"`) — five-minute
+   changes once you know what's installed, likely a noticeable speedup in
+   the RA session.
+4. §4 (parallelism via `tar_make_future()` + `future::plan()`) — bigger win
+   once §1's branching exists, but gives something even without it.
 5. §1 (dynamic branching) and §2 (`tar_map()` for the duplicated
    aggregate/output pairs) — the real structural upgrade for iter2.
