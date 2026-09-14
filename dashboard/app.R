@@ -5,6 +5,7 @@
 # aggregation of its own beyond filtering and the share calculation.
 
 source("data/metadata/brand_colors.R")
+source("data/metadata/variable_labels.R")
 
 suppressPackageStartupMessages({
   library(shiny)
@@ -16,6 +17,8 @@ suppressPackageStartupMessages({
   library(plotly)
   library(writexl)
 })
+
+source("utils/venn_diagram.R")
 
 # ---------------------------------------------------------------------------
 # Data
@@ -55,17 +58,44 @@ region_choices <- lapply(geo, function(g) {
   setNames(d$region_code, d$region_name)[order(d$region_name)]
 })
 
+# Which split_var holds the O_MPG*/O_OUD* support-combination for each
+# population, and the matching label vectors from variable_labels.R -- keyed
+# the same way throughout so a lookup by input$populatie always works.
+COMBO_SPLIT_VAR <- c(
+  "huishoudens met kinderen" = "O_MPG_combination",
+  "ouderen (65+)"            = "O_OUD_combination"
+)
+COMBO_GROUP_LABELS <- list(
+  "huishoudens met kinderen" = ONDERSTEUNING_GROEP_LABELS_HHKIND,
+  "ouderen (65+)"            = ONDERSTEUNING_GROEP_LABELS_OUD
+)
+COMBO_GROUP_UITLEG <- list(
+  "huishoudens met kinderen" = ONDERSTEUNING_GROEP_UITLEG_HHKIND,
+  "ouderen (65+)"            = ONDERSTEUNING_GROEP_UITLEG_OUD
+)
+# variable_name is disjoint between the two populations (R_MPG* vs R_OUD*),
+# so one merged lookup is safe and simpler than branching on population.
+RISICO_LABELS <- c(RISICO_LABELS_HHKIND, RISICO_LABELS_OUD)
+
 # ---------------------------------------------------------------------------
 # Labels
 # ---------------------------------------------------------------------------
 
-# R_MPG1_armoede_hh -> "MPG1 - armoede", R_OUD4_alleenwonend -> "OUD4 - alleenwonend".
+# variable_name -> official Dutch description, from Outcomes.xlsx (see
+# data/metadata/variable_labels.R) -- not guessed from the column name. Falls
+# back to a cleaned-up version of the raw name for anything not in that
+# lookup, so a future indicator the labels file hasn't caught up with still
+# renders as something readable rather than breaking.
 pretty_var <- function(x) {
-  s <- sub("^R_", "", x)
-  s <- sub("_hh$", "", s)
-  s <- sub("^(MPG|OUD)([0-9]*)_", "\\1\\2 - ", s)
-  s <- sub("^(MPG|OUD)_", "\\1 ", s)
-  gsub("_", " ", s)
+  known <- RISICO_LABELS[x]
+  fallback <- {
+    s <- sub("^R_", "", x)
+    s <- sub("_hh$", "", s)
+    s <- sub("^(MPG|OUD)([0-9]*)_", "\\1\\2 - ", s)
+    s <- sub("^(MPG|OUD)_", "\\1 ", s)
+    gsub("_", " ", s)
+  }
+  unname(ifelse(is.na(known), fallback, known))
 }
 
 pretty_metric <- function(x) {
@@ -77,17 +107,39 @@ pretty_split <- function(x) {
   ifelse(x == TOTAL_LABEL, TOTAL_LABEL, gsub("_", " ", sub("_hh$", "", x)))
 }
 
-# The binary split variables come through as "0"/"1", which reads as a value
-# rather than a group in a legend. Categorical splits (herkomst7, geslacht, the
-# O_*_combination fields) already carry readable labels and are left alone.
-pretty_level <- function(x) {
+# "O_MPG1 + O_MPG2" -> "Jeugdhulp + Psychosociale zorg (volwassenen)": every
+# token split on "+" gets its short group name from variable_labels.R. "none"
+# is its own sentinel (never itself a "+"-joined token).
+pretty_combo_level <- function(x, groep_labels) {
+  vapply(x, function(v) {
+    if (is.na(v) || v == "none") return("Geen ondersteuningssignaal")
+    parts <- trimws(strsplit(v, "\\+")[[1]])
+    labs <- groep_labels[parts]
+    labs[is.na(labs)] <- parts[is.na(labs)]  # unknown token: show as-is rather than drop it
+    paste(labs, collapse = " + ")
+  }, character(1), USE.NAMES = FALSE)
+}
+
+# split_level formatting depends on which split_var it belongs to: the O_*
+# combination fields need pretty_combo_level(), the binary split variables
+# ("0"/"1") read as ja/nee, and categorical splits (herkomst7, geslacht)
+# already carry readable values and are left alone. split_var/population are
+# optional so this still works for split_var-less callers (e.g. a plain
+# variable_value).
+pretty_level <- function(x, split_var = NULL, population = NULL) {
+  if (!is.null(split_var) && !is.null(population) &&
+      isTRUE(split_var == COMBO_SPLIT_VAR[[population]])) {
+    return(pretty_combo_level(x, COMBO_GROUP_LABELS[[population]]))
+  }
   if (all(x %in% c("0", "1"))) {
     return(c("0" = "nee", "1" = "ja")[x])
   }
   x
 }
 
-named_levels <- function(values) setNames(values, pretty_level(values))
+named_levels <- function(values, split_var = NULL, population = NULL) {
+  setNames(values, pretty_level(values, split_var, population))
+}
 
 named <- function(values, labeller) setNames(values, labeller(values))
 
@@ -128,18 +180,19 @@ ui <- fluidPage(
   div("Risicostapeling bij huishoudens met kinderen en ouderen, 2018-2024. ",
       "Bron: CBS microdata via de Remote Access-omgeving.", class = "app-sub"),
 
-  div(class = "popbar",
-      fluidRow(
-        column(5, selectInput("populatie", "Populatie", choices = POPULATIONS, width = "100%")),
-        column(7, div(class = "note", style = "padding-top: 26px;",
-                      "De populatiekeuze geldt voor beide tabbladen."))
-      )),
-
   tabsetPanel(
     id = "hoofdtab",
     tabPanel(
       "Iteratie 1",
       br(),
+
+      div(class = "popbar",
+          fluidRow(
+            column(5, selectInput("populatie", "Populatie", choices = POPULATIONS, width = "100%")),
+            column(7, div(class = "note", style = "padding-top: 26px;",
+                          "De populatiekeuze geldt voor beide tabbladen hieronder."))
+          )),
+
       tabsetPanel(
         id = "subtab",
 
@@ -155,7 +208,10 @@ ui <- fluidPage(
                 selectInput("k_niveau", "Regioniveau", choices = REGION_LEVELS, selected = "wijk")
               ),
               control_card(
-                selectInput("k_var", "Indicator", choices = NULL),
+                selectInput("k_var", "Risicoscore (R_...)", choices = NULL),
+                div(class = "note", style = "margin: -6px 0 10px;",
+                    "Alle scores hieronder zijn risico-indicatoren: waarde één betekent",
+                    " dat dit risico aanwezig is bij het huishouden/de oudere."),
                 selectInput("k_val", "Waarde van de indicator", choices = NULL),
                 selectInput("k_metric", "Metric", choices = NULL)
               ),
@@ -164,7 +220,8 @@ ui <- fluidPage(
                 conditionalPanel(
                   "input.k_split != '(totaal)'",
                   selectInput("k_level", "Toon welk niveau", choices = NULL)
-                )
+                ),
+                uiOutput("k_combo_legend")
               ),
               control_card(
                 radioButtons("k_weergave", "Weergave",
@@ -196,7 +253,10 @@ ui <- fluidPage(
                 selectizeInput("r_regio", "Regio", choices = NULL)
               ),
               control_card(
-                selectInput("r_var", "Indicator", choices = NULL),
+                selectInput("r_var", "Risicoscore (R_...)", choices = NULL),
+                div(class = "note", style = "margin: -6px 0 10px;",
+                    "Alle scores hieronder zijn risico-indicatoren: waarde één betekent",
+                    " dat dit risico aanwezig is bij het huishouden/de oudere."),
                 selectInput("r_val", "Waarde van de indicator", choices = NULL),
                 selectInput("r_metric", "Metric", choices = NULL)
               ),
@@ -215,7 +275,19 @@ ui <- fluidPage(
             mainPanel(
               width = 9,
               div(textOutput("r_titel"), class = "chart-title"),
-              plotlyOutput("lijn", height = 620)
+              plotlyOutput("lijn", height = 620),
+
+              hr(),
+              fluidRow(
+                column(9, div("Risicostapeling naar ondersteuningscombinatie", class = "chart-title")),
+                column(3, selectInput("r_venn_jaar", "Jaar", choices = YEARS, selected = max(YEARS)))
+              ),
+              div(class = "note", style = "margin-bottom: 10px;",
+                  "Combinatie van ondersteuningsgroepen voor de gekozen regio/risicoscore/waarde/",
+                  "metric hierboven, voor het gekozen jaar. Dode ruimte buiten de cirkels = geen",
+                  " van de drie groepen; het overlappende gebied = beide/alle groepen tegelijk."),
+              uiOutput("venn"),
+              uiOutput("venn_legenda")
             )
           )
         )
@@ -238,17 +310,21 @@ server <- function(input, output, session) {
   })
 
   # Within one population the indicator / metric / split vocabulary is fixed, so
-  # these only ever need refreshing when the population changes.
+  # these only ever need refreshing when the population changes. "Waarde van
+  # de indicator" (k_val/r_val) is handled separately below: it depends on
+  # which indicator is selected, not just the population -- the individual
+  # risk factors are binary (0/1) but the totaalscore is a stapeling (0/1/2/
+  # 3plus), so a fixed population-wide list would offer values that don't
+  # apply to the chosen indicator.
   observeEvent(input$populatie, {
     v <- pop_vocab()
 
     vars    <- sort(unique(v$variable_name))
     metrics <- sort(unique(v$metric_name))
-    vals    <- sort(unique(v$variable_value))
     splits  <- unique(v$split_var)
     splits  <- c(TOTAL_LABEL, sort(setdiff(splits, TOTAL_LABEL)))
 
-    ids <- paste0(rep(c("k", "r"), each = 4), c("_var", "_metric", "_val", "_split"))
+    ids <- paste0(rep(c("k", "r"), each = 3), c("_var", "_metric", "_split"))
 
     # Read the current picks BEFORE freezing: a frozen input throws a silent
     # error when read, which would abort this observer before it sends any
@@ -260,20 +336,43 @@ server <- function(input, output, session) {
     # input$k_var still holds the OLD population's variable for one flush after
     # the update is sent. Freezing halts the downstream reactives until the new
     # value lands, instead of querying the new population with the old
-    # population's indicator.
-    for (i in ids) freezeReactiveValue(input, i)
+    # population's indicator. k_val/r_val are frozen too even though they are
+    # not updated here: they depend on k_var/r_var (see below), which is
+    # itself mid-change, so any stale read of k_val this same flush must also
+    # be halted rather than paired with the wrong population's indicator.
+    for (i in c(ids, "k_val", "r_val")) freezeReactiveValue(input, i)
 
     for (p in c("k", "r")) {
       update_preserving(session, paste0(p, "_var"),    named(vars, pretty_var),
                         current[[paste0(p, "_var")]])
       update_preserving(session, paste0(p, "_metric"), named(metrics, pretty_metric),
                         current[[paste0(p, "_metric")]])
-      update_preserving(session, paste0(p, "_val"),    vals,
-                        current[[paste0(p, "_val")]])
       update_preserving(session, paste0(p, "_split"),  named(splits, pretty_split),
                         current[[paste0(p, "_split")]])
     }
   }, ignoreInit = FALSE)
+
+  # "Waarde van de indicator": which values actually occur for the CURRENTLY
+  # selected risicoscore, not the population as a whole -- see the comment
+  # above. req(k_var %in% ...) guards the one flush where k_var can still be
+  # stale for a population that was just switched away from: skip rather
+  # than compute choices against the wrong population's indicator.
+  observeEvent(list(input$populatie, input$k_var), {
+    req(input$k_var)
+    req(input$k_var %in% pop_vocab()$variable_name)
+    vals <- sort(unique(pop_vocab()[variable_name == input$k_var]$variable_value))
+    cur <- isolate(input$k_val)
+    freezeReactiveValue(input, "k_val")
+    update_preserving(session, "k_val", vals, cur)
+  })
+  observeEvent(list(input$populatie, input$r_var), {
+    req(input$r_var)
+    req(input$r_var %in% pop_vocab()$variable_name)
+    vals <- sort(unique(pop_vocab()[variable_name == input$r_var]$variable_value))
+    cur <- isolate(input$r_val)
+    freezeReactiveValue(input, "r_val")
+    update_preserving(session, "r_val", vals, cur)
+  })
 
   # Levels of the chosen split variable (map tab only -- the line chart draws
   # every level at once).
@@ -283,7 +382,18 @@ server <- function(input, output, session) {
     cur <- isolate(input$k_level)  # read before freezing (see above)
     lv <- sort(unique(pop_vocab()[split_var == input$k_split]$split_level))
     freezeReactiveValue(input, "k_level")
-    update_preserving(session, "k_level", named_levels(lv), cur)
+    update_preserving(session, "k_level", named_levels(lv, input$k_split, input$populatie), cur)
+  })
+
+  # Legend explaining O_MPG1/2/3 (or O_OUD1/2/3) whenever that's the chosen
+  # map split -- otherwise NULL (hidden). The venn panel on the Per regio tab
+  # carries the same legend permanently, since it always shows this split.
+  output$k_combo_legend <- renderUI({
+    req(input$populatie, input$k_split)
+    if (!isTRUE(input$k_split == COMBO_SPLIT_VAR[[input$populatie]])) return(NULL)
+    gl <- COMBO_GROUP_UITLEG[[input$populatie]]
+    tags$div(class = "note", style = "margin-top: -4px;",
+             HTML(paste(sprintf("<b>%s</b> %s", names(gl), gl), collapse = "<br/>")))
   })
 
   # Region picker follows the region level.
@@ -346,7 +456,7 @@ server <- function(input, output, session) {
     req(input$k_var, input$k_metric, input$k_jaar)
     sp <- if (input$k_split == TOTAL_LABEL) "" else
       sprintf(" | %s: %s", pretty_split(input$k_split),
-              pretty_level(input$k_level %||% ""))
+              pretty_level(input$k_level %||% "", input$k_split, input$populatie))
     sprintf("%s = %s | %s (%s) | %s %s%s",
             pretty_var(input$k_var), input$k_val,
             pretty_metric(input$k_metric), eenheid(input$k_weergave),
@@ -465,7 +575,7 @@ server <- function(input, output, session) {
 
     p <- plot_ly(source = "lijn")
     lv <- unique(d$split_level)
-    lv_lab <- pretty_level(lv)
+    lv_lab <- pretty_level(lv, input$r_split, input$populatie)
     for (i in seq_along(lv)) {
       di <- d[split_level == lv[i]]
       p <- add_trace(
@@ -494,6 +604,63 @@ server <- function(input, output, session) {
       ) |>
       config(displaylogo = FALSE,
              modeBarButtonsToRemove = c("select2d", "lasso2d", "autoScale2d"))
+  })
+
+  # -- Risicostapeling naar ondersteuningscombinatie (venn) --------------------
+  # Always shows the O_MPG_combination/O_OUD_combination split for the region
+  # + risicoscore + waarde + metric already chosen above -- independent of
+  # whatever input$r_split happens to be set to, and for one chosen year
+  # (r_venn_jaar) since a venn diagram is a single-year snapshot, unlike the
+  # line chart above it.
+
+  venn_data <- reactive({
+    req(input$populatie, input$r_niveau, input$r_regio,
+        input$r_var, input$r_val, input$r_metric, input$r_venn_jaar)
+
+    combo_var <- COMBO_SPLIT_VAR[[input$populatie]]
+
+    d <- ds |>
+      filter(population    == !!input$populatie,
+             region_level  == !!input$r_niveau,
+             region_code   == !!input$r_regio,
+             variable_name == !!input$r_var,
+             variable_value== !!input$r_val,
+             metric_name   == !!input$r_metric,
+             split_var     == !!combo_var,
+             year          == !!as.integer(input$r_venn_jaar)) |>
+      collect() |>
+      as.data.table()
+
+    add_display(d, input$r_weergave)
+  })
+
+  output$venn <- renderUI({
+    d <- venn_data()
+
+    codes <- names(COMBO_GROUP_LABELS[[input$populatie]])  # e.g. O_MPG1/2/3
+    get_val <- function(level) {
+      row <- d[split_level == level]
+      if (nrow(row) == 0) NA_real_ else row$waarde[1]
+    }
+    vals <- c(
+      none = get_val("none"),
+      A    = get_val(codes[1]),
+      B    = get_val(codes[2]),
+      C    = get_val(codes[3]),
+      AB   = get_val(paste(codes[1], codes[2], sep = " + ")),
+      AC   = get_val(paste(codes[1], codes[3], sep = " + ")),
+      BC   = get_val(paste(codes[2], codes[3], sep = " + ")),
+      ABC  = get_val(paste(codes, collapse = " + "))
+    )
+
+    HTML(venn_svg(vals, input$r_weergave, codes, COMBO_GROUP_LABELS[[input$populatie]]))
+  })
+
+  output$venn_legenda <- renderUI({
+    req(input$populatie)
+    gl <- COMBO_GROUP_UITLEG[[input$populatie]]
+    tags$div(class = "note", style = "margin-top: 8px; text-align: center;",
+             HTML(paste(sprintf("<b>%s</b> %s", names(gl), gl), collapse = "&nbsp;&nbsp;&middot;&nbsp;&nbsp;")))
   })
 
   # -------------------------------------------------------------- Downloads ---

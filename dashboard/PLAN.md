@@ -148,9 +148,17 @@ De ruwe 330 MB CSV en 19 MB xlsx blijven buiten git (`.gitignore`); de parquet-o
 klein genoeg om wél mee te deployen.
 
 ### App — `app.R`
-Eén hoofdtab **"Iteratie 1"**, daarbinnen twee subtabs. Eén gedeelde parameter bovenaan:
-**populatie** (`ouderen (65+)` / `huishoudens met kinderen`), die de keuzelijsten van beide
-subtabs vult.
+Eén hoofdtab **"Iteratie 1"**; de populatiekeuze (`ouderen (65+)` / `huishoudens met
+kinderen`) staat direct daarbinnen, boven de twee subtabs, en vult de keuzelijsten van
+beide.
+
+**Labels komen uit `Outcomes.xlsx`** (tabbladen "Definities-MPG"/"Definities-Ouderen"),
+overgenomen in `data/metadata/variable_labels.R` — niet afgeleid uit de kolomnaam. Elke
+`R_`-indicator toont zijn officiële omschrijving (bijv. `R_MPG1_armoede_hh` → "Armoede
+(huishoudinkomen < 130% sociaal minimum)") met een vaste toelichting dat alle `R_`-scores
+risico-indicatoren zijn. "Waarde van de indicator" is gefilterd op de gekozen indicator: de
+losse risicofactoren zijn binair (0/1), de totaalscore is een stapeling (0/1/2/3plus) — een
+vaste lijst voor de hele populatie zou hier onterecht waarden aanbieden.
 
 #### Subtab 1 — Kaart
 Besturing: jaar · regioniveau (buurt / wijk / gebied / stadsdeel) · indicator
@@ -159,13 +167,27 @@ absoluut/relatief.
 
 `leaflet` choropleth: hover-tooltip met naam + waarde + n, klik-popup met de volledige
 context, legenda, en **grijs met expliciet "onvoldoende waarnemingen"** voor onderdrukte
-regio's — belangrijk dat onderdrukt niet als nul leest.
+regio's — belangrijk dat onderdrukt niet als nul leest. Bij `O_MPG_combination`/
+`O_OUD_combination` als split_by: keuzelijst en titel tonen de korte groepsnaam (bijv.
+"Jeugdhulp"), plus een vaste toelichtingsbox met de volledige omschrijving per groep.
 
 #### Subtab 2 — Per regio
 Besturing: regioniveau + regio · indicator · metric · split_by.
 
 `plotly` lijndiagram 2018–2024, één lijn per niveau van de gekozen splitvariabele (bij
 "(totaal)" één lijn). Hover met jaar + waarde. Zelfde absoluut/relatief-keuze.
+
+Daaronder, **altijd zichtbaar** (los van wat er bij "Splits de lijn uit naar" gekozen is):
+een 3-cirkel venn/euler-diagram van `O_MPG_combination`/`O_OUD_combination`, choropleth-
+gekleurd (zelfde YlOrRd-schaal als de kaart) voor de gekozen regio/indicator/waarde/metric
+en een los te kiezen jaar (een venn is een momentopname, geen tijdreeks). De dode ruimte
+buiten de 3 cirkels — begrensd door een afgeronde rechthoek, niet de hele SVG — is "none"
+(geen van de drie ondersteuningsgroepen). Gebouwd als handgeschreven inline SVG
+(`utils/venn_diagram.R`) met `clipPath` (doorsnede: geneste clip-groepen) en `mask`
+(uitsluiting: een zwarte vorm op een wit mask knipt dat gebied weg) — er bestaat geen
+CRAN-package voor een 3-cirkel venn met onafhankelijk gekleurde/hoverbare deelgebieden.
+Elk deelgebied heeft een SVG `<title>` (native browser-hover) met de volledige groepsnaam
++ waarde; een vaste tekstlegenda onder de figuur geeft de volledige omschrijving per groep.
 
 ---
 

@@ -22,6 +22,9 @@ person-level records.
   which stays local-only. Re-run `data-prep/01_build_app_data.R` and commit the result whenever
   `data/output_data/` gets a new delivery; nothing regenerates it automatically.
 - `data/metadata/brand_colors.R` — ahti branding palette, shared with the template.
+- `data/metadata/variable_labels.R` — Dutch labels for every `R_`/`O_`-variable, taken from
+  `Outcomes.xlsx` (see PLAN.md §3). Update this file from a new `Outcomes.xlsx`, never guess a
+  label from the column name.
 
 CBS output rules still apply to anything rendered: cells below 10 are suppressed and values
 are rounded to 10 in the delivery. **Render a suppressed region as explicitly "onvoldoende
@@ -55,7 +58,8 @@ These are verified against the actual delivery, not assumed from the output form
 - `data-prep/` — one-off scripts that turn an RA delivery into `data/app_data/`. Re-run by
   hand after each new delivery; not part of the app's runtime.
 - `utils/` — reusable functions shared across the app, incl. `auth.R` (shinymanager) and the
-  think-cell export stack.
+  think-cell export stack. `venn_diagram.R` is Dynamo-specific (a hand-built 3-circle SVG venn
+  for `O_MPG_combination`/`O_OUD_combination`), not shared with sibling dashboards.
 - `templates/` — built-in think-cell `.pptx` slide templates for the "Download slide" export.
 - `state/` — runtime state (favorites, export history, uploaded templates); never committed,
   never synced by the deploy workflow, so it survives a redeploy.
