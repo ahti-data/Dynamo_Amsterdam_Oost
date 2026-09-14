@@ -1,35 +1,38 @@
-# Shiny Dashboard Template
+# Dynamo Amsterdam — Shiny dashboard
 
-This repository is a starter template for Shiny dashboards.
+Intern dashboard op de CBS RA-output van het Dynamo-project: risicostapeling bij
+huishoudens met kinderen en bij ouderen (65+) in Amsterdam, 2018–2024.
 
-Use it as follows:
+Zie [PLAN.md](PLAN.md) voor de opzet en de verantwoording van de cijfers, en
+[CLAUDE.md](CLAUDE.md) voor de conventies in deze map.
 
-1. Put your input files in `data/`.
-2. Keep shared metadata and branding helpers in `data/metadata/`.
-3. Add reusable functions to `utils/`.
-4. Replace the scaffold in `app.R` with your dashboard UI and server logic.
+## Draaien
 
-## Included Helpers
+Eenmalig, na elke nieuwe RA-levering in `data/output_data/`:
 
-- [data/metadata/brand_colors.R](data/metadata/brand_colors.R) contains the branding palette.
-- [utils/format_thinkcell_download.R](utils/format_thinkcell_download.R) contains a helper for formatting data exports for Think-Cell.
+```r
+Rscript data-prep/01_build_app_data.R
+```
 
-## Run Locally
-
-From an R session in the project folder:
+Dat zet de levering om naar `data/app_data/` (parquet + geometrie). Daarna:
 
 ```r
 shiny::runApp("app.R")
 ```
 
-If needed, set the working directory first:
+## Structuur
 
-```r
-setwd("c:/Users/MarcoGriepAHTI/Git Repos/shiny_dashboard_template")
-shiny::runApp("app.R")
-```
+- `app.R` — het dashboard: één tab "Iteratie 1" met de subtabs **Kaart** en **Per regio**.
+- `data-prep/` — eenmalige scripts die een RA-levering omzetten naar `data/app_data/`.
+- `data/output_data/` — ruwe RA-leveringen (niet in git).
+- `data/geo/` — Amsterdamse geometrie (buurten, wijken, gebieden).
+- `utils/` — gedeelde helpers uit `shiny_dashboard_template`, inclusief de think-cell
+  exportlaag (nog niet aangesloten, zie PLAN.md §6).
+- `templates/` — think-cell `.pptx` sjablonen.
 
-## Notes
+## Let op bij de cijfers
 
-- The template app sources the shared helper files from `app.R`.
-- Keep the README updated if you add new helper files or data conventions.
+De output valt onder de CBS-uitvoerregels: aantallen onder de 10 zijn onderdrukt en waarden
+zijn afgerond op 10. Een regio zonder cijfer is daarom **onvoldoende waarnemingen**, niet
+nul — het dashboard toont dat ook zo. `variable_value` is de uitzondering op de afronding:
+dat is een categorielabel (`0`, `1`, `2`, `3plus`), geen telling.

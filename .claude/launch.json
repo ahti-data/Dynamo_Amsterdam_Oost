@@ -1,0 +1,20 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "dynamo-dashboard-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "dashboard_client/dashboard"],
+      "port": 5173
+    },
+    {
+      "name": "dynamo-shiny",
+      "runtimeExecutable": "C:/Program Files/R/R-4.5.2/bin/Rscript.exe",
+      "runtimeArgs": [
+        "-e",
+        "setwd('C:/Users/MarcoGriepAHTI/Git Repos/Dynamo_Amsterdam_Oost/dashboard'); shiny::runApp('app.R', port=8320, host='127.0.0.1', launch.browser=FALSE)"
+      ],
+      "port": 8320
+    }
+  ]
+}

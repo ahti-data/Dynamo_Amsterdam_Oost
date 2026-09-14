@@ -1,289 +1,523 @@
+# Dynamo Amsterdam Oost -- internal dashboard, iteratie 1.
+#
+# Reads data/app_data/, built by data-prep/01_build_app_data.R from the CBS RA
+# delivery. Run that script first after a new delivery; the app does no
+# aggregation of its own beyond filtering and the share calculation.
+
 source("data/metadata/brand_colors.R")
 
-library(shiny)
-library(leaflet)
-library(sf)
-library(data.table)
-
-# Load aggregated data from CBS environment
-hh   <- dt_huishoudens_agg_OT1
-rins <- dt_rins_agg_OT2
-
-# Load and reproject shapefiles
-shp_wc <- st_read("wc.shp") |> st_transform(4326) |> st_make_valid()
-shp_bc <- st_read("bc.shp") |> st_transform(4326) |> st_make_valid()
-
-# Split-var choices, computed once from the full rins table and used as static
-# UI choices below. Nothing ever calls updateSelectInput() on split_*, so a
-# user's pick persists across variable/year changes (Shiny only resets a
-# selectInput when server code updates it).
-split_var_choices <- lapply(split_vars, function(svar) {
-  vals <- as.character(rins[[svar]])
-  sort(unique(vals[!is.na(vals)]))
+suppressPackageStartupMessages({
+  library(shiny)
+  library(dplyr)
+  library(arrow)
+  library(data.table)
+  library(sf)
+  library(leaflet)
+  library(plotly)
+  library(writexl)
 })
-names(split_var_choices) <- split_vars
+
+# ---------------------------------------------------------------------------
+# Data
+# ---------------------------------------------------------------------------
+
+DATA_DIR <- "data/app_data"
+
+if (!dir.exists(DATA_DIR)) {
+  stop("data/app_data/ is missing. Run: Rscript data-prep/01_build_app_data.R")
+}
+
+ds  <- open_dataset(file.path(DATA_DIR, "indicators.parquet"))
+geo <- readRDS(file.path(DATA_DIR, "geo.rds"))
+
+TOTAL_LABEL <- "(totaal)"
+
+# Small vocabulary table driving every selector, pulled once at startup so the
+# cascading selectors never touch the 3.5M-row dataset just to list choices.
+vocab <- ds |>
+  select(population, region_level, year, variable_name, variable_value,
+         metric_name, split_var, split_level) |>
+  distinct() |>
+  collect() |>
+  as.data.table()
+
+POPULATIONS   <- sort(unique(vocab$population))
+REGION_LEVELS <- c("buurt", "wijk", "gebied", "stadsdeel")  # gemeente has no map
+YEARS         <- sort(unique(vocab$year))
+
+# Opening view: the city itself, not a default that includes Haarlem and Almere.
+AMS_BBOX <- st_bbox(geo$stadsdeel)
+
+# Region code -> name, per level, from the geometry (the delivery carries codes
+# only).
+region_choices <- lapply(geo, function(g) {
+  d <- st_drop_geometry(g)
+  setNames(d$region_code, d$region_name)[order(d$region_name)]
+})
+
+# ---------------------------------------------------------------------------
+# Labels
+# ---------------------------------------------------------------------------
+
+# R_MPG1_armoede_hh -> "MPG1 - armoede", R_OUD4_alleenwonend -> "OUD4 - alleenwonend".
+pretty_var <- function(x) {
+  s <- sub("^R_", "", x)
+  s <- sub("_hh$", "", s)
+  s <- sub("^(MPG|OUD)([0-9]*)_", "\\1\\2 - ", s)
+  s <- sub("^(MPG|OUD)_", "\\1 ", s)
+  gsub("_", " ", s)
+}
+
+pretty_metric <- function(x) {
+  out <- gsub("_", " ", sub("^n_", "aantal ", x))
+  sub("aantal ouderen with var value", "aantal ouderen", out)
+}
+
+pretty_split <- function(x) {
+  ifelse(x == TOTAL_LABEL, TOTAL_LABEL, gsub("_", " ", sub("_hh$", "", x)))
+}
+
+# The binary split variables come through as "0"/"1", which reads as a value
+# rather than a group in a legend. Categorical splits (herkomst7, geslacht, the
+# O_*_combination fields) already carry readable labels and are left alone.
+pretty_level <- function(x) {
+  if (all(x %in% c("0", "1"))) {
+    return(c("0" = "nee", "1" = "ja")[x])
+  }
+  x
+}
+
+named_levels <- function(values) setNames(values, pretty_level(values))
+
+named <- function(values, labeller) setNames(values, labeller(values))
+
+# Keeps the user's current pick when it is still a valid choice, so changing an
+# unrelated selector does not silently reset the rest of the form.
+update_preserving <- function(session, id, choices, current) {
+  sel <- if (!is.null(current) && current %in% choices) current else choices[1]
+  updateSelectInput(session, id, choices = choices, selected = sel)
+}
+
+# ---------------------------------------------------------------------------
+# UI
+# ---------------------------------------------------------------------------
+
+control_card <- function(...) div(class = "control-card", ...)
 
 ui <- fluidPage(
-  titlePanel("Dynamo Oost — Dashboard"),
-  sidebarLayout(
-    sidebarPanel(
-      selectInput("bron", "Aggregatieniveau data", c("huishoudens", "rins")),
-      selectInput("jaar", "Jaar", choices = NULL),
-      selectInput("varnaam", "Variabele", choices = NULL),
-      conditionalPanel(
-        "input.bron=='huishoudens'",
-        selectInput("scoreval", "Score waarde", choices = NULL)
-      ),
-      selectInput("metriek", "Metric", choices = NULL),
-      selectInput("regionlvl", "Regionaal niveau", c("wc", "bc")),
-      conditionalPanel("input.bron=='rins'",
-        selectInput(paste0("split_", split_vars[1]), label = split_vars[1],
-                    choices = split_var_choices[[split_vars[1]]]),
-        selectInput(paste0("split_", split_vars[2]), label = split_vars[2],
-                    choices = split_var_choices[[split_vars[2]]]),
-        selectInput(paste0("split_", split_vars[3]), label = split_vars[3],
-                    choices = split_var_choices[[split_vars[3]]])
-      ),
-      hr(),
-      p("Hover over gebieden voor waarden • Klik voor meer detail", class = "help-text")
-    ),
-    mainPanel(
+  title = "Dynamo Amsterdam - dashboard",
+
+  tags$head(tags$style(HTML(sprintf("
+    body { background: #fff; }
+    h2.app-title { font-weight: 600; color: %1$s; margin: 14px 0 2px; font-size: 24px; }
+    .app-sub { color: %3$s; margin-bottom: 14px; font-size: 13px; }
+    .popbar { background: %4$s; border-left: 4px solid %2$s;
+              padding: 10px 14px; border-radius: 4px; margin-bottom: 16px; }
+    .popbar .form-group { margin-bottom: 0; }
+    .control-card { background: %4$s; border-radius: 4px; padding: 12px 14px; margin-bottom: 12px; }
+    .control-card .form-group { margin-bottom: 10px; }
+    .note { font-size: 12px; color: %3$s; line-height: 1.45; }
+    .chart-title { font-weight: 600; font-size: 15px; margin-bottom: 8px; color: %1$s; }
+    .nav-tabs > li.active > a { border-top: 2px solid %2$s !important; }
+  ", ahti_branding$colors$grijs_blauw,
+     ahti_branding$colors$helder_blauw,
+     ahti_branding$colors$midden_grijs,
+     ahti_branding$colors$licht_grijs)))),
+
+  h2("Dynamo Amsterdam", class = "app-title"),
+  div("Risicostapeling bij huishoudens met kinderen en ouderen, 2018-2024. ",
+      "Bron: CBS microdata via de Remote Access-omgeving.", class = "app-sub"),
+
+  div(class = "popbar",
+      fluidRow(
+        column(5, selectInput("populatie", "Populatie", choices = POPULATIONS, width = "100%")),
+        column(7, div(class = "note", style = "padding-top: 26px;",
+                      "De populatiekeuze geldt voor beide tabbladen."))
+      )),
+
+  tabsetPanel(
+    id = "hoofdtab",
+    tabPanel(
+      "Iteratie 1",
+      br(),
       tabsetPanel(
-        tabPanel("Kaart", leafletOutput("kaart", height = 700)),
-        tabPanel("Debug: filtdata", verbatimTextOutput("debug_filt")),
-        tabPanel("Debug: merge/sf", verbatimTextOutput("debug_sf"))
+        id = "subtab",
+
+        # ---------------------------------------------------------------- Kaart
+        tabPanel(
+          "Kaart",
+          br(),
+          sidebarLayout(
+            sidebarPanel(
+              width = 3,
+              control_card(
+                selectInput("k_jaar", "Jaar", choices = YEARS, selected = max(YEARS)),
+                selectInput("k_niveau", "Regioniveau", choices = REGION_LEVELS, selected = "wijk")
+              ),
+              control_card(
+                selectInput("k_var", "Indicator", choices = NULL),
+                selectInput("k_val", "Waarde van de indicator", choices = NULL),
+                selectInput("k_metric", "Metric", choices = NULL)
+              ),
+              control_card(
+                selectInput("k_split", "Splits uit naar", choices = NULL),
+                conditionalPanel(
+                  "input.k_split != '(totaal)'",
+                  selectInput("k_level", "Toon welk niveau", choices = NULL)
+                )
+              ),
+              control_card(
+                radioButtons("k_weergave", "Weergave",
+                             c("Absoluut" = "abs", "Aandeel (%)" = "rel"),
+                             selected = "rel")
+              ),
+              downloadButton("k_dl", "Download data (xlsx)", class = "btn-default"),
+              div(class = "note", style = "margin-top: 10px;",
+                  "Grijze gebieden hebben geen cijfer: door de CBS-uitvoerregels zijn ",
+                  "aantallen onder de 10 onderdrukt. Dat is niet hetzelfde als nul.")
+            ),
+            mainPanel(
+              width = 9,
+              div(textOutput("k_titel"), class = "chart-title"),
+              leafletOutput("kaart", height = 680)
+            )
+          )
+        ),
+
+        # ------------------------------------------------------------ Per regio
+        tabPanel(
+          "Per regio",
+          br(),
+          sidebarLayout(
+            sidebarPanel(
+              width = 3,
+              control_card(
+                selectInput("r_niveau", "Regioniveau", choices = REGION_LEVELS, selected = "stadsdeel"),
+                selectizeInput("r_regio", "Regio", choices = NULL)
+              ),
+              control_card(
+                selectInput("r_var", "Indicator", choices = NULL),
+                selectInput("r_val", "Waarde van de indicator", choices = NULL),
+                selectInput("r_metric", "Metric", choices = NULL)
+              ),
+              control_card(
+                selectInput("r_split", "Splits de lijn uit naar", choices = NULL)
+              ),
+              control_card(
+                radioButtons("r_weergave", "Weergave",
+                             c("Absoluut" = "abs", "Aandeel (%)" = "rel"),
+                             selected = "rel")
+              ),
+              downloadButton("r_dl", "Download data (xlsx)", class = "btn-default"),
+              div(class = "note", style = "margin-top: 10px;",
+                  "Een onderbroken lijn betekent dat het cijfer in dat jaar onderdrukt is.")
+            ),
+            mainPanel(
+              width = 9,
+              div(textOutput("r_titel"), class = "chart-title"),
+              plotlyOutput("lijn", height = 620)
+            )
+          )
+        )
       )
     )
-  ),
-  tags$style(HTML("
-    .help-text { font-size: 12px; color: #666; margin-top: 1em; }
-    .leaflet-popup-content-wrapper { font-size: 13px; }
-  "))
+  )
 )
+
+# ---------------------------------------------------------------------------
+# Server
+# ---------------------------------------------------------------------------
 
 server <- function(input, output, session) {
 
-  # Data reactives
-  dt <- reactive({
-    if (input$bron == "huishoudens") hh else rins
+  # -- Shared vocabulary for the selected population --------------------------
+
+  pop_vocab <- reactive({
+    req(input$populatie)
+    vocab[population == input$populatie]
   })
 
-  shp <- reactive({
-    if (input$regionlvl == "wc") shp_wc else shp_bc
-  })
+  # Within one population the indicator / metric / split vocabulary is fixed, so
+  # these only ever need refreshing when the population changes.
+  observeEvent(input$populatie, {
+    v <- pop_vocab()
 
-  # The selectors form a cascade: bron -> jaar -> varnaam -> scoreval/split -> metriek.
-  # updateSelectInput() is a round trip to the browser, so input$X keeps its OLD
-  # value for one flush after the update is sent. freezeReactiveValue() marks the
-  # input stale so downstream reactives halt (like req()) until the new value
-  # arrives — without it, filtdata() runs the previous bron's varnaam against the
-  # new table.
+    vars    <- sort(unique(v$variable_name))
+    metrics <- sort(unique(v$metric_name))
+    vals    <- sort(unique(v$variable_value))
+    splits  <- unique(v$split_var)
+    splits  <- c(TOTAL_LABEL, sort(setdiff(splits, TOTAL_LABEL)))
 
-  # Update year choices when data source changes
-  observeEvent(input$bron, {
-    years <- suppressWarnings(as.numeric(as.character(dt()$year)))
-    years <- sort(unique(years[!is.na(years)]), decreasing = TRUE)
+    ids <- paste0(rep(c("k", "r"), each = 4), c("_var", "_metric", "_val", "_split"))
 
-    freezeReactiveValue(input, "jaar")
-    updateSelectInput(session, "jaar", choices = years)
-  })
+    # Read the current picks BEFORE freezing: a frozen input throws a silent
+    # error when read, which would abort this observer before it sends any
+    # choices at all.
+    current <- lapply(ids, function(i) isolate(input[[i]]))
+    names(current) <- ids
 
-  # Update variable choices when bron or year changes
-  observeEvent(list(input$bron, input$jaar), {
-    req(input$jaar)
-    d <- dt()[suppressWarnings(as.numeric(as.character(year))) == as.numeric(input$jaar)]
+    # Freeze, because updateSelectInput() is a round trip to the browser:
+    # input$k_var still holds the OLD population's variable for one flush after
+    # the update is sent. Freezing halts the downstream reactives until the new
+    # value lands, instead of querying the new population with the old
+    # population's indicator.
+    for (i in ids) freezeReactiveValue(input, i)
 
-    freezeReactiveValue(input, "varnaam")
-    updateSelectInput(session, "varnaam", choices = sort(unique(d$variable_name)))
-  })
-
-  # Update score value choices (huishoudens only)
-  observeEvent(list(input$bron, input$varnaam, input$jaar), {
-    if (input$bron != "huishoudens") return()
-    req(input$varnaam, input$jaar)
-
-    sub <- hh[variable_name == input$varnaam &
-              suppressWarnings(as.numeric(as.character(year))) == as.numeric(input$jaar)]
-
-    freezeReactiveValue(input, "scoreval")
-    updateSelectInput(session, "scoreval", choices = sort(unique(sub$variable_value)))
-  })
-
-  # Split-var selectors (split_<svar>) are static — see split_var_choices above
-  # — so there is deliberately no observer here to refresh them; that is what
-  # keeps a user's pick fixed across variable/year changes.
-
-  # Update metric choices
-  observeEvent(list(input$bron, input$varnaam, input$scoreval, input$jaar), {
-    req(input$varnaam, input$jaar)
-    if (input$bron == "huishoudens") req(input$scoreval)
-
-    d <- dt()[variable_name == input$varnaam &
-              suppressWarnings(as.numeric(as.character(year))) == as.numeric(input$jaar)]
-    if (input$bron == "huishoudens") d <- d[variable_value == input$scoreval]
-
-    freezeReactiveValue(input, "metriek")
-    updateSelectInput(session, "metriek", choices = sort(unique(d$metric_name)))
-  })
-
-  # Filtered data for map
-  filtdata <- reactive({
-    req(input$varnaam, input$metriek, input$regionlvl, input$jaar)
-    if (input$bron == "huishoudens") req(input$scoreval)
-
-    jaar_num <- suppressWarnings(as.numeric(as.character(input$jaar)))
-    if (is.na(jaar_num)) return(dt()[0])
-
-    # No `:=` on dt(): it is not a copy, so := would mutate hh/rins in place.
-    d0 <- dt()[suppressWarnings(as.numeric(as.character(year))) == jaar_num]
-    if (nrow(d0) == 0) return(d0)
-    if (!(input$varnaam %in% d0$variable_name)) return(d0[0])
-    if (input$bron == "huishoudens" &&
-        !(input$scoreval %in% d0[variable_name == input$varnaam]$variable_value)) {
-      return(d0[0])
+    for (p in c("k", "r")) {
+      update_preserving(session, paste0(p, "_var"),    named(vars, pretty_var),
+                        current[[paste0(p, "_var")]])
+      update_preserving(session, paste0(p, "_metric"), named(metrics, pretty_metric),
+                        current[[paste0(p, "_metric")]])
+      update_preserving(session, paste0(p, "_val"),    vals,
+                        current[[paste0(p, "_val")]])
+      update_preserving(session, paste0(p, "_split"),  named(splits, pretty_split),
+                        current[[paste0(p, "_split")]])
     }
+  }, ignoreInit = FALSE)
 
-    d <- d0[
-      variable_name == input$varnaam &
-      metric_name == input$metriek &
-      region_agg_level == input$regionlvl
-    ]
-    if (input$bron == "huishoudens") {
-      d <- d[variable_value == input$scoreval]
-    } else if (input$bron == "rins") {
-      # Only an unset selector is skipped; any other value filters like normal.
-      for (svar in split_vars) {
-        split_val <- input[[paste0("split_", svar)]]
-        if (is.null(split_val) || !nzchar(split_val)) next
-        d <- d[as.character(get(svar)) == split_val]
-      }
+  # Levels of the chosen split variable (map tab only -- the line chart draws
+  # every level at once).
+  observeEvent(list(input$populatie, input$k_split), {
+    req(input$k_split)
+    if (input$k_split == TOTAL_LABEL) return()
+    cur <- isolate(input$k_level)  # read before freezing (see above)
+    lv <- sort(unique(pop_vocab()[split_var == input$k_split]$split_level))
+    freezeReactiveValue(input, "k_level")
+    update_preserving(session, "k_level", named_levels(lv), cur)
+  })
+
+  # Region picker follows the region level.
+  observeEvent(input$r_niveau, {
+    req(input$r_niveau)
+    ch <- region_choices[[input$r_niveau]]
+    cur <- isolate(input$r_regio)
+    freezeReactiveValue(input, "r_regio")
+    updateSelectizeInput(session, "r_regio", choices = ch,
+                         selected = if (!is.null(cur) && cur %in% ch) cur else ch[1],
+                         server = TRUE)
+  }, ignoreInit = FALSE)
+
+  # -- Shared slice logic -----------------------------------------------------
+
+  # metric_value is the count; denominator is the total across the
+  # variable_value categories within the same slice, so a share stays a valid
+  # percentage for the n_kinderen_* metrics too (those count children against a
+  # household n_totaal, which is why n_totaal is not the denominator here).
+  # Always adds `waarde`, including on an empty slice -- a selection that has no
+  # rows must still produce a table the map and chart can render as "geen data",
+  # not one that errors on a missing column.
+  add_display <- function(d, weergave) {
+    if (nrow(d) == 0) {
+      d[, waarde := numeric()]
+      return(d[])
     }
+    d[, waarde := if (weergave == "rel") {
+        fifelse(denominator > 0, metric_value / denominator * 100, NA_real_)
+      } else as.numeric(metric_value)]
+    d[]
+  }
 
-    d <- copy(d)
-    d[, metric_value := as.numeric(metric_value)]
-    d <- unique(d, by = "region_code")
-    d
+  eenheid <- function(weergave) if (weergave == "rel") "%" else "aantal"
+
+  # ---------------------------------------------------------------- Kaart -----
+
+  kaart_data <- reactive({
+    req(input$populatie, input$k_jaar, input$k_niveau,
+        input$k_var, input$k_val, input$k_metric, input$k_split)
+
+    lvl <- if (input$k_split == TOTAL_LABEL) TOTAL_LABEL else req(input$k_level)
+
+    d <- ds |>
+      filter(population   == !!input$populatie,
+             region_level == !!input$k_niveau,
+             year          == !!as.integer(input$k_jaar),
+             variable_name == !!input$k_var,
+             variable_value== !!input$k_val,
+             metric_name   == !!input$k_metric,
+             split_var     == !!input$k_split,
+             split_level   == !!lvl) |>
+      collect() |>
+      as.data.table()
+
+    add_display(d, input$k_weergave)
   })
 
-  # Debug output: filtered data
-  output$debug_filt <- renderPrint({
-    d <- filtdata()
-    cat("nrow:", nrow(d), "\n")
-    print(summary(d$metric_value))
-    cat("\nAantal negatief:", sum(d$metric_value < 0, na.rm = TRUE), "\n")
-    print(sort(unique(d$metric_value[d$metric_value < 0])))
-    print(head(d, 20))
+  kaart_titel <- reactive({
+    req(input$k_var, input$k_metric, input$k_jaar)
+    sp <- if (input$k_split == TOTAL_LABEL) "" else
+      sprintf(" | %s: %s", pretty_split(input$k_split),
+              pretty_level(input$k_level %||% ""))
+    sprintf("%s = %s | %s (%s) | %s %s%s",
+            pretty_var(input$k_var), input$k_val,
+            pretty_metric(input$k_metric), eenheid(input$k_weergave),
+            input$k_jaar, input$k_niveau, sp)
   })
 
-  # Debug output: merged sf object
-  output$debug_sf <- renderPrint({
-    d <- filtdata()
-    s <- shp()
-    m <- merge(s, d[, .(region_code, metric_value)],
-               by.x = "regioncode", by.y = "region_code", all.x = TRUE)
-    m <- st_as_sf(m)
+  output$k_titel <- renderText(kaart_titel())
 
-    cat("CRS:", st_crs(s)$input, "\n")
-    cat("nrow s:", nrow(s), " nrow m:", nrow(m), "\n")
-    cat("unieke regiocodes in m:", length(unique(m$regioncode)), "\n")
-    cat("regiocodes met >1 rij:\n")
-    print(table(m$regioncode)[table(m$regioncode) > 1])
-    cat("ongeldige geometrieen:", sum(!st_is_valid(m)), "\n")
-    cat("lege geometrieen:", sum(st_is_empty(m)), "\n")
-    cat("class(m$metric_value):", class(m$metric_value), "\n")
-    cat("niet-NA metric_value:", sum(!is.na(m$metric_value)), "van", nrow(m), "\n")
-    print(head(st_drop_geometry(m), 20))
-  })
-
-  # Main map
   output$kaart <- renderLeaflet({
-    d <- filtdata()
-    s <- shp()
-
-    # Merge data with shapes (include n_totaal)
-    m <- merge(s, d[, .(region_code, metric_value, n_totaal)],
-               by.x = "regioncode", by.y = "region_code", all.x = TRUE)
-    m <- st_as_sf(m)
-
-    # Create color palette
-    pal <- colorNumeric(
-      "YlOrRd",
-      domain = m$metric_value,
-      na.color = "grey90"
-    )
-
-    # Build hover labels (plain text for tooltips)
-    labels <- lapply(seq_len(nrow(m)), function(i) {
-      region <- m$regioncode[i]
-      value <- m$metric_value[i]
-      n_tot <- m$n_totaal[i]
-
-      if (is.na(value)) {
-        label_text <- paste0(region, " — Geen data")
-      } else {
-        label_text <- paste0(region, ": ", round(value, 2))
-      }
-
-      if (!is.na(n_tot)) {
-        label_text <- paste0(label_text, " (n=", n_tot, ")")
-      }
-
-      label_text
-    })
-
-    # Build popups for click
-    popups <- lapply(seq_len(nrow(m)), function(i) {
-      region <- m$regioncode[i]
-      value <- m$metric_value[i]
-      n_tot <- m$n_totaal[i]
-      metric <- input$metriek
-      jaar <- input$jaar
-
-      popup_html <- paste0(
-        "<b>", region, "</b><br/>",
-        "Metriek: ", metric, "<br/>",
-        "Jaar: ", jaar, "<br/>"
-      )
-
-      if (is.na(value)) {
-        popup_html <- paste0(popup_html, "Waarde: Geen data")
-      } else {
-        popup_html <- paste0(
-          popup_html,
-          "Waarde: <strong>", round(value, 2), "</strong>"
-        )
-      }
-
-      if (!is.na(n_tot)) {
-        popup_html <- paste0(popup_html, "<br/>n: ", n_tot)
-      }
-
-      HTML(popup_html)
-    })
-
-    # Render map
-    leaflet(m) |>
-      addTiles() |>
-      addPolygons(
-        fillColor = ~pal(metric_value),
-        fillOpacity = 0.8,
-        color = "white",
-        weight = 1,
-        label = labels,
-        popup = popups,
-        highlightOptions = highlightOptions(
-          weight = 2,
-          color = "#333",
-          bringToFront = TRUE
-        )
-      ) |>
-      addLegend(
-        pal = pal,
-        values = ~metric_value,
-        title = paste0(input$metriek, " (", input$jaar, ")"),
-        position = "bottomright"
-      )
+    # Esri's grey canvas is keyless; CartoDB.Positron now watermarks its tiles
+    # with "API KEY REQUIRED", which would show up on a deployed dashboard.
+    leaflet(options = leafletOptions(minZoom = 10)) |>
+      addProviderTiles(providers$Esri.WorldGrayCanvas) |>
+      fitBounds(AMS_BBOX[["xmin"]], AMS_BBOX[["ymin"]],
+                AMS_BBOX[["xmax"]], AMS_BBOX[["ymax"]])
   })
+
+  # Redraw only the polygons, via a proxy, so changing a selector does not reset
+  # the user's pan/zoom.
+  observe({
+    d <- kaart_data()
+    req(input$k_niveau)
+    g <- geo[[input$k_niveau]]
+
+    m <- merge(g, d[, .(region_code, waarde, metric_value, n_totaal)],
+               by = "region_code", all.x = TRUE)
+
+    proxy <- leafletProxy("kaart") |> clearShapes() |> clearControls()
+
+    if (all(is.na(m$waarde))) {
+      proxy |> addPolygons(data = m, fillColor = "#e0e0e0", fillOpacity = 0.7,
+                           color = "#fff", weight = 1,
+                           label = "Geen data voor deze selectie")
+      return()
+    }
+
+    pal <- colorBin("YlOrRd", domain = m$waarde, bins = 6,
+                    na.color = "#e0e0e0", pretty = TRUE)
+
+    fmt <- function(x) {
+      if (is.na(x)) return("onvoldoende waarnemingen")
+      if (input$k_weergave == "rel") sprintf("%.1f%%", x) else format(round(x), big.mark = ".")
+    }
+
+    labels <- mapply(function(nm, w, mv, nt) {
+      HTML(sprintf(
+        "<b>%s</b><br/>%s: %s%s",
+        nm, pretty_metric(input$k_metric), fmt(w),
+        if (is.na(w)) "" else sprintf("<br/><span style='color:#666'>n = %s van %s</span>",
+                                      format(mv, big.mark = "."),
+                                      format(nt, big.mark = "."))
+      ))
+    # USE.NAMES = FALSE matters: mapply() would otherwise key the result by
+    # region_name, and leaflet serialises a *named* list as one JS object that
+    # every polygon then shares -- which renders as an empty tooltip.
+    }, m$region_name, m$waarde, m$metric_value, m$n_totaal,
+       SIMPLIFY = FALSE, USE.NAMES = FALSE)
+
+    proxy |>
+      addPolygons(
+        data = m,
+        fillColor = ~pal(waarde), fillOpacity = 0.8,
+        color = "#ffffff", weight = 1,
+        label = labels,
+        labelOptions = labelOptions(direction = "auto", textsize = "13px"),
+        highlightOptions = highlightOptions(weight = 3, color = "#272727",
+                                            fillOpacity = 0.9, bringToFront = TRUE)
+      ) |>
+      addLegend(position = "bottomright", pal = pal, values = m$waarde,
+                title = eenheid(input$k_weergave), opacity = 0.9,
+                na.label = "onvoldoende")
+  })
+
+  # ------------------------------------------------------------ Per regio -----
+
+  regio_data <- reactive({
+    req(input$populatie, input$r_niveau, input$r_regio,
+        input$r_var, input$r_val, input$r_metric, input$r_split)
+
+    d <- ds |>
+      filter(population    == !!input$populatie,
+             region_level  == !!input$r_niveau,
+             region_code   == !!input$r_regio,
+             variable_name == !!input$r_var,
+             variable_value== !!input$r_val,
+             metric_name   == !!input$r_metric,
+             split_var     == !!input$r_split) |>
+      collect() |>
+      as.data.table()
+
+    d <- add_display(d, input$r_weergave)
+    if (nrow(d) == 0) return(d)
+    setorder(d, split_level, year)
+    d[]
+  })
+
+  regio_titel <- reactive({
+    req(input$r_var, input$r_metric, input$r_regio)
+    nm <- names(region_choices[[input$r_niveau]])[
+      match(input$r_regio, region_choices[[input$r_niveau]])]
+    sp <- if (input$r_split == TOTAL_LABEL) "" else
+      sprintf(" | uitgesplitst naar %s", pretty_split(input$r_split))
+    sprintf("%s = %s | %s (%s) | %s%s",
+            pretty_var(input$r_var), input$r_val,
+            pretty_metric(input$r_metric), eenheid(input$r_weergave),
+            nm %||% input$r_regio, sp)
+  })
+
+  output$r_titel <- renderText(regio_titel())
+
+  output$lijn <- renderPlotly({
+    d <- regio_data()
+    validate(need(nrow(d) > 0, "Geen data voor deze selectie."))
+
+    pal <- rep(ahti_branding$scale_discrete, length.out = uniqueN(d$split_level))
+
+    p <- plot_ly(source = "lijn")
+    lv <- unique(d$split_level)
+    lv_lab <- pretty_level(lv)
+    for (i in seq_along(lv)) {
+      di <- d[split_level == lv[i]]
+      p <- add_trace(
+        p, data = di, x = ~year, y = ~waarde,
+        type = "scatter", mode = "lines+markers",
+        name = lv_lab[i], line = list(color = pal[i], width = 2.5),
+        marker = list(color = pal[i], size = 7),
+        hovertemplate = paste0(
+          "<b>", lv_lab[i], "</b><br>%{x}<br>",
+          if (input$r_weergave == "rel") "%{y:.1f}%" else "%{y:,.0f}",
+          "<extra></extra>")
+      )
+    }
+
+    p |>
+      layout(
+        title = list(text = ""),
+        xaxis = list(title = "", dtick = 1, tickmode = "linear"),
+        yaxis = list(title = eenheid(input$r_weergave),
+                     rangemode = "tozero",
+                     ticksuffix = if (input$r_weergave == "rel") "%" else ""),
+        hovermode = "x unified",
+        legend = list(orientation = "h", y = -0.12),
+        showlegend = uniqueN(d$split_level) > 1,
+        margin = list(t = 20)
+      ) |>
+      config(displaylogo = FALSE,
+             modeBarButtonsToRemove = c("select2d", "lasso2d", "autoScale2d"))
+  })
+
+  # -------------------------------------------------------------- Downloads ---
+  # Raw data export only for now; the think-cell / favorites layer in utils/ is
+  # deliberately not wired up yet (see PLAN.md).
+
+  export_cols <- function(d) {
+    d[, .(populatie = population, regioniveau = region_level,
+          regiocode = region_code, regionaam = region_name, stadsdeel,
+          jaar = year, indicator = variable_name, waarde_indicator = variable_value,
+          metric = metric_name, aantal = metric_value,
+          n_totaal, noemer = denominator, weergegeven_waarde = waarde,
+          splitsvariabele = split_var, splitsniveau = split_level)]
+  }
+
+  output$k_dl <- downloadHandler(
+    filename = function() sprintf("dynamo_kaart_%s.xlsx", Sys.Date()),
+    content  = function(file) write_xlsx(export_cols(kaart_data()), file)
+  )
+
+  output$r_dl <- downloadHandler(
+    filename = function() sprintf("dynamo_regio_%s.xlsx", Sys.Date()),
+    content  = function(file) write_xlsx(export_cols(regio_data()), file)
+  )
 }
 
-shinyApp(ui = ui, server = server)
+shinyApp(ui, server)

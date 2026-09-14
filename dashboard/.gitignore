@@ -1,0 +1,16 @@
+/context/
+/temp/
+
+# Personal, machine-specific local dev config (absolute paths); not shared.
+/.claude/launch.json
+
+# Runtime state — never committed; deploy workflow never syncs these either,
+# so local testing artifacts and uploaded content stay out of git either way.
+# (Uploaded templates live under state/template_uploads/.)
+/state/
+
+# Raw CBS RA deliveries — large, and source data that should not be committed.
+/data/output_data/
+
+# Prep-step output; rebuild with data-prep/ scripts.
+/data/app_data/
