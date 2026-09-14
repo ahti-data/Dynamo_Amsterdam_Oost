@@ -16,7 +16,11 @@ person-level records.
   xlsx). Treat as read-only inputs.
 - `data/geo/` — Amsterdam geometry (buurten / wijken / gebieden), copied from
   `dashboard_client/data-prep/geo/`.
-- `data/app_data/` — the prep step's parquet + geo output; this is what the app reads.
+- `data/app_data/` — the prep step's parquet + geo output; this is what the app reads, and what
+  the deploy workflow ships. **Committed to git** (~7.6 MB, already-aggregated CBS output under
+  the same rounding/suppression as the delivery it's built from) — unlike `data/output_data/`,
+  which stays local-only. Re-run `data-prep/01_build_app_data.R` and commit the result whenever
+  `data/output_data/` gets a new delivery; nothing regenerates it automatically.
 - `data/metadata/brand_colors.R` — ahti branding palette, shared with the template.
 
 CBS output rules still apply to anything rendered: cells below 10 are suppressed and values
@@ -56,7 +60,22 @@ These are verified against the actual delivery, not assumed from the output form
 - `state/` — runtime state (favorites, export history, uploaded templates); never committed,
   never synced by the deploy workflow, so it survives a redeploy.
 - `tests/testthat/` — testthat tests.
-- `deploy.env` — `APP_FOLDER` sets the project name under `/apps/`.
+- `deploy.env` — `APP_FOLDER` sets the project name under `/apps/` (`dynamo_internal` — `dynamo`
+  itself is already taken by `dashboard_client`, the client-facing dashboard in this same repo).
+
+## Deployment
+
+The GitHub Actions workflow is **not** under `dashboard/.github/workflows/` — GitHub only reads
+`.github/workflows/` at the repo root, so a copy there (as the template ships it) never actually
+runs. The real one is [.github/workflows/deploy-dynamo-internal.yml](../.github/workflows/deploy-dynamo-internal.yml)
+at the repo root, modelled on `pharm` and `RVS_laatste_1000_dagen`'s own root-level workflows
+(both Shiny dashboards with the same `dashboard/` subfolder layout as this repo). It triggers on
+push to `main` (path-filtered to `dashboard/**`) and on manual dispatch, reads `APP_FOLDER` from
+`dashboard/deploy.env`, and SFTPs `app.R` + `data/` + `utils/` + `templates/` to
+`/apps/dynamo_internal/` on healthinsights.ahti.nl — `state/` is deliberately excluded, same as
+every other dashboard built from this template. See the `healthinsights-server-admin` skill for
+how the server itself treats a newly-uploaded `/apps/` folder (protected by default, no config
+change needed).
 
 ## Conventions
 

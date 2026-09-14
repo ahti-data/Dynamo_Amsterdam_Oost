@@ -1,0 +1,97 @@
+name: Deploy Dynamo internal (Shiny) via SFTP
+
+# Adapted from pharm/.github/workflows/deploy.yml and
+# RVS_laatste_1000_dagen/.github/workflows/deploy.yml -- other Shiny
+# dashboards built from shiny_dashboard_template, each living under their own
+# repo's dashboard/ subfolder just like this one. The workflow has to live
+# here at the repo root: GitHub Actions only reads .github/workflows/ at the
+# top level, so a copy under dashboard/.github/workflows/ (as the template
+# ships it) never actually runs -- that copy has been removed from
+# dashboard/ for that reason.
+#
+# Deploys to /apps/dynamo_internal/ (see dashboard/deploy.env) -- not
+# /apps/dynamo/, which is dashboard_client's folder, see
+# .github/workflows/deploy-dynamo.yml.
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'dashboard/**'
+  workflow_dispatch:
+
+jobs:
+  web-deploy:
+    name: 🎉 Deploy Dynamo internal
+    runs-on: ubuntu-latest
+    steps:
+    - name: 🚚 Get latest code
+      uses: actions/checkout@v4
+
+    - name: 📦 Prepare deploy folder
+      run: |
+        mkdir -p deploy
+        cp dashboard/app.R deploy/
+        cp -r dashboard/data deploy/
+        cp -r dashboard/utils deploy/
+        cp -r dashboard/templates deploy/
+        echo "Deploy contents:"
+        find deploy -type f | sort
+
+    - name: ⚙️ Load deployment config
+      shell: bash
+      run: |
+        if [ -f dashboard/deploy.env ]; then
+          . ./dashboard/deploy.env
+        fi
+
+        if [ -z "${APP_FOLDER:-}" ] || [ "$APP_FOLDER" = "NONE" ]; then
+          echo "Set APP_FOLDER in dashboard/deploy.env to the dashboard folder name under /apps/."
+          exit 1
+        fi
+
+        echo "REMOTE_PATH=/apps/${APP_FOLDER}/" >> "$GITHUB_ENV"
+
+    - name: 📁 Ensure remote dashboard folder exists
+      shell: bash
+      env:
+        SFTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y -qq sshpass
+
+        REMOTE_PATH="${{ env.REMOTE_PATH }}"
+        REMOTE_PATH="${REMOTE_PATH%/}"
+
+        # A plain `ssh ... "mkdir ..."` is a shell-exec session, which a
+        # chrooted/SFTP-only account rejects ("This service allows sftp
+        # connections only."). Use a real SFTP session instead; the leading
+        # "-" on mkdir tells sftp to ignore an error there (folder already
+        # exists) instead of aborting the whole batch.
+        printf '%s\n' "-mkdir ${REMOTE_PATH}" "bye" > /tmp/sftp_mkdir_batch.txt
+
+        # -b (batch mode) implies BatchMode=yes on the underlying ssh
+        # connection, which disables interactive prompting -- so password
+        # auth silently can't happen and sshpass never gets a prompt to
+        # answer ("Permission denied (publickey,password)"). Force
+        # BatchMode=no back on so password auth still works; -b still
+        # avoids sftp's own confirmation prompts for the mkdir command.
+        sshpass -p "$SFTP_PASSWORD" sftp \
+          -o StrictHostKeyChecking=no \
+          -o UserKnownHostsFile=/dev/null \
+          -o BatchMode=no \
+          -P 22 \
+          -b /tmp/sftp_mkdir_batch.txt \
+          "${{ secrets.FTP_USERNAME }}@${{ secrets.FTP_SERVER }}"
+
+    - name: 📂 Sync files via SFTP
+      uses: wlixcc/SFTP-Deploy-Action@v1.2.4
+      with:
+        username: ${{ secrets.FTP_USERNAME }}
+        server: ${{ secrets.FTP_SERVER }}
+        password: ${{ secrets.FTP_PASSWORD }}
+        port: 22
+        local_path: './deploy/*'
+        remote_path: ${{ env.REMOTE_PATH }}
+        sftp_only: true
+        delete_remote_files: false

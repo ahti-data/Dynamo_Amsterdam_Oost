@@ -23,13 +23,14 @@ standaard afhandelt — dus géén shinymanager in deze repo.
 ## 1. Wat er nu staat
 
 ### Gekopieerd uit `shiny_dashboard_template`
-`utils/` (8 scripts), `tests/`, `templates/` (think-cell .pptx + previews),
-`.github/workflows/deploy.yml`, `deploy.env`, `.gitignore`,
-`.claude/skills/thinkcell-export/`.
+`utils/` (8 scripts), `tests/`, `templates/` (think-cell .pptx + previews), `deploy.env`,
+`.gitignore`, `.claude/skills/thinkcell-export/`.
 
 De bestaande `dashboard/utils/format_thinkcell_download.R` was een stub van 14 regels en is
 vervangen door de volledige versie (376 regels). `data/metadata/brand_colors.R` was al
-identiek. De oude `deploy.yml` miste de stappen die `utils/` en `templates/` meedeployen.
+identiek. De template's `.github/workflows/deploy.yml` is **niet** meegekopieerd naar
+`dashboard/.github/` — dat pad draait hier nooit (zie §6, Deployment); de echte workflow staat
+op de repo-root.
 
 De bestaande `app.R` is **niet** overschreven. Dat is de prototype-versie die binnen de CBS
 RA draait (verwijst naar `dt_huishoudens_agg_OT1`, `dt_rins_agg_OT2`, `st_read("wc.shp")`)
@@ -225,6 +226,26 @@ op tot `n_totaal` (Amsterdam 2024, R_MPG_totaal: 38.610 + 26.660 + 13.910 + 8.34
 
 ### Deployment
 
-`deploy.env` staat op `APP_FOLDER=dynamo_internal` → `/apps/dynamo_internal/` op
+**Staat live.** `deploy.env` → `APP_FOLDER=dynamo_internal`, dus `/apps/dynamo_internal/` op
 healthinsights.ahti.nl. Niet `dynamo`: die naam is al in gebruik door het client-dashboard
 (`dashboard_client/`).
+
+De GitHub Actions-workflow die dit uitvoert staat niet onder `dashboard/.github/workflows/`
+(GitHub Actions leest alleen `.github/workflows/` op de repo-root, dus die kopie — zoals de
+template hem meelevert — draaide hier nooit echt en is verwijderd). De werkende versie staat op
+de root: [.github/workflows/deploy-dynamo-internal.yml](../.github/workflows/deploy-dynamo-internal.yml),
+naar het patroon van `pharm` en `RVS_laatste_1000_dagen` (twee andere Shiny-dashboards met
+dezelfde `dashboard/`-submapstructuur als deze repo). Triggert op een push naar `main`
+(path-filter `dashboard/**`) en op handmatige dispatch; synct `app.R`, `data/`, `utils/` en
+`templates/` via SFTP — niet `state/`.
+
+Daarvoor moest `data/app_data/` (de parquet-dataset, ~7,6 MB) van gitignored naar gecommit: de
+CI-runner checkt de repo vers uit en heeft dus nooit toegang tot lokaal gebouwde bestanden. Dat
+volgt hetzelfde patroon als `RVS_laatste_1000_dagen` en `pharm`, die hun werkdataset ook gewoon
+in git zetten — het blijft dezelfde geaggregeerde, al-afgeronde/onderdrukte CBS-output die de
+RA al vrijgaf, alleen anders geordend. De ruwe 330 MB/19 MB-levering in `data/output_data/`
+blijft wél lokaal-only.
+
+Aanname: de repo-secrets `FTP_USERNAME`/`FTP_SERVER`/`FTP_PASSWORD` bestaan al (dezelfde namen
+worden al gebruikt door `.github/workflows/deploy-dynamo.yml` voor het client-dashboard) — niet
+vanaf hier te verifiëren zonder `gh` op deze machine.

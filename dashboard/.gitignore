@@ -11,6 +11,3 @@
 
 # Raw CBS RA deliveries — large, and source data that should not be committed.
 /data/output_data/
-
-# Prep-step output; rebuild with data-prep/ scripts.
-/data/app_data/
