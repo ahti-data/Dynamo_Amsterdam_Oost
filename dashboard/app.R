@@ -279,15 +279,21 @@ ui <- fluidPage(
 
               hr(),
               fluidRow(
-                column(9, div("Risicostapeling naar ondersteuningscombinatie", class = "chart-title")),
-                column(3, selectInput("r_venn_jaar", "Jaar", choices = YEARS, selected = max(YEARS)))
+                column(5, div("Risicostapeling naar ondersteuningscombinatie", class = "chart-title")),
+                column(3, selectInput("r_venn_jaar", "Jaar", choices = YEARS, selected = max(YEARS))),
+                column(4, selectInput("r_venn_pal", "Kleurenschaal", choices = names(VENN_PALETTES)))
               ),
               div(class = "note", style = "margin-bottom: 10px;",
                   "Combinatie van ondersteuningsgroepen voor de gekozen regio/risicoscore/waarde/",
                   "metric hierboven, voor het gekozen jaar. Dode ruimte buiten de cirkels = geen",
-                  " van de drie groepen; het overlappende gebied = beide/alle groepen tegelijk."),
+                  " van de drie groepen; het overlappende gebied = beide/alle groepen tegelijk.",
+                  " De kleurenschaal loopt over de zeven cirkelvlakken; de dode ruimte valt",
+                  " erbuiten, anders bepaalt die in haar eentje de hele schaal."),
               uiOutput("venn"),
-              uiOutput("venn_legenda")
+              uiOutput("venn_legenda"),
+              div(style = "text-align: center; margin-top: 14px;",
+                  downloadButton("r_venn_dl", "Download figuur (svg)", class = "btn-default"),
+                  downloadButton("r_venn_dl_data", "Download data (xlsx)", class = "btn-default"))
             )
           )
         )
@@ -634,7 +640,10 @@ server <- function(input, output, session) {
     add_display(d, input$r_weergave)
   })
 
-  output$venn <- renderUI({
+  # The 8 region values in the order venn_svg() wants them. Shared by the
+  # figure on screen and by the SVG behind the download button, so the two can
+  # never drift apart.
+  venn_vals <- reactive({
     d <- venn_data()
 
     codes <- names(COMBO_GROUP_LABELS[[input$populatie]])  # e.g. O_MPG1/2/3
@@ -642,7 +651,7 @@ server <- function(input, output, session) {
       row <- d[split_level == level]
       if (nrow(row) == 0) NA_real_ else row$waarde[1]
     }
-    vals <- c(
+    c(
       none = get_val("none"),
       A    = get_val(codes[1]),
       B    = get_val(codes[2]),
@@ -652,8 +661,28 @@ server <- function(input, output, session) {
       BC   = get_val(paste(codes[2], codes[3], sep = " + ")),
       ABC  = get_val(paste(codes, collapse = " + "))
     )
+  })
 
-    HTML(venn_svg(vals, input$r_weergave, codes, COMBO_GROUP_LABELS[[input$populatie]]))
+  # The venn is its own chart with its own year, so it needs its own title
+  # rather than borrowing the line chart's -- and the downloaded SVG carries
+  # it, which is what makes the file readable away from the dashboard.
+  venn_titel <- reactive({
+    req(input$r_var, input$r_val, input$r_metric, input$r_regio, input$r_venn_jaar)
+    nm <- names(region_choices[[input$r_niveau]])[
+      match(input$r_regio, region_choices[[input$r_niveau]])]
+    sprintf("Risicostapeling naar ondersteuningscombinatie | %s = %s | %s (%s) | %s | %s",
+            pretty_var(input$r_var), input$r_val,
+            pretty_metric(input$r_metric), eenheid(input$r_weergave),
+            nm %||% input$r_regio, input$r_venn_jaar)
+  })
+
+  output$venn <- renderUI({
+    # No title: the heading above the figure already carries it on screen.
+    HTML(venn_svg(venn_vals(), input$r_weergave,
+                  names(COMBO_GROUP_LABELS[[input$populatie]]),
+                  COMBO_GROUP_LABELS[[input$populatie]],
+                  # Cosmetic input: fall back rather than block the figure on it.
+                  palette = input$r_venn_pal %||% names(VENN_PALETTES)[1]))
   })
 
   output$venn_legenda <- renderUI({
@@ -684,6 +713,38 @@ server <- function(input, output, session) {
   output$r_dl <- downloadHandler(
     filename = function() sprintf("dynamo_regio_%s.xlsx", Sys.Date()),
     content  = function(file) write_xlsx(export_cols(regio_data()), file)
+  )
+
+  # The venn slice is a different year and a different split than the line
+  # chart above it, so r_dl does not cover it.
+  output$r_venn_dl_data <- downloadHandler(
+    filename = function() sprintf("dynamo_venn_%s_%s.xlsx", input$r_venn_jaar, Sys.Date()),
+    content  = function(file) write_xlsx(export_cols(venn_data()), file)
+  )
+
+  # Vector, not a bitmap: the figure is already an SVG, so the download is the
+  # same drawing with a title, a source line and the bits a standalone file
+  # needs. Written with useBytes so the file is byte-identical to what
+  # venn_svg() produced, whatever locale the R process runs under.
+  output$r_venn_dl <- downloadHandler(
+    filename    = function() sprintf("dynamo_venn_%s_%s.svg", input$r_venn_jaar, Sys.Date()),
+    contentType = "image/svg+xml",
+    content = function(file) {
+      svg <- venn_svg(venn_vals(), input$r_weergave,
+                      names(COMBO_GROUP_LABELS[[input$populatie]]),
+                      COMBO_GROUP_LABELS[[input$populatie]],
+                      palette = input$r_venn_pal %||% names(VENN_PALETTES)[1],
+                      title = venn_titel(),
+                      caption = paste(
+                        "Bron: CBS microdata via de Remote Access-omgeving.",
+                        "Cellen onder de 10 zijn onderdrukt en tellen niet als nul;",
+                        "waarden zijn afgerond op tientallen."),
+                      standalone = TRUE)
+      # base::file, spelled out: the handler's own argument is called `file`.
+      con <- base::file(file, open = "wb")
+      on.exit(close(con))
+      writeLines(svg, con, useBytes = TRUE)
+    }
   )
 }
 

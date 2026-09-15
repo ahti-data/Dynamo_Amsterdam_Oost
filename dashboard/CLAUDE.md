@@ -59,7 +59,13 @@ These are verified against the actual delivery, not assumed from the output form
   hand after each new delivery; not part of the app's runtime.
 - `utils/` — reusable functions shared across the app, incl. `auth.R` (shinymanager) and the
   think-cell export stack. `venn_diagram.R` is Dynamo-specific (a hand-built 3-circle SVG venn
-  for `O_MPG_combination`/`O_OUD_combination`), not shared with sibling dashboards.
+  for `O_MPG_combination`/`O_OUD_combination`), not shared with sibling dashboards. One
+  `venn_svg()` renders both the on-screen figure and the "Download figuur (svg)" file
+  (`standalone = TRUE` adds the XML declaration, white background and pixel size); the colour
+  scales the UI offers live in `VENN_PALETTES` in that same file. The **"none" region is
+  deliberately off the colour scale** (`VENN_NONE_FILL`) — it is 60–90% of a selection, so on
+  the shared scale it flattened all seven circle regions into one tint. Its value is still in
+  the label and the tooltip.
 - `templates/` — built-in think-cell `.pptx` slide templates for the "Download slide" export.
 - `state/` — runtime state (favorites, export history, uploaded templates); never committed,
   never synced by the deploy workflow, so it survives a redeploy.
@@ -118,9 +124,14 @@ testthat::test_dir("tests")
 
 Run the suite after changing anything in `utils/`.
 
-Current baseline on this machine: **FAIL 36 | PASS 408** — identical to the same suite in
+`tests/testthat.R` sources `data/metadata/brand_colors.R` and `utils/venn_diagram.R` and loads
+`leaflet` — `venn_svg()` needs `ahti_branding` and `colorNumeric()`, which the app itself gets
+from `app.R`.
+
+Current failure baseline on this machine: **FAIL 36** — identical to the same suite in
 `shiny_dashboard_template`, so it is not something this repo introduced. Every failure comes
 from `zip` not being on PATH, which only affects the slide/favorites ZIP paths (the layer v1
 does not wire up). The template's `.claude/launch.json` works around it by prepending a
 `zip-shim` directory to PATH. Treat 36 as the pass mark until `zip` is available; a 37th
-failure is a real regression.
+failure is a real regression. The pass count was 408 before `test-venn_diagram.R` was added
+(59 more passes there, plus one that needs `xml2` and skips without it).
