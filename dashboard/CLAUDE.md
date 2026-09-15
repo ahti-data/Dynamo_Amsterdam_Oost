@@ -59,6 +59,14 @@ These are verified against the actual delivery, not assumed from the output form
   is therefore written only when all of its building blocks are published, and the "wel" level
   comes from *total − none* rather than summing the other seven. Don't relax that without
   documenting the resulting error margin.
+- **A risk score can have fewer categories in one region than nationally, with nothing
+  suppressed** — in Geuzenveld 2024 `R_MPG1_armoede_hh` has only value `0`, counting the whole
+  wijk. Such a source is the *best* one available (no cross-tabulation, so no suppression in
+  its level rows). Judging completeness against the national category count throws exactly
+  those away; judge it against the source's own total rows instead, with a one-rounding-step
+  tolerance (`SUPPORT_ROUND_TOL`) because everything is rounded to tens and sources therefore
+  land a ten apart. Getting this wrong left `*_aantal_vormen` all but empty below gebied level
+  (PLAN.md §7).
 
 ## Structure
 

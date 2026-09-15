@@ -94,6 +94,19 @@ SUPPORT_N_LEVELS <- c("0" = 1L, "1" = 3L, "2" = 3L, "3" = 1L)
 # van twee gepubliceerde totalen en kan zelf onder de 10 uitkomen.
 SUPPORT_MIN_CELL <- 10
 
+# Alles is afgerond op tientallen, dus twee risicoscores die dezelfde populatie
+# tellen komen op een tiental van elkaar uit: in Geuzenveld 2024 zeggen zeven
+# bronnen 2.480 en drie 2.490. Dat is afronding, geen ontbrekende categorie --
+# vandaar de mediaan als referentie en een marge van een afrondingsstap. Op de
+# levering van 09-09-2026 is de spreiding binnen een slice in 84% van de
+# gevallen precies 10 en in 99,6% hoogstens 20.
+SUPPORT_ROUND_TOL <- 10
+
+#' Afronden op tientallen, half naar boven -- de mediaan van twee
+#' gepubliceerde waarden kan op een vijftal uitkomen, en de levering kent
+#' alleen veelvouden van 10. round() zou hier bankiersafronding doen.
+support_round10 <- function(x) floor(x / 10 + 0.5) * 10
+
 #' Hoeveel ondersteuningsgroepen zitten er in een combinatieniveau.
 #' "none" -> 0, "O_MPG1" -> 1, "O_MPG1 + O_MPG2" -> 2, alle drie -> 3.
 support_n_forms <- function(level) {
@@ -116,6 +129,12 @@ SUPPORT_IND_GROUP_COLS <- c("population", "region_level", "region_code", "region
 
 #' De twee afgeleide splitsvariabelen, uit de combinatierijen + de totaalrijen.
 #'
+#' Werkt per (regio, jaar, risicoscore, risicowaarde, metric): hier wordt niet
+#' over de risicowaarden heen opgeteld, dus elke afgeleide cel is een som van
+#' cellen die allemaal gepubliceerd moeten zijn. Waar dat niet lukt biedt het
+#' complement soms alsnog uitkomst -- "1 vorm" en "2 vormen" tellen samen met
+#' "3 vormen" op tot "wel", dus wie er twee kent, kent de derde exact.
+#'
 #' @param dt data.table in het lange schema van 01_build_app_data.R, met in
 #'   elk geval de combinatierijen en de totaalrijen (`split_var ==
 #'   SUPPORT_TOTAL_LABEL`) van dezelfde slices.
@@ -127,111 +146,173 @@ derive_support_split_rows <- function(dt) {
   missing <- setdiff(unique(cols), names(dt))
   if (length(missing)) stop("Ontbrekende kolommen: ", paste(missing, collapse = ", "))
 
+  leeg <- dt[0L, c(SUPPORT_GROUP_COLS, "metric_value", "split_var", "split_level"), with = FALSE]
+
   combo <- dt[split_var == SUPPORT_COMBO_VAR[population]]
-  if (nrow(combo) == 0L) return(dt[0L, c(SUPPORT_GROUP_COLS, "metric_value",
-                                         "split_var", "split_level"), with = FALSE])
+  if (nrow(combo) == 0L) return(leeg)
   combo <- combo[, c(SUPPORT_GROUP_COLS, "metric_value", "split_level"), with = FALSE]
   combo[, n_vormen := support_n_forms(split_level)]
 
-  # -- aantal_ondersteuningsvormen -------------------------------------------
   # Som per groepsgrootte, maar alleen waar elk onderliggend combinatieniveau
   # gepubliceerd is: een ontbrekend niveau zou als nul meetellen.
-  aantal <- combo[, .(metric_value = sum(metric_value), n_niveaus = .N),
+  aantal <- combo[, .(waarde = sum(metric_value), n_niveaus = .N),
                   by = c(SUPPORT_GROUP_COLS, "n_vormen")]
   aantal <- aantal[n_niveaus == SUPPORT_N_LEVELS[as.character(n_vormen)]]
-  aantal[, `:=`(split_var = SUPPORT_SPLIT_COUNT,
-                split_level = as.character(n_vormen),
-                n_niveaus = NULL, n_vormen = NULL)]
-
-  # -- ondersteuningssignaal --------------------------------------------------
-  # "geen" is de none-rij zelf. "wel" is de totaalrij min de none-rij, en
-  # bewust niet de som van de 7 andere niveaus: het verschil telt de
-  # onderdrukte combinaties gewoon mee, de som laat ze vallen.
-  geen <- combo[n_vormen == 0L, c(SUPPORT_GROUP_COLS, "metric_value"), with = FALSE]
+  aantal[, n_niveaus := NULL]
 
   totaal <- dt[split_var == SUPPORT_TOTAL_LABEL & population %in% names(SUPPORT_COMBO_VAR),
                c(SUPPORT_GROUP_COLS, "metric_value"), with = FALSE]
-  setnames(totaal, "metric_value", "totaal_value")
+  setnames(totaal, "metric_value", "totaal_waarde")
 
-  wel <- merge(totaal, geen, by = SUPPORT_GROUP_COLS)  # inner: beide nodig
-  wel[, metric_value := totaal_value - metric_value]
-  wel[, totaal_value := NULL]
-  # Zowel de totaalrij als de none-rij is afgerond op tientallen, dus het
-  # verschil is dat ook. Wat eronder blijft (ook een negatief verschil door
-  # afronding) valt af onder dezelfde drempel als de levering zelf hanteert.
-  wel <- wel[metric_value >= SUPPORT_MIN_CELL]
-  wel[, `:=`(split_var = SUPPORT_SPLIT_SIGNAL, split_level = "wel")]
+  # Breed zetten: per groep een kolom voor 0, 1, 2 en 3 vormen, plus het
+  # totaal. Dat is wat het complement hieronder nodig heeft.
+  w <- dcast(aantal, paste(paste(SUPPORT_GROUP_COLS, collapse = " + "), "~ n_vormen"),
+             value.var = "waarde")
+  for (kol in c("0", "1", "2", "3")) if (!kol %in% names(w)) w[, (kol) := NA_real_]
+  setnames(w, c("0", "1", "2", "3"), c("k0", "k1", "k2", "k3"))
+  w <- merge(w, totaal, by = SUPPORT_GROUP_COLS, all.x = TRUE)
 
-  geen[, `:=`(split_var = SUPPORT_SPLIT_SIGNAL, split_level = "geen")]
+  # "wel" komt uit de totaalrij min de none-rij, bewust niet uit de som van de
+  # zeven andere niveaus: het verschil telt de onderdrukte combinaties gewoon
+  # mee, de som laat ze vallen.
+  w[, wel := totaal_waarde - k0]
 
-  out <- rbind(aantal, geen, wel, use.names = TRUE)
+  # Complement: k1 + k2 + k3 = wel. Kent een groep er twee van, dan is de derde
+  # exact af te leiden -- ook als zijn eigen combinatieniveaus deels onderdrukt
+  # zijn. Beide complementen worden berekend voordat er iets wordt ingevuld,
+  # dus ze kunnen niet op elkaar terugslaan.
+  w[, `:=`(k1_complement = wel - k2 - k3,
+           k2_complement = wel - k1 - k3)]
+  w[is.na(k1), k1 := k1_complement]
+  w[is.na(k2), k2 := k2_complement]
+  w[, c("k1_complement", "k2_complement") := NULL]
+
+  lang <- melt(w, id.vars = SUPPORT_GROUP_COLS,
+               measure.vars = c("k0", "k1", "k2", "k3", "wel"),
+               variable.name = "categorie", value.name = "metric_value",
+               variable.factor = FALSE, na.rm = TRUE)
+  # Een afgeleid getal kan onder de CBS-drempel uitkomen (of door afronding
+  # zelfs negatief); dan vervalt de cel, net als in de levering.
+  lang <- lang[metric_value >= SUPPORT_MIN_CELL]
+
+  aantal_rijen <- lang[categorie != "wel"]
+  aantal_rijen[, `:=`(split_var = SUPPORT_SPLIT_COUNT,
+                      split_level = sub("^k", "", categorie), categorie = NULL)]
+
+  signaal <- rbind(
+    lang[categorie == "wel"][, `:=`(split_level = "wel", categorie = NULL)],
+    lang[categorie == "k0"][, `:=`(split_level = "geen", categorie = NULL)])
+  signaal[, split_var := SUPPORT_SPLIT_SIGNAL]
+
+  out <- rbind(aantal_rijen, signaal, use.names = TRUE)
   setcolorder(out, c(SUPPORT_GROUP_COLS, "metric_value", "split_var", "split_level"))
   out[]
 }
 
-#' De twee afgeleide indicatoren, uit de afgeleide splitsrijen.
+#' De twee afgeleide indicatoren, rechtstreeks uit de combinatie- en
+#' totaalrijen.
 #'
-#' Hier wordt opgeteld over de risicowaarden, en dat mag alleen als die reeks
-#' compleet is. Welke risicoscore de bron is maakt inhoudelijk niet uit: elke
-#' `R_`-score verdeelt dezelfde populatie over zijn eigen categorieen, dus de
-#' som over die categorieen is steeds hetzelfde aantal huishoudens/ouderen --
-#' op afronding op tientallen na (op de levering van 09-09-2026 verschillen
-#' complete bronnen onderling 0-20, precies de afrondingsmarge). Wat wel
-#' uitmaakt is *onderdrukking*: de cumulatieve score heeft vier categorieen en
-#' verliest er in een kleine buurt al snel een, terwijl een binaire score er
-#' maar twee heeft. Daarom wordt per slice de eerste bron gekozen die volledig
-#' gepubliceerd is, met de cumulatieve score voorop en daarna de losse
-#' risicofactoren op naam. Dat tilt de dekking van het
-#' ondersteuningssignaal op buurtniveau van 18% naar 64% zonder ook maar een
-#' onderdrukte cel als nul mee te tellen.
+#' Hier wordt wel over de risicowaarden heen opgeteld, en dat mag alleen als
+#' die reeks compleet is. Welke risicoscore de bron is maakt inhoudelijk niet
+#' uit: elke `R_`-score verdeelt dezelfde populatie over zijn eigen
+#' categorieen, dus de som over die categorieen is steeds hetzelfde aantal
+#' huishoudens/ouderen -- op afronding op tientallen na.
 #'
-#' @param split_rows uitvoer van derive_support_split_rows().
-#' @param vocab data.table met alle voorkomende (population, variable_name,
-#'   variable_value)-combinaties uit de levering -- bepaalt hoeveel
-#'   risicowaarden een complete som nodig heeft, zodat dat niet hier hoeft te
-#'   worden vastgelegd.
-derive_support_indicator_rows <- function(split_rows, vocab) {
-  stopifnot(is.data.table(split_rows), is.data.table(vocab))
-  leeg <- split_rows[0L, c(SUPPORT_IND_GROUP_COLS, "variable_name", "variable_value",
-                           "metric_value", "split_var", "split_level"), with = FALSE]
-  if (nrow(split_rows) == 0L) return(leeg)
+#' **Wat "compleet" betekent, en waarom dat niet het landelijke aantal
+#' categorieen is.** Een score kan in een regio minder categorieen hebben dan
+#' landelijk, zonder dat er iets onderdrukt is: in Geuzenveld 2024 heeft
+#' `R_MPG1_armoede_hh` alleen waarde `0`, en die ene rij telt 2.480 = de hele
+#' wijk. Zo'n bron is juist de *beste* die er is -- geen kruising, dus geen
+#' onderdrukking in de niveaurijen -- maar een toets op "landelijk twee
+#' categorieen, hier een" gooit hem weg. De toets loopt daarom via de
+#' totaalrijen van de bron zelf: tellen die op tot het regiototaal, dan dekken
+#' zijn categorieen de hele populatie en ontbreekt er niets. Een niveaurij van
+#' zo'n bron is exact zodra hij evenveel cellen heeft als de bron categorieen
+#' heeft.
+#'
+#' Meerdere bruikbare bronnen geven hetzelfde niveautotaal, op afronding na
+#' (gemeten spreiding 0-20); de mediaan vangt de afrondingsuitschieters.
+derive_support_indicator_rows <- function(dt) {
+  stopifnot(is.data.table(dt))
+  leeg <- dt[0L, c(SUPPORT_IND_GROUP_COLS, "variable_name", "variable_value",
+                   "metric_value", "split_var", "split_level"), with = FALSE]
 
-  # Hoeveel categorieen heeft elke bronscore? Uit de levering zelf, niet
-  # vastgelegd: een volgende levering kan een andere reeks hebben.
-  n_waarden <- vocab[, .(n_waarden = uniqueN(variable_value)), by = .(population, variable_name)]
+  combo <- dt[split_var == SUPPORT_COMBO_VAR[population]]
+  totaal <- dt[split_var == SUPPORT_TOTAL_LABEL & population %in% names(SUPPORT_COMBO_VAR)]
+  if (nrow(combo) == 0L || nrow(totaal) == 0L) return(leeg)
 
-  # Hoeveel categorieen de afgeleide indicator zelf moet hebben. Alles of
-  # niets: de noemer is de som over die categorieen, dus een half aanwezige
-  # partitie zou een te hoog percentage geven.
-  n_cat <- c(2L, length(SUPPORT_N_LEVELS))  # geen/wel, en 0 t/m 3
-  names(n_cat) <- c(SUPPORT_SPLIT_SIGNAL, SUPPORT_SPLIT_COUNT)
+  SL <- SUPPORT_IND_GROUP_COLS
 
-  kand <- split_rows[, .(metric_value = sum(metric_value), n_gezien = uniqueN(variable_value)),
-                     by = c(SUPPORT_IND_GROUP_COLS, "variable_name", "split_var", "split_level")]
-  kand <- merge(kand, n_waarden, by = c("population", "variable_name"))
-  kand <- kand[n_gezien == n_waarden]                       # complete risicoreeks
-  kand[, n_cat_gezien := uniqueN(split_level),
-       by = c(SUPPORT_IND_GROUP_COLS, "variable_name", "split_var")]
-  kand <- kand[n_cat_gezien == n_cat[split_var]]            # complete partitie
-  if (nrow(kand) == 0L) return(leeg)
+  # -- bruikbare bronnen ------------------------------------------------------
+  bron <- totaal[, .(bron_totaal = sum(metric_value), n_cat = uniqueN(variable_value)),
+                 by = c(SL, "variable_name")]
+  # Elke bron telt dezelfde populatie, dus de hoogste is de beste schatting van
+  # het regiototaal: onderdrukking haalt er alleen af. Maar exact gelijk zijn ze
+  # nooit -- afronding op tientallen zet ze een stap uit elkaar. Zonder die
+  # marge zouden juist de beste bronnen afvallen: die met een of twee
+  # categorieen in deze regio, en dus nauwelijks onderdrukking in hun
+  # niveaurijen. Zie SUPPORT_ROUND_TOL.
+  bron[, regio_totaal := max(bron_totaal), by = SL]
+  # Wat een bron binnen die marge mist, zou een hele categorie onder de 10
+  # zijn; daarboven mist zij er echt een en zou elk niveautotaal te laag worden.
+  bron <- bron[regio_totaal - bron_totaal <= SUPPORT_ROUND_TOL]
+  if (nrow(bron) == 0L) return(leeg)
 
-  # Een bron per slice, zodat de categorieen onderling optellen: de
-  # cumulatieve score als die compleet is, anders de eerste losse score op
-  # naam.
-  kand[, voorkeur := fifelse(variable_name == SUPPORT_SOURCE_VAR[population], 0L, 1L)]
-  kand[, bron := variable_name[order(voorkeur, variable_name)][1L],
-       by = c(SUPPORT_IND_GROUP_COLS, "split_var")]
-  ind <- kand[variable_name == bron]
+  # -- niveautotalen ----------------------------------------------------------
+  niv <- combo[, .(som = sum(metric_value), n_cel = uniqueN(variable_value)),
+               by = c(SL, "variable_name", "split_level")]
+  niv <- merge(niv, bron[, c(SL, "variable_name", "n_cat", "regio_totaal"), with = FALSE],
+               by = c(SL, "variable_name"))
+  niv <- niv[n_cel == n_cat]                      # geen onderdrukte cel in deze rij
+  if (nrow(niv) == 0L) return(leeg)
 
-  ind[, variable_name := unname(fifelse(split_var == SUPPORT_SPLIT_SIGNAL,
-                                        SUPPORT_INDICATOR_SIGNAL[population],
-                                        SUPPORT_INDICATOR_COUNT[population]))]
-  ind[, variable_value := split_level]
+  lev <- niv[, .(niveau = support_round10(median(som))),
+             by = c(SL, "regio_totaal", "split_level")]
+  lev[, n_vormen := support_n_forms(split_level)]
+
+  IK <- c(SL, "regio_totaal")
+
+  # -- signaal: alleen de none-rij nodig --------------------------------------
+  signaal <- lev[split_level == "none", .(geen = niveau), by = IK]
+  signaal[, wel := regio_totaal - geen]
+  signaal <- melt(signaal, id.vars = IK, measure.vars = c("geen", "wel"),
+                  variable.name = "variable_value", value.name = "metric_value",
+                  variable.factor = FALSE)
+  signaal[, variable_name := unname(SUPPORT_INDICATOR_SIGNAL[population])]
+
+  # -- aantal vormen: alle vier de categorieen nodig --------------------------
+  grp <- lev[, .(som = sum(niveau), n_niveaus = .N), by = c(IK, "n_vormen")]
+  grp <- grp[n_niveaus == SUPPORT_N_LEVELS[as.character(n_vormen)]]
+  aantal <- leeg[0L]
+  if (nrow(grp) > 0L) {
+    w <- dcast(grp, paste(paste(IK, collapse = " + "), "~ n_vormen"), value.var = "som")
+    for (kol in c("0", "1", "2", "3")) if (!kol %in% names(w)) w[, (kol) := NA_real_]
+    setnames(w, c("0", "1", "2", "3"), c("k0", "k1", "k2", "k3"))
+    # Zelfde complement als bij de splitsvorm: k1 + k2 + k3 = wel.
+    w[, wel := regio_totaal - k0]
+    w[, `:=`(k1_complement = wel - k2 - k3, k2_complement = wel - k1 - k3)]
+    w[is.na(k1), k1 := k1_complement]
+    w[is.na(k2), k2 := k2_complement]
+    # Alles-of-niets: de noemer van deze indicator is de som over zijn eigen
+    # categorieen, dus een half aanwezige partitie zou het percentage te hoog
+    # maken.
+    w <- w[!is.na(k0) & !is.na(k1) & !is.na(k2) & !is.na(k3)]
+    if (nrow(w) > 0L) {
+      aantal <- melt(w, id.vars = IK, measure.vars = c("k0", "k1", "k2", "k3"),
+                     variable.name = "variable_value", value.name = "metric_value",
+                     variable.factor = FALSE)
+      aantal[, variable_value := sub("^k", "", variable_value)]
+      aantal[, variable_name := unname(SUPPORT_INDICATOR_COUNT[population])]
+    }
+  }
+
+  ind <- rbind(signaal, aantal, use.names = TRUE, fill = TRUE)
+  ind <- ind[metric_value >= SUPPORT_MIN_CELL]
+  if (nrow(ind) == 0L) return(leeg)
   ind[, `:=`(split_var = SUPPORT_TOTAL_LABEL, split_level = SUPPORT_TOTAL_LABEL,
-             n_gezien = NULL, n_waarden = NULL, n_cat_gezien = NULL,
-             voorkeur = NULL, bron = NULL)]
-  setcolorder(ind, c(SUPPORT_IND_GROUP_COLS, "variable_name", "variable_value",
-                     "metric_value", "split_var", "split_level"))
+             regio_totaal = NULL)]
+  setcolorder(ind, c(SL, "variable_name", "variable_value", "metric_value",
+                     "split_var", "split_level"))
   ind[]
 }
 
@@ -247,10 +328,8 @@ add_support_derivations <- function(dt) {
   dt <- dt[!split_var %in% c(SUPPORT_SPLIT_SIGNAL, SUPPORT_SPLIT_COUNT)]
   dt <- dt[!variable_name %in% c(SUPPORT_INDICATOR_SIGNAL, SUPPORT_INDICATOR_COUNT)]
 
-  vocab <- unique(dt[, .(population, variable_name, variable_value)])
-
   split_rows <- derive_support_split_rows(dt)
-  ind_rows   <- derive_support_indicator_rows(split_rows, vocab)
+  ind_rows   <- derive_support_indicator_rows(dt)
 
   out <- rbind(dt, split_rows, ind_rows, use.names = TRUE, fill = TRUE)
   setcolorder(out, names(dt))

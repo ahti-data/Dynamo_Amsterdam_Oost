@@ -63,14 +63,36 @@ test_that("'wel' komt uit de totaalrij, niet uit de som van de 7 niveaus", {
   expect_equal(niveau(out, SUPPORT_SPLIT_SIGNAL, "wel"), 400)
 })
 
-test_that("een onvolledige groepsgrootte levert geen rij in plaats van een te laag getal", {
+test_that("een onvolledige groepsgrootte wordt uit het complement gehaald", {
+  # Een van de drie losse groepen is onderdrukt, dus "1 vorm" is niet op te
+  # tellen. Maar 1 + 2 + 3 vormen samen zijn "wel", dus met de paren en de
+  # drievoudige erbij is "1 vorm" alsnog exact: 400 - 120 - 30 = 250.
   slice <- maak_slice(WAARDEN, 1000, niveaus = setdiff(ALLE_NIVEAUS, "O_MPG2"))
   out <- derive_support_split_rows(slice)
 
-  expect_length(niveau(out, SUPPORT_SPLIT_COUNT, "1"), 0)   # 1 van de 3 mist
-  expect_equal(niveau(out, SUPPORT_SPLIT_COUNT, "2"), 120)  # paren zijn compleet
+  expect_equal(niveau(out, SUPPORT_SPLIT_COUNT, "1"), 250)
+  expect_equal(niveau(out, SUPPORT_SPLIT_COUNT, "2"), 120)
   expect_equal(niveau(out, SUPPORT_SPLIT_COUNT, "3"), 30)
   expect_equal(niveau(out, SUPPORT_SPLIT_SIGNAL, "wel"), 400)
+})
+
+test_that("het complement slaat niet op zichzelf terug", {
+  # Zowel een losse groep als een paar is onderdrukt: dan is noch "1 vorm" noch
+  # "2 vormen" te bepalen, en mag geen van beide uit de ander volgen.
+  slice <- maak_slice(WAARDEN, 1000,
+                      niveaus = setdiff(ALLE_NIVEAUS, c("O_MPG2", "O_MPG1 + O_MPG2")))
+  out <- derive_support_split_rows(slice)
+
+  expect_length(niveau(out, SUPPORT_SPLIT_COUNT, "1"), 0)
+  expect_length(niveau(out, SUPPORT_SPLIT_COUNT, "2"), 0)
+  expect_equal(niveau(out, SUPPORT_SPLIT_COUNT, "3"), 30)
+  expect_equal(niveau(out, SUPPORT_SPLIT_SIGNAL, "wel"), 400)
+})
+
+test_that("zonder totaalrij is er geen complement, want 'wel' is dan onbekend", {
+  slice <- maak_slice(WAARDEN, 1000, niveaus = setdiff(ALLE_NIVEAUS, "O_MPG2"))
+  out <- derive_support_split_rows(slice[split_var != "(totaal)"])
+  expect_length(niveau(out, SUPPORT_SPLIT_COUNT, "1"), 0)
 })
 
 test_that("zonder none-rij is noch 'geen' noch 'wel' af te leiden", {
@@ -115,47 +137,77 @@ test_that("de indicatorvorm telt over de risicowaarden en gebruikt de hele popul
   expect_equal(sum(aantal$metric_value), 2000)
 })
 
-test_that("een indicator verschijnt alleen als zijn hele partitie er is", {
-  # Bij variable_value "1" is een losse groep onderdrukt, dus "1 vorm" ontbreekt
-  # daar. Dan is de som over de risicowaarden onvolledig en valt de hele
-  # aantal-vormen-indicator weg -- anders zou het percentage te hoog uitvallen.
+test_that("een onderdrukte losse groep haalt de indicator niet onderuit", {
+  # Bij variable_value "1" is O_MPG2 onderdrukt, dus dat niveautotaal is niet
+  # exact op te tellen en valt "1 vorm" niet direct te bepalen. Via het
+  # complement wel: de vier categorieen komen precies op de populatie uit.
   dt <- rbind(maak_slice(WAARDEN, 1000, variable_value = "0"),
               maak_slice(WAARDEN, 1000, variable_value = "1",
                          niveaus = setdiff(ALLE_NIVEAUS, "O_MPG2")))
   out <- add_support_derivations(dt)
 
+  aantal <- out[variable_name == "O_MPG_aantal_vormen"]
+  expect_equal(aantal[variable_value == "0"]$metric_value, 1200)
+  expect_equal(aantal[variable_value == "1"]$metric_value, 500)   # 200 + 160 + 140
+  expect_equal(aantal[variable_value == "2"]$metric_value, 240)
+  expect_equal(aantal[variable_value == "3"]$metric_value, 60)
+  expect_equal(sum(aantal$metric_value), 2000)                    # de hele populatie
+})
+
+test_that("de indicator valt weg zodra geen enkele route sluit", {
+  # Nu is er bij waarde "1" zowel een losse groep als een paar onderdrukt: dan
+  # is noch "1 vorm" noch "2 vormen" te bepalen, en verschijnt de hele
+  # aantal-vormen-indicator niet -- een halve partitie zou het percentage te
+  # hoog maken.
+  dt <- rbind(maak_slice(WAARDEN, 1000, variable_value = "0"),
+              maak_slice(WAARDEN, 1000, variable_value = "1",
+                         niveaus = setdiff(ALLE_NIVEAUS, c("O_MPG2", "O_MPG1 + O_MPG2"))))
+  out <- add_support_derivations(dt)
+
   expect_equal(nrow(out[variable_name == "O_MPG_aantal_vormen"]), 0)
-  # Het signaal staat los en blijft wel compleet.
+  # Het signaal hangt alleen aan de none-rij en blijft wel staan.
   expect_equal(nrow(out[variable_name == "O_MPG_ondersteuning"]), 2)
 })
 
-test_that("de bron valt terug op een losse risicoscore als de cumulatieve incompleet is", {
-  # De cumulatieve score mist bij waarde "3plus" zijn none-rij, dus zijn reeks
-  # is niet compleet. De binaire score is dat wel en neemt het over -- dezelfde
-  # populatie, alleen anders ingedeeld.
-  dt <- rbind(maak_slice(WAARDEN, 1000, variable_value = "0"),
-              maak_slice(WAARDEN, 1000, variable_value = "1"),
-              maak_slice(WAARDEN, 1000, variable_value = "3plus",
-                         niveaus = setdiff(ALLE_NIVEAUS, "none")),
-              maak_slice(WAARDEN, 1000, variable_value = "0", variable_name = "R_MPG1_armoede_hh"),
-              maak_slice(WAARDEN, 1000, variable_value = "1", variable_name = "R_MPG1_armoede_hh"))
+test_that("een bron met een categorie in deze regio is bruikbaar, niet verdacht", {
+  # Zoals R_MPG1_armoede_hh in Geuzenveld: maar een waarde, die in zijn eentje
+  # de hele populatie telt. Geen kruising, dus geen onderdrukking in de
+  # niveaurijen -- dat is de beste bron die er is. Een toets op "landelijk twee
+  # categorieen, hier een" zou hem juist weggooien.
+  dt <- maak_slice(WAARDEN, 1000, variable_value = "0", variable_name = "R_MPG1_armoede_hh")
   out <- add_support_derivations(dt)
 
   ind <- out[variable_name == "O_MPG_ondersteuning"]
-  expect_setequal(ind$variable_value, c("geen", "wel"))
-  expect_equal(ind[variable_value == "geen"]$metric_value, 1200)  # 2 x 600, uit R_MPG1
-  expect_equal(ind[variable_value == "wel"]$metric_value, 800)
+  expect_equal(ind[variable_value == "geen"]$metric_value, 600)
+  expect_equal(ind[variable_value == "wel"]$metric_value, 400)
+
+  aantal <- out[variable_name == "O_MPG_aantal_vormen"]
+  expect_setequal(aantal$variable_value, c("0", "1", "2", "3"))
+  expect_equal(aantal[variable_value == "1"]$metric_value, 250)
 })
 
-test_that("zonder enige complete bron komt er geen indicator", {
-  dt <- rbind(maak_slice(WAARDEN, 1000, variable_value = "0"),
-              maak_slice(WAARDEN, 1000, variable_value = "1",
-                         niveaus = setdiff(ALLE_NIVEAUS, "none")))
+test_that("een bron die zijn eigen regiototaal niet haalt telt niet mee", {
+  # R_MPG_totaal mist hier waarde "3plus" helemaal: zijn totaalrijen tellen op
+  # tot 900 terwijl de regio er 1000 heeft. Zo'n bron mist een categorie en zou
+  # elk niveautotaal te laag maken.
+  dt <- rbind(maak_slice(WAARDEN, 900, variable_value = "0"),
+              maak_slice(WAARDEN, 1000, variable_value = "0",
+                         variable_name = "R_MPG1_armoede_hh"))
+  dt[variable_name == "R_MPG_totaal" & split_var == "(totaal)", metric_value := 900]
   out <- add_support_derivations(dt)
-  expect_equal(nrow(out[variable_name %like% "^O_"]), 0)
+
+  # De complete bron bepaalt het cijfer, niet de incomplete.
+  expect_equal(out[variable_name == "O_MPG_ondersteuning" & variable_value == "wel"]$metric_value, 400)
 })
 
-test_that("de cumulatieve score gaat voor als meerdere bronnen compleet zijn", {
+test_that("zonder none-rij is er geen signaalindicator", {
+  dt <- maak_slice(WAARDEN, 1000, variable_value = "0",
+                   niveaus = setdiff(ALLE_NIVEAUS, "none"))
+  out <- add_support_derivations(dt)
+  expect_equal(nrow(out[variable_name == "O_MPG_ondersteuning"]), 0)
+})
+
+test_that("bruikbare bronnen geven hetzelfde antwoord", {
   dt <- rbind(maak_slice(WAARDEN, 1000, variable_value = "0"),
               maak_slice(WAARDEN, 1000, variable_value = "1"),
               maak_slice(WAARDEN, 1000, variable_value = "0", variable_name = "R_MPG1_armoede_hh"),

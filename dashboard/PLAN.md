@@ -375,44 +375,81 @@ Liever een grijs vlak dan een te laag getal.
 - `wel` = **totaalrij − `none`-rij**, bewust niet de som van de andere zeven: het verschil
   telt de onderdrukte combinaties gewoon mee, de som laat ze vallen. Valt het verschil onder
   de 10, dan vervalt de cel — dezelfde drempel als de levering hanteert.
-- `1` = som van de 3 losse groepen, `2` = som van de 3 paren, alleen als ze compleet zijn.
-- `3` = de rij met alle drie.
+- `1` = som van de 3 losse groepen, `2` = som van de 3 paren, `3` = de rij met alle drie.
+- **Complement:** `1` + `2` + `3` samen zijn `wel`. Wie er twee van kent, kent de derde
+  exact — ook als zijn eigen combinatieniveaus deels onderdrukt zijn. Beide complementen
+  worden berekend vóór er iets wordt ingevuld, zodat ze niet op elkaar kunnen terugslaan.
+  Dat scheelt bij `2 vormen` als splitsvariabele ruim 60% meer cellen (27.686 → 45.064
+  rijen), zonder één onderdrukte cel als nul te tellen.
 
 Voor de indicatorvorm geldt bovendien alles-of-niets over de risicowaarden: de noemer is de
 som over de eigen categorieën, dus een half aanwezige partitie zou het percentage te hoog
 maken.
 
-### Welke risicoscore de indicator voedt
+### Welke risicoscore de indicator voedt, en wat "compleet" betekent
 
 Optellen over de risicowaarden mag alleen als die reeks compleet is. Welke `R_`-score de bron
 is maakt inhoudelijk niet uit — elke score verdeelt dezelfde populatie, dus de som over zijn
-categorieën is hetzelfde aantal huishoudens/ouderen. Wat wél uitmaakt is onderdrukking: de
-cumulatieve score heeft vier categorieën en verliest er in een kleine buurt snel een, een
-binaire score heeft er twee. De afleiding kiest daarom per slice de eerste bron die volledig
-gepubliceerd is, met de cumulatieve score voorop en daarna de losse risicofactoren op naam.
-Gemeten op deze levering verschillen complete bronnen onderling 0–20, precies de
-afrondingsmarge.
+categorieën is hetzelfde aantal huishoudens/ouderen. Wat wél uitmaakt is onderdrukking: hoe
+meer categorieën een score in een regio heeft, hoe fijner de kruising en hoe meer cellen
+onder de 10 vallen.
 
-Dekking van de indicatorvorm (aandeel slices met een cijfer):
+**Een score kan in een regio minder categorieën hebben dan landelijk, zonder dat er iets
+onderdrukt is.** In Geuzenveld 2024 heeft `R_MPG1_armoede_hh` alleen waarde `0`, en die ene
+rij telt 2.480 = de hele wijk. Zo'n bron is juist de *beste* die er is: geen kruising, dus
+geen onderdrukking in de niveaurijen. Een toets op "landelijk twee categorieën, hier één"
+gooit hem weg — dat deed de eerste versie van deze afleiding, en daardoor was
+`*_aantal_vormen` onder gebiedsniveau vrijwel leeg.
 
-| regioniveau | `*_ondersteuning` | `*_aantal_vormen` |
-|---|---|---|
-| gemeente | 100% | 100% |
-| stadsdeel | 98% | 59% |
-| gebied | 97% | 46% |
-| wijk | 90% | 4% |
-| buurt | 63% | 0% |
+De toets loopt daarom via de totaalrijen van de bron zelf: tellen die op tot het regiototaal,
+dan dekken haar categorieën de hele populatie. Twee details maken dat werkbaar:
 
-`*_ondersteuning` is dus overal bruikbaar (zonder de bronkeuze was buurt 18% geweest);
-`*_aantal_vormen` vraagt alle acht combinaties tegelijk en is daarmee pas vanaf gebiedsniveau
-zinvol. Dat staat als kanttekening onder de indicatorkeuze in de app. De splitsvorm heeft dat
-probleem veel minder — die telt niet over de risicowaarden heen.
+- **Het regiototaal is het maximum over de bronnen.** Onderdrukking haalt er alleen af, dus
+  de hoogste is de beste schatting.
+- **Met een marge van één afrondingsstap** (`SUPPORT_ROUND_TOL = 10`). Alles is afgerond op
+  tientallen, dus bronnen die dezelfde populatie tellen komen een tiental uit elkaar: in
+  Geuzenveld zeggen zeven bronnen 2.480 en drie 2.490. Zonder die marge vallen juist de
+  bronnen met weinig categorieën af. Gemeten spreiding binnen een slice: 84% precies 10,
+  99,6% hoogstens 20.
 
-### Waar dit nog scherper kan
+Een niveaurij van een bruikbare bron is exact zodra zij evenveel cellen heeft als de bron
+categorieën heeft. Meerdere bruikbare bronnen geven hetzelfde niveautotaal, op afronding na;
+de mediaan vangt de uitschieters.
 
-Een afgeleide categorie vervalt nu zodra één bouwsteen onderdrukt is, ook als die bouwsteen
-klein is ten opzichte van de rest (een zeldzaam paar van < 10 laat "2 vormen" vervallen, ook
-als de andere twee paren samen 300 zijn). Dat is de veilige kant, maar het kost dekking bij
-`aantal_ondersteuningsvormen`. Wie dat wil verruimen, doet dat in
-`derive_support_split_rows()` — met een expliciete, gedocumenteerde foutmarge, niet
-stilzwijgend.
+Dekking van de indicatorvorm (aandeel slices met een cijfer), vóór en na deze correctie:
+
+| regioniveau | `*_ondersteuning` | | `*_aantal_vormen` | |
+|---|---|---|---|---|
+| | eerst | nu | eerst | nu |
+| gemeente | 100% | 100% | 100% | 100% |
+| stadsdeel | 98% | 99% | 59% | 83% |
+| gebied | 97% | 99% | 46% | 65% |
+| wijk | 90% | **99,7%** | 4% | **23%** |
+| buurt | 63% | **99,4%** | 0% | **4%** |
+
+### De harde grens bij `*_aantal_vormen`
+
+Ook na de correctie is "hoeveel vormen tegelijk" op buurtniveau vrijwel niet af te leiden, en
+op wijkniveau voor een kwart. Dat is geen rekenfout meer maar de vorm van de levering: de
+combinatie is er alleen **gekruist met een risicoscore**. Om "precies één vorm" te tellen zijn
+de drie losse groepstotalen nodig, en in een buurt valt daarvan altijd wel een cel onder de
+10. Het complement helpt maar tot op zekere hoogte — het verlegt het probleem naar de paren
+en de drievoudige, die nog kleiner zijn.
+
+**Dit is op te lossen in de bron, niet in de code.** Vraag in de volgende RA-levering om de
+combinatietelling ook *ongekruist*: één rij per regio × jaar × combinatieniveau, zonder
+`variable_name`/`variable_value`. Dat zijn acht getallen per regio-jaar in plaats van acht ×
+het aantal risicowaarden, dus ze vallen veel minder vaak onder de 10 — en dan is
+`*_aantal_vormen` op élk regioniveau exact, zonder enige afleiding. Als dat er is, vervalt de
+hele bronkeuze hierboven.
+
+### Wat hier bewust niet gebeurt
+
+Een afgeleide categorie vervalt nog steeds zodra geen enkele route sluit, ook als de
+ontbrekende bouwsteen klein is ten opzichte van de rest. Er is een variant denkbaar die het
+onverklaarde restant als foutmarge accepteert (de bron kiezen met het kleinste tekort en
+publiceren zolang dat tekort onder bijv. 1% van het totaal blijft); die haalt op buurtniveau
+ongeveer 50% en op wijkniveau ongeveer 56% voor `*_aantal_vormen`. Dat is bewust *niet*
+ingebouwd: het betekent dat een categorie stilzwijgend te laag kan uitvallen, en die afweging
+hoort bij de onderzoekers, niet in een prep-script. Wie hem wil, bouwt hem in
+`derive_support_indicator_rows()` met de marge als expliciete, gedocumenteerde constante.

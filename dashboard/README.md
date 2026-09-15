@@ -51,9 +51,13 @@ ondersteuningsvariabelen, berekend uit `O_MPG_combination`/`O_OUD_combination` (
   ondersteuning* (Amsterdam 2024: 42,9%).
 
 Een afgeleide cel verschijnt alleen als alle onderliggende combinaties gepubliceerd zijn —
-anders staat er "onvoldoende waarnemingen", nooit een te laag getal. Daardoor is
-`Aantal vormen ondersteuning` als indicator pas vanaf gebiedsniveau goed gevuld; als
-splitsvariabele speelt dat veel minder.
+anders staat er "onvoldoende waarnemingen", nooit een te laag getal. `Ondersteuningssignaal`
+is daardoor op elk regioniveau gevuld (99% van de buurten en wijken). `Aantal vormen
+ondersteuning` vraagt alle acht combinaties tegelijk en haalt dat op gemeente-, stadsdeel- en
+gebiedsniveau (100/83/65%), op ongeveer een kwart van de wijken en nauwelijks op buurtniveau.
+Dat is de vorm van de levering, niet de berekening: de combinaties staan er alleen gekruist
+met een risicoscore. Een ongekruiste combinatietelling in de volgende RA-levering lost het op
+— zie PLAN.md §7.
 
 Onder het vennfiguur op **Per regio** staat dezelfde figuur in tabelvorm: de acht
 deelgebieden × de categorieën van de gekozen risicoscore.

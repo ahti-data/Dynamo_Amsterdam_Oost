@@ -529,10 +529,12 @@ server <- function(input, output, session) {
     if (isTRUE(var_name %in% ONDERSTEUNING_INDICATOREN)) {
       if (isTRUE(grepl("_aantal_vormen$", var_name))) {
         tags$div(class = "note", style = "margin: -6px 0 10px;",
-                 "Afgeleid uit de ondersteuningscombinaties. Deze telling vraagt",
-                 " alle acht combinaties tegelijk, en die zijn onder buurt- en",
-                 " wijkniveau bijna altijd deels onderdrukt: verwacht hier vooral",
-                 " op gebieds-, stadsdeel- en gemeenteniveau cijfers.")
+                 "Afgeleid uit de ondersteuningscombinaties. De levering telt die",
+                 " combinaties alleen gekruist met een risicoscore, en op buurtniveau",
+                 " valt daarvan bijna altijd een cel onder de tien: reken op cijfers",
+                 " voor gemeente, stadsdeel en gebied, ongeveer een kwart van de",
+                 " wijken en nauwelijks buurten. Waar het cijfer er niet is, is het",
+                 " onderdrukt \u2014 niet nul.")
       } else {
         tags$div(class = "note", style = "margin: -6px 0 10px;",
                  "Afgeleid uit de ondersteuningscombinaties: heeft dit huishouden/",
