@@ -20,6 +20,19 @@ suppressPackageStartupMessages({
 
 source("utils/venn_diagram.R")
 
+# The shared think-cell export stack from shiny_dashboard_template, in the order
+# the files build on each other (same order as tests/testthat.R). Wiring
+# conventions live in .claude/skills/thinkcell-export/SKILL.md; every chart that
+# gets download buttons goes through chart_data_downloads_ui/server rather than
+# growing its own handlers here.
+source("utils/format_thinkcell_download.R")
+source("utils/slide_download.R")
+source("utils/template_admin.R")
+source("utils/favorites.R")
+source("utils/export_history.R")
+source("utils/chart_downloads.R")
+source("utils/tab_theme.R")
+
 # ---------------------------------------------------------------------------
 # Data
 # ---------------------------------------------------------------------------
@@ -32,6 +45,27 @@ if (!dir.exists(DATA_DIR)) {
 
 ds  <- open_dataset(file.path(DATA_DIR, "indicators.parquet"))
 geo <- readRDS(file.path(DATA_DIR, "geo.rds"))
+
+# Provenance stamped into every export (tc_build_datasheet_log() in
+# utils/slide_download.R): which RA delivery a chart's numbers came from, and
+# when this app's own prepped copy of that delivery was last rebuilt. The raw
+# delivery stays on the analyst's machine and is never deployed, so
+# data-prep/01_build_app_data.R's parquet output -- what the app actually reads
+# and what ships -- is the file whose date describes the numbers on screen.
+RA_OUTPUT_ID   <- "output_1a"
+RA_SOURCE_FILE <- c(
+  "huishoudens met kinderen" = "OT_HHKIND.csv",
+  "ouderen (65+)"            = "OT_OUD.xlsx"
+)
+APP_DATA_MTIME <- local({
+  parts <- list.files(file.path(DATA_DIR, "indicators.parquet"),
+                      pattern = "\\.parquet$", recursive = TRUE, full.names = TRUE)
+  if (length(parts) == 0) {
+    ""
+  } else {
+    tc_format_source_mtime(parts[[which.max(file.info(parts)$mtime)]])
+  }
+})
 
 TOTAL_LABEL <- "(totaal)"
 
@@ -268,7 +302,22 @@ ui <- fluidPage(
                              c("Absoluut" = "abs", "Aandeel (%)" = "rel"),
                              selected = "rel")
               ),
-              downloadButton("r_dl", "Download data (xlsx)", class = "btn-default"),
+              # Raw xlsx, think-cell xlsx, slide (.pptx) and the favorite star
+              # for the line chart, all from the shared module -- see
+              # chart_data_downloads_server("r_downloads", ...) below for the
+              # data behind them.
+              chart_data_downloads_ui(
+                "r_downloads",
+                chart_type      = "line",
+                raw_label       = "Download data (ruw, xlsx)",
+                thinkcell_label = "Download data (think-cell, xlsx)",
+                slide_label     = "Download slide (PowerPoint)",
+                favorite_label  = "\u2606 Bewaar als favoriet",
+                # The plotlyOutput id below, deliberately un-namespaced: it is
+                # what the client-side snapshot looks up to put a PNG of this
+                # chart in a favorites/regenerate ZIP.
+                plot_output_id  = "lijn"
+              ),
               div(class = "note", style = "margin-top: 10px;",
                   "Een onderbroken lijn betekent dat het cijfer in dat jaar onderdrukt is.")
             ),
@@ -298,8 +347,18 @@ ui <- fluidPage(
           )
         )
       )
-    )
-  )
+    ),
+
+    # The three shared panels every dashboard built from shiny_dashboard_template
+    # carries (utils/favorites.R, utils/export_history.R, utils/template_admin.R).
+    # Their titles stay English: the panels' own copy is English, and
+    # tc_tab_color_theme() below keys its colour accents off this exact text.
+    tabPanel("Favorites", br(), favorites_panel_ui("favorieten")),
+    tabPanel("Export history", br(), export_history_panel_ui("exporthistorie")),
+    tabPanel("Manage templates", br(), template_admin_ui("templates"))
+  ),
+
+  tc_tab_color_theme(ahti_branding)
 )
 
 # ---------------------------------------------------------------------------
@@ -571,19 +630,50 @@ server <- function(input, output, session) {
             nm %||% input$r_regio, sp)
   })
 
+  # Short headline for the exported slide. regio_titel() above is the figure's
+  # own caption -- accurate but far too long for a slide title bar -- so the two
+  # go to the template's separate SlideTitle and FigureTitle placeholders (see
+  # tc_build_ppttc_slide_block() in utils/slide_download.R).
+  regio_slide_titel <- reactive({
+    req(input$r_var, input$r_regio, input$r_niveau)
+    nm <- names(region_choices[[input$r_niveau]])[
+      match(input$r_regio, region_choices[[input$r_niveau]])]
+    sprintf("%s - %s, %s-%s", pretty_var(input$r_var), nm %||% input$r_regio,
+            min(YEARS), max(YEARS))
+  })
+
+  # The figure's title stays an HTML heading above the plot rather than a plotly
+  # layout(title=): the full selection string is too long for a plotly title bar,
+  # and the Kaart tab titles its leaflet map the same way. It is still one
+  # reactive shared by the figure and the export (figure_title below), which is
+  # what lets a starred chart show its own title in Favorites instead of falling
+  # back to the sub-tab name.
   output$r_titel <- renderText(regio_titel())
 
+  # One source of truth for the line chart: the rows regio_data() returns plus
+  # each line's legend label, as a factor in the order the chart draws them.
+  # format_tc_data() inherits those factor levels, so an export lists its series
+  # the way the figure does instead of alphabetically -- the reason the
+  # thinkcell-export skill asks for factor-ordered data shared between plot and
+  # download rather than a separately-built export table.
+  regio_plot_data <- reactive({
+    d <- copy(regio_data())  # copy: `:=` would otherwise mutate regio_data()'s cached value
+    lv  <- unique(d$split_level)  # regio_data() is already ordered by split_level, year
+    lab <- unname(pretty_level(lv, input$r_split, input$populatie))
+    d[, reeks := factor(lab[match(split_level, lv)], levels = lab)]
+    d[]
+  })
+
   output$lijn <- renderPlotly({
-    d <- regio_data()
+    d <- regio_plot_data()
     validate(need(nrow(d) > 0, "Geen data voor deze selectie."))
 
-    pal <- rep(ahti_branding$scale_discrete, length.out = uniqueN(d$split_level))
+    lv_lab <- levels(d$reeks)
+    pal <- rep(ahti_branding$scale_discrete, length.out = length(lv_lab))
 
     p <- plot_ly(source = "lijn")
-    lv <- unique(d$split_level)
-    lv_lab <- pretty_level(lv, input$r_split, input$populatie)
-    for (i in seq_along(lv)) {
-      di <- d[split_level == lv[i]]
+    for (i in seq_along(lv_lab)) {
+      di <- d[reeks == lv_lab[i]]
       p <- add_trace(
         p, data = di, x = ~year, y = ~waarde,
         type = "scatter", mode = "lines+markers",
@@ -605,7 +695,7 @@ server <- function(input, output, session) {
                      ticksuffix = if (input$r_weergave == "rel") "%" else ""),
         hovermode = "x unified",
         legend = list(orientation = "h", y = -0.12),
-        showlegend = uniqueN(d$split_level) > 1,
+        showlegend = length(lv_lab) > 1,
         margin = list(t = 20)
       ) |>
       config(displaylogo = FALSE,
@@ -693,8 +783,11 @@ server <- function(input, output, session) {
   })
 
   # -------------------------------------------------------------- Downloads ---
-  # Raw data export only for now; the think-cell / favorites layer in utils/ is
-  # deliberately not wired up yet (see PLAN.md).
+  # The Kaart tab keeps its plain xlsx export (a choropleth has no think-cell
+  # equivalent); the Per regio line chart is wired to the shared export layer in
+  # utils/ -- raw xlsx, think-cell xlsx, slide .pptx, favorites and export
+  # history (PLAN.md §4, stap 7). Wiring a second chart means repeating the
+  # ui/server pair, never reimplementing any of it here.
 
   export_cols <- function(d) {
     d[, .(populatie = population, regioniveau = region_level,
@@ -710,13 +803,59 @@ server <- function(input, output, session) {
     content  = function(file) write_xlsx(export_cols(kaart_data()), file)
   )
 
-  output$r_dl <- downloadHandler(
-    filename = function() sprintf("dynamo_regio_%s.xlsx", Sys.Date()),
-    content  = function(file) write_xlsx(export_cols(regio_data()), file)
+  # The table behind every Per regio export: exactly the rows the line chart
+  # draws, under the same Dutch column names the raw download has always used.
+  # jaar / reeks / weergegeven_waarde are the category / series / value columns
+  # the think-cell matrix is pivoted from; the rest rides along in the raw sheet
+  # so n, noemer and the CBS codes stay checkable.
+  regio_export_data <- reactive({
+    d <- regio_plot_data()
+    out <- export_cols(d)
+    out[, reeks := d$reeks]
+    out[]
+  })
+
+  # Registered once for the whole app: labels each export's provenance log with
+  # the dashboard name and the active tab / sub-tab. dl_option_prefixes scopes
+  # the "selected options" section per chart -- without it every input in the
+  # app lands in the line chart's log, including the Kaart tab's k_* selectors
+  # and the r_venn_* ones, which belong to the venn below the chart, not to the
+  # line.
+  tc_register_app_context(
+    input,
+    dashboard_title = "Dynamo Amsterdam",
+    nav_id = "hoofdtab",
+    subtab_by_tab = c("Iteratie 1" = "subtab"),
+    dl_option_prefixes = c(
+      "r_downloads" = "^(populatie|r_niveau|r_regio|r_var|r_val|r_metric|r_split|r_weergave)$"
+    )
   )
 
-  # The venn slice is a different year and a different split than the line
-  # chart above it, so r_dl does not cover it.
+  chart_data_downloads_server(
+    id           = "r_downloads",
+    data         = regio_export_data,
+    chart_type   = "line",
+    category_col = "jaar",
+    series_col   = "reeks",
+    value_col    = "weergegeven_waarde",
+    filename_prefix = "dynamo_regio",
+    # The delivery is already aggregated: one row per jaar x reeks, so there is
+    # nothing left to aggregate and a duplicate pair would be a real bug.
+    agg_fun      = NULL,
+    slide_title  = regio_slide_titel,
+    figure_title = regio_titel,
+    source_output = RA_OUTPUT_ID,
+    source_sheet  = reactive({
+      req(input$populatie)
+      f <- RA_SOURCE_FILE[input$populatie]
+      if (is.na(f)) "" else unname(f)
+    }),
+    source_mtime = APP_DATA_MTIME
+  )
+
+  # The venn's own slice: a different year and a different split than the line
+  # chart above it, so the export panel next to that chart does not cover it.
+  # No think-cell route either -- like the choropleth, a venn has no template.
   output$r_venn_dl_data <- downloadHandler(
     filename = function() sprintf("dynamo_venn_%s_%s.xlsx", input$r_venn_jaar, Sys.Date()),
     content  = function(file) write_xlsx(export_cols(venn_data()), file)
@@ -746,6 +885,12 @@ server <- function(input, output, session) {
       writeLines(svg, con, useBytes = TRUE)
     }
   )
+
+  # The three shared tabs. They read the same state/ files any chart writes to,
+  # so nothing here needs to know which charts are wired up.
+  favorites_panel_server("favorieten")
+  export_history_panel_server("exporthistorie")
+  template_admin_server("templates")
 }
 
 shinyApp(ui, server)

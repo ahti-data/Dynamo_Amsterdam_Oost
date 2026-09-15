@@ -67,6 +67,13 @@ These are verified against the actual delivery, not assumed from the output form
   the shared scale it flattened all seven circle regions into one tint. Its value is still in
   the label and the tooltip.
 - `templates/` — built-in think-cell `.pptx` slide templates for the "Download slide" export.
+  The line chart on **Per regio** is the one chart wired to the export layer
+  (`chart_data_downloads_ui`/`_server`, id `r_downloads`, `chart_type = "line"`); the
+  choropleth and the venn have no think-cell equivalent and keep plain download buttons
+  (the venn: its own `.svg` of the figure plus an xlsx of its slice, which has a different
+  year and split than the line chart's export). Adding a chart means repeating that ui/server
+  pair — see
+  PLAN.md §6 and the `thinkcell-export` skill, never reimplementing export logic in `app.R`.
 - `state/` — runtime state (favorites, export history, uploaded templates); never committed,
   never synced by the deploy workflow, so it survives a redeploy.
 - `tests/testthat/` — testthat tests.
@@ -110,6 +117,10 @@ Verified present on this machine (R 4.5.2): shiny, leaflet, sf, data.table, ggpl
 plotly, arrow, readxl, jsonlite, bslib, DT, shinyWidgets, writexl, filelock, shinymanager,
 testthat.
 
+`format_tc_data()` also reaches for tidyr, tibble and rlang, and it takes `%>%` from the
+app's own `library(dplyr)` rather than importing it — so those three are runtime
+dependencies of `app.R` now that the export layer is wired up, not just of the test suite.
+
 ## Running
 
 ```r
@@ -130,8 +141,9 @@ from `app.R`.
 
 Current failure baseline on this machine: **FAIL 36** — identical to the same suite in
 `shiny_dashboard_template`, so it is not something this repo introduced. Every failure comes
-from `zip` not being on PATH, which only affects the slide/favorites ZIP paths (the layer v1
-does not wire up). The template's `.claude/launch.json` works around it by prepending a
-`zip-shim` directory to PATH. Treat 36 as the pass mark until `zip` is available; a 37th
-failure is a real regression. The pass count was 408 before `test-venn_diagram.R` was added
-(59 more passes there, plus one that needs `xml2` and skips without it).
+from `zip` not being on PATH, which only affects the slide/favorites ZIP paths. The
+template's `.claude/launch.json` works around it by prepending a `zip-shim` directory to
+PATH. Treat 36 as the pass mark until `zip` is available; a 37th failure is a real
+regression. Those 36 really are only the missing `zip`: on a Linux box that has `zip` (but
+no `readxl`) the same suite ran **FAIL 0 | PASS 483 | SKIP 9** — that count predates
+`test-venn_diagram.R`, which adds 59 passes plus one that needs `xml2` and skips without it.
