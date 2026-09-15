@@ -14,9 +14,9 @@ Eerst eenmalig `Rscript data-prep/01_build_app_data.R` — dat zet de 330 MB CSV
 om naar 7,6 MB parquet plus de geometrie.
 
 Afspraken uit het overleg: **heel Amsterdam** (niet alleen Oost), in v1 **alleen
-data-export** (de think-cell/favorieten-laag uit `utils/` staat klaar maar is bewust nog
-niet aangesloten), en deployment naar healthinsights.ahti.nl waar Authelia de login
-standaard afhandelt — dus géén shinymanager in deze repo.
+data-export**, en deployment naar healthinsights.ahti.nl waar Authelia de login standaard
+afhandelt — dus géén shinymanager in deze repo. De think-cell/favorieten-laag uit `utils/`
+is inmiddels aangesloten, voorlopig alleen op het lijndiagram (zie §4 stap 7 en §6).
 
 ---
 
@@ -177,6 +177,13 @@ Besturing: regioniveau + regio · indicator · metric · split_by.
 `plotly` lijndiagram 2018–2024, één lijn per niveau van de gekozen splitvariabele (bij
 "(totaal)" één lijn). Hover met jaar + waarde. Zelfde absoluut/relatief-keuze.
 
+Dit is de enige figuur met de volledige exportlaag eronder (§4 stap 7): ruwe xlsx,
+think-cell-xlsx, slide (.pptx) en de favorietenster, via
+`chart_data_downloads_ui()`/`chart_data_downloads_server()`. De tabel achter die knoppen is
+exact wat het diagram tekent — één rij per jaar × lijn, met de legendanaam van de lijn als
+factor in tekenvolgorde, zodat de geëxporteerde matrix dezelfde volgorde heeft als de
+figuur.
+
 Daaronder, **altijd zichtbaar** (los van wat er bij "Splits de lijn uit naar" gekozen is):
 een 3-cirkel venn/euler-diagram van `O_MPG_combination`/`O_OUD_combination`, choropleth-
 gekleurd (zelfde YlOrRd-schaal als de kaart) voor de gekozen regio/indicator/waarde/metric
@@ -199,7 +206,9 @@ Elk deelgebied heeft een SVG `<title>` (native browser-hover) met de volledige g
 4. Per regio-subtab.
 5. Absoluut/relatief.
 6. Onderdrukkingslogica + legenda-afwerking.
-7. Pas daarna: think-cell export / favorites aanhaken (zie open vraag 2).
+7. Pas daarna: think-cell export / favorites aanhaken. **Gedaan** voor het lijndiagram op
+   de subtab "Per regio", inclusief de drie gedeelde tabbladen (Favorites / Export history /
+   Manage templates). Kaart en venn zijn bewust niet aangesloten — zie §6.
 
 ---
 
@@ -235,14 +244,31 @@ blijft voor élke metric een geldig percentage. `n_totaal` gaat wel mee in de to
 Voor `metric_name = n_households` vallen beide definities samen: de categorieën tellen daar
 op tot `n_totaal` (Amsterdam 2024, R_MPG_totaal: 38.610 + 26.660 + 13.910 + 8.340 = 87.520).
 
+### De exportlaag — wat er wel en niet aangesloten is
+
+Aangesloten op het **lijndiagram** (subtab "Per regio"): ruwe xlsx, think-cell-xlsx,
+slide-ZIP en de favorietenster, plus de drie gedeelde tabbladen **Favorites**,
+**Export history** en **Manage templates**. Elke export krijgt automatisch een herkomstregel
+mee (`tc_build_datasheet_log()`): tijdstip, download-id, dashboard/tab/subtab, chart_type,
+de gekozen filters van díé figuur (niet die van de hele app), en de levering waar de cijfers
+uit komen — `output_1a` + `OT_HHKIND.csv`/`OT_OUD.xlsx`, met de bouwdatum van de parquet als
+`source_updated`, want de ruwe levering staat niet op de server.
+
+De tabbladen heten Engels ("Favorites", "Export history", "Manage templates"), net als de
+panelen zelf: die komen ongewijzigd uit `shiny_dashboard_template` en worden met de andere
+dashboards gedeeld, dus vertalen hoort daar centraal te gebeuren en niet als fork hier. De
+knoppen bij de figuur zijn wél Nederlands — dat zijn per-aanroep labels.
+
+**Niet aangesloten:** de Kaart (een choropleth heeft geen think-cell-sjabloon; die houdt
+zijn losse xlsx-download) en het venn-diagram (idem, en het is handgeschreven SVG, geen
+ggplot/plotly-figuur).
+
 ### Nog open
 
-1. **Wanneer de think-cell/favorieten-laag aangesloten wordt.** `utils/` is compleet
-   meegekomen; het aansluiten is stap 7 uit §4.
-2. **Labels voor de indicatoren.** Nu worden de kolomnamen opgeschoond weergegeven
+1. **Labels voor de indicatoren.** Nu worden de kolomnamen opgeschoond weergegeven
    (`R_MPG1_armoede_hh` → "MPG1 - armoede"). Als er een vastgestelde Nederlandse
    omschrijving per indicator is, is dat een betere bron dan de variabelenaam.
-3. **`variable_value` = `3plus`.** Wordt nu getoond zoals hij is. Voor de stapelings-
+2. **`variable_value` = `3plus`.** Wordt nu getoond zoals hij is. Voor de stapelings-
    variabelen betekent het "3 of meer risicofactoren"; voor de binaire varianten komt de
    waarde niet voor. Eventueel expliciet labelen.
 

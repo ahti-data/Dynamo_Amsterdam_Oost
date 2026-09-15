@@ -22,12 +22,16 @@ shiny::runApp("app.R")
 
 ## Structuur
 
-- `app.R` — het dashboard: één tab "Iteratie 1" met de subtabs **Kaart** en **Per regio**.
+- `app.R` — het dashboard: de tab "Iteratie 1" met de subtabs **Kaart** en **Per regio**,
+  plus de drie gedeelde tabbladen **Favorites**, **Export history** en **Manage templates**
+  (Engels, net als de panelen zelf — die komen ongewijzigd uit `shiny_dashboard_template`).
 - `data-prep/` — eenmalige scripts die een RA-levering omzetten naar `data/app_data/`.
 - `data/output_data/` — ruwe RA-leveringen (niet in git).
 - `data/geo/` — Amsterdamse geometrie (buurten, wijken, gebieden).
 - `utils/` — gedeelde helpers uit `shiny_dashboard_template`, inclusief de think-cell
-  exportlaag (nog niet aangesloten, zie PLAN.md §6).
+  exportlaag. Die is aangesloten op het lijndiagram op **Per regio** (ruwe xlsx,
+  think-cell-xlsx, slide `.pptx`, favorieten, exportgeschiedenis); de Kaart houdt zijn
+  losse xlsx-download. Zie PLAN.md §6.
 - `templates/` — think-cell `.pptx` sjablonen.
 
 ## Let op bij de cijfers
