@@ -1,12 +1,14 @@
 # Build the app's data from a CBS RA delivery.
 #
-# One-off prep step: re-run by hand after each new delivery, then commit nothing --
-# both the raw input and the output under data/app_data/ are gitignored.
+# One-off prep step: re-run by hand after each new delivery. De ruwe levering
+# onder data/output_data/ blijft lokaal (gitignored); de parquet-uitvoer onder
+# data/app_data/ wordt wel gecommit -- de CI-runner bouwt hem niet zelf (PLAN.md 6).
 #
 #   Rscript data-prep/01_build_app_data.R
 #
 # Reads  : data/output_data/output_1a/{OT_HHKIND.csv,OT_OUD.xlsx}
 #          data/geo/GM0363_{buurten,wijken,gebieden}.geojson
+#          data-prep/derive_support_splits.R  (afgeleide ondersteuningsvormen)
 # Writes : data/app_data/indicators.parquet  (partitioned by population/region_level)
 #          data/app_data/geo.rds
 
@@ -216,6 +218,22 @@ if (missing_name > 0L) {
   warning(sprintf("%d rows have no region_name -- check the geometry vintage.", missing_name))
   print(unique(dt[is.na(region_name), .(region_level, region_code)])[1:20])
 }
+
+# ---------------------------------------------------------------------------
+# Afgeleide ondersteuningsuitsplitsingen
+# ---------------------------------------------------------------------------
+
+# "Wel/geen ondersteuningssignaal" en "hoeveel vormen tegelijk" zitten niet als
+# kolom in de levering, maar zijn exact af te leiden uit de combinatierijen --
+# zie data-prep/derive_support_splits.R voor de afleiding en de
+# onderdrukkingsregel. Draait voor de noemerberekening hieronder, zodat die in
+# een keer ook over de nieuwe rijen gaat.
+source(file.path(ROOT, "data-prep", "derive_support_splits.R"))
+
+message("Deriving support splits ...")
+n_voor <- nrow(dt)
+dt <- add_support_derivations(dt)
+message(sprintf("  +%s rows", format(nrow(dt) - n_voor, big.mark = ".")))
 
 # Share denominator: the total across the variable_value categories within the
 # same slice. Unlike n_totaal (households) this stays a valid percentage for

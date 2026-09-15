@@ -2,7 +2,7 @@
 
 Status: **versie 1 staat en draait lokaal.** Geschreven na inspectie van de eerste CBS
 RA-output (`data/output_data/output_1a/`, opgeleverd 09-09-2026); §1–5 beschrijven de
-verantwoording, §6 wat er nog open staat.
+verantwoording, §6 wat er nog open staat en §7 de afgeleide ondersteuningsvariabelen.
 
 Draaien:
 
@@ -11,7 +11,9 @@ shiny::runApp("app.R")
 ```
 
 Eerst eenmalig `Rscript data-prep/01_build_app_data.R` — dat zet de 330 MB CSV + 19 MB xlsx
-om naar 7,6 MB parquet plus de geometrie.
+om naar 9,9 MB parquet plus de geometrie. Verandert alléén de afleiding in §7 en niet de
+levering, dan volstaat `Rscript data-prep/02_add_derived_splits.R` (seconden in plaats van
+minuten; werkt de bestaande parquet ter plekke bij).
 
 Afspraken uit het overleg: **heel Amsterdam** (niet alleen Oost), in v1 **alleen
 data-export**, en deployment naar healthinsights.ahti.nl waar Authelia de login standaard
@@ -136,12 +138,14 @@ Draait handmatig na elke nieuwe RA-levering. Doet:
    Totaalrijen krijgen `split_var = "(totaal)"`. Dit maakt de UI generiek: HHKIND (4 splits)
    en OUD (3 splits) worden door dezelfde code bediend.
 3. Regionamen en stadsdeel aanhaken vanuit de geojson.
-4. `denominator` vooraf berekenen (zie open vraag 1).
-5. Wegschrijven als **parquet, gepartitioneerd op `population` / `region_level`**. De app
+4. **Afgeleide ondersteuningsuitsplitsingen** toevoegen — `data-prep/derive_support_splits.R`,
+   zie §7. Vóór de noemer, zodat die in één keer ook over de nieuwe rijen gaat.
+5. `denominator` vooraf berekenen (zie open vraag 1).
+6. Wegschrijven als **parquet, gepartitioneerd op `population` / `region_level`**. De app
    leest lazy via `arrow` en haalt per slice alleen de benodigde partitie op — dan hoeft
-   3,5 mln rijen nooit volledig in geheugen, wat schaalt als er meerdere gebruikers tegelijk op
+   4,7 mln rijen nooit volledig in geheugen, wat schaalt als er meerdere gebruikers tegelijk op
    de server zitten.
-6. Geometrie: drie geojson + afgeleide stadsdeellaag, vereenvoudigd (`st_simplify`) voor
+7. Geometrie: drie geojson + afgeleide stadsdeellaag, vereenvoudigd (`st_simplify`) voor
    snelheid in de browser, weggeschreven als `data/app_data/geo.rds`.
 
 De ruwe 330 MB CSV en 19 MB xlsx blijven buiten git (`.gitignore`); de parquet-output is
@@ -195,6 +199,19 @@ buiten de 3 cirkels — begrensd door een afgeronde rechthoek, niet de hele SVG 
 CRAN-package voor een 3-cirkel venn met onafhankelijk gekleurde/hoverbare deelgebieden.
 Elk deelgebied heeft een SVG `<title>` (native browser-hover) met de volledige groepsnaam
 + waarde; een vaste tekstlegenda onder de figuur geeft de volledige omschrijving per groep.
+
+Onder de figuur staat **dezelfde venn in tabelvorm**: acht rijen (de deelgebieden, in de
+volgorde van de figuur) × de categorieën van de gekozen risicoscore, plus een `n`-kolom met
+de omvang van elk deelgebied. Dat is wat de figuur per definitie niet kan tonen — die staat
+op één gekozen waarde — en het is precies de kruising waar de risicostapeling per
+ondersteuningsgroep zichtbaar wordt. Bij "Aandeel (%)" telt elke rij op tot 100%. De
+xlsx-download onder de figuur heeft daarom twee tabbladen: `figuur` (de slice van de figuur)
+en `risicomatrix` (alle risicowaarden).
+
+De figuur en de tabel delen één sleutelvector, `venn_levels()` — dat is wat garandeert dat
+een combinatieniveau in beide in hetzelfde vakje terechtkomt. Kiest de gebruiker een van de
+twee afgeleide ondersteuningsindicatoren (§7), dan bestaat die kruising niet en tonen figuur
+en tabel een uitleg in plaats van een volledig grijs figuur.
 
 ---
 
@@ -297,3 +314,105 @@ blijft wél lokaal-only.
 Aanname: de repo-secrets `FTP_USERNAME`/`FTP_SERVER`/`FTP_PASSWORD` bestaan al (dezelfde namen
 worden al gebruikt door `.github/workflows/deploy-dynamo.yml` voor het client-dashboard) — niet
 vanaf hier te verifiëren zonder `gh` op deze machine.
+
+---
+
+## 7. Afgeleide ondersteuningsvariabelen
+
+Op verzoek van het team: een kaart van het **aandeel gezinnen dat een vorm van ondersteuning
+gebruikt**, en de uitsplitsing naar **één, twee of drie vormen tegelijk, gekruist met de
+risicoscore**. Geen van beide staat als kolom in de levering — wel is beide er exact uit af
+te leiden, want `O_MPG_combination`/`O_OUD_combination` partitioneert de populatie over acht
+niveaus ("none", 3 losse groepen, 3 paren, alle 3). Geverifieerd op de levering van
+09-09-2026: de som over die acht komt op de totaalrij uit, op afronding na (Amsterdam 2024,
+`n_households`, `R_MPG_totaal`: 38.610 / 26.640 / 13.920 / 8.340 tegen 38.610 / 26.660 /
+13.910 / 8.340 in de totaalrijen).
+
+De afleiding staat in **`data-prep/derive_support_splits.R`** en draait in de prep-stap, niet
+in de app — de app filtert en rekent één percentage uit, verder niets. Twee scripts roepen
+dezelfde `add_support_derivations()` aan, dus ze kunnen niet uit elkaar lopen:
+`01_build_app_data.R` (nieuwe levering) en `02_add_derived_splits.R` (bestaande parquet
+bijwerken, idempotent).
+
+### Twee vormen, omdat de noemer verschilt
+
+**Als splitsvariabele** — `variable_value` blijft de risicoscore, dus dit kruist de
+ondersteuning met de risicostapeling:
+
+| `split_var` | niveaus |
+|---|---|
+| `ondersteuningssignaal` | `geen`, `wel` |
+| `aantal_ondersteuningsvormen` | `0`, `1`, `2`, `3` |
+
+Bij "Aandeel (%)" is de noemer de gekozen groep zelf: *van de gezinnen met twee vormen
+ondersteuning heeft x% drie of meer risicofactoren.* Dat is de gevraagde kruising.
+
+**Als indicator** (`variable_name`) — de ondersteuning zit dan zelf in `variable_value`, dus
+de noemer is de hele populatie:
+
+| `variable_name` | waarden |
+|---|---|
+| `O_MPG_ondersteuning` / `O_OUD_ondersteuning` | `geen`, `wel` |
+| `O_MPG_aantal_vormen` / `O_OUD_aantal_vormen` | `0`, `1`, `2`, `3` |
+
+Bij "Aandeel (%)" leest dat als *x% van de gezinnen gebruikt een vorm van ondersteuning* —
+de kaart die gevraagd is. Amsterdam 2024, `n_households`: **42,9% wel, 57,1% geen**; naar
+aantal vormen 57,1% / 31,0% / 10,2% / 1,8%. Deze vorm bestaat alleen op de totaalrij: de
+levering heeft nooit twee splitsingen tegelijk, dus kruisen met een andere splitsing kan
+niet. De keuzelijst "Splits uit naar" hangt daarom aan de gekozen indicator, zodat een
+combinatie zonder rijen niet aan te klikken is.
+
+### Onderdrukking: exact of niets
+
+Onderdrukt is hier een **ontbrekende rij**, geen `NA` — de laagste `metric_value` in de hele
+levering is 10. Een som over combinatieniveaus telt zo'n ontbrekende cel stilzwijgend als
+nul, precies wat de CBS-uitvoerregels van dit project verbieden. Daarom wordt een afgeleide
+cel alleen weggeschreven als élke bouwsteen eronder gepubliceerd is; anders komt er geen rij
+en toont het dashboard "onvoldoende waarnemingen", net als bij elke andere onderdrukte cel.
+Liever een grijs vlak dan een te laag getal.
+
+- `geen` / `0` = de `none`-rij zelf.
+- `wel` = **totaalrij − `none`-rij**, bewust niet de som van de andere zeven: het verschil
+  telt de onderdrukte combinaties gewoon mee, de som laat ze vallen. Valt het verschil onder
+  de 10, dan vervalt de cel — dezelfde drempel als de levering hanteert.
+- `1` = som van de 3 losse groepen, `2` = som van de 3 paren, alleen als ze compleet zijn.
+- `3` = de rij met alle drie.
+
+Voor de indicatorvorm geldt bovendien alles-of-niets over de risicowaarden: de noemer is de
+som over de eigen categorieën, dus een half aanwezige partitie zou het percentage te hoog
+maken.
+
+### Welke risicoscore de indicator voedt
+
+Optellen over de risicowaarden mag alleen als die reeks compleet is. Welke `R_`-score de bron
+is maakt inhoudelijk niet uit — elke score verdeelt dezelfde populatie, dus de som over zijn
+categorieën is hetzelfde aantal huishoudens/ouderen. Wat wél uitmaakt is onderdrukking: de
+cumulatieve score heeft vier categorieën en verliest er in een kleine buurt snel een, een
+binaire score heeft er twee. De afleiding kiest daarom per slice de eerste bron die volledig
+gepubliceerd is, met de cumulatieve score voorop en daarna de losse risicofactoren op naam.
+Gemeten op deze levering verschillen complete bronnen onderling 0–20, precies de
+afrondingsmarge.
+
+Dekking van de indicatorvorm (aandeel slices met een cijfer):
+
+| regioniveau | `*_ondersteuning` | `*_aantal_vormen` |
+|---|---|---|
+| gemeente | 100% | 100% |
+| stadsdeel | 98% | 59% |
+| gebied | 97% | 46% |
+| wijk | 90% | 4% |
+| buurt | 63% | 0% |
+
+`*_ondersteuning` is dus overal bruikbaar (zonder de bronkeuze was buurt 18% geweest);
+`*_aantal_vormen` vraagt alle acht combinaties tegelijk en is daarmee pas vanaf gebiedsniveau
+zinvol. Dat staat als kanttekening onder de indicatorkeuze in de app. De splitsvorm heeft dat
+probleem veel minder — die telt niet over de risicowaarden heen.
+
+### Waar dit nog scherper kan
+
+Een afgeleide categorie vervalt nu zodra één bouwsteen onderdrukt is, ook als die bouwsteen
+klein is ten opzichte van de rest (een zeldzaam paar van < 10 laat "2 vormen" vervallen, ook
+als de andere twee paren samen 300 zijn). Dat is de veilige kant, maar het kost dekking bij
+`aantal_ondersteuningsvormen`. Wie dat wil verruimen, doet dat in
+`derive_support_split_rows()` — met een expliciete, gedocumenteerde foutmarge, niet
+stilzwijgend.

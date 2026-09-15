@@ -111,6 +111,21 @@ COMBO_GROUP_UITLEG <- list(
 # so one merged lookup is safe and simpler than branching on population.
 RISICO_LABELS <- c(RISICO_LABELS_HHKIND, RISICO_LABELS_OUD)
 
+# De twee afgeleide ondersteuningsuitsplitsingen uit de prep-stap
+# (data-prep/derive_support_splits.R). Ze staan gewoon als rijen in de dataset,
+# dus de keuzelijsten vinden ze vanzelf; de app hoeft ze alleen te kunnen
+# benoemen, en te weten dat de indicatorvorm alleen op de totaalrij bestaat.
+#
+#   als splitsvariabele -> kruist met de risicoscore ("van de gezinnen met 2
+#     vormen ondersteuning heeft x% drie of meer risicofactoren")
+#   als indicator       -> de noemer is de hele populatie ("x% van de gezinnen
+#     gebruikt een vorm van ondersteuning")
+ONDERSTEUNING_SPLITS      <- names(ONDERSTEUNING_SPLIT_LABELS)
+ONDERSTEUNING_INDICATOREN <- names(ONDERSTEUNING_INDICATOR_LABELS)
+
+# variable_name -> omschrijving, voor alles wat in "Risicoscore" kan staan.
+VAR_LABELS <- c(RISICO_LABELS, ONDERSTEUNING_INDICATOR_LABELS)
+
 # ---------------------------------------------------------------------------
 # Labels
 # ---------------------------------------------------------------------------
@@ -121,7 +136,7 @@ RISICO_LABELS <- c(RISICO_LABELS_HHKIND, RISICO_LABELS_OUD)
 # lookup, so a future indicator the labels file hasn't caught up with still
 # renders as something readable rather than breaking.
 pretty_var <- function(x) {
-  known <- RISICO_LABELS[x]
+  known <- VAR_LABELS[x]
   fallback <- {
     s <- sub("^R_", "", x)
     s <- sub("_hh$", "", s)
@@ -138,7 +153,27 @@ pretty_metric <- function(x) {
 }
 
 pretty_split <- function(x) {
-  ifelse(x == TOTAL_LABEL, TOTAL_LABEL, gsub("_", " ", sub("_hh$", "", x)))
+  known <- ONDERSTEUNING_SPLIT_LABELS[x]
+  fallback <- ifelse(x == TOTAL_LABEL, TOTAL_LABEL, gsub("_", " ", sub("_hh$", "", x)))
+  unname(ifelse(is.na(known), fallback, known))
+}
+
+# Categorielabel voor een afgeleide ondersteuningswaarde ("wel", "2"), in
+# beide vormen: als variable_value van de indicator en als split_level van de
+# splitsing zijn het dezelfde codes. Onbekende codes blijven zichzelf.
+pretty_ondersteuning <- function(x) {
+  x <- as.character(x)
+  if (length(x) == 0L) return(character(0))  # ifelse() zou hier logical(0) geven
+  lab <- ONDERSTEUNING_NIVEAU_LABELS[x]
+  unname(ifelse(is.na(lab), x, lab))
+}
+
+# "Waarde van de indicator". De risicoscores houden hun ruwe waarde (0/1/2/
+# 3plus, zie PLAN.md 6, open punt 2); bij de afgeleide indicatoren is de
+# waarde zelf een categorie en krijgt hij zijn label mee.
+pretty_value <- function(x, variable_name) {
+  if (isTRUE(variable_name %in% ONDERSTEUNING_INDICATOREN)) return(pretty_ondersteuning(x))
+  x
 }
 
 # "O_MPG1 + O_MPG2" -> "Jeugdhulp + Psychosociale zorg (volwassenen)": every
@@ -165,6 +200,10 @@ pretty_level <- function(x, split_var = NULL, population = NULL) {
       isTRUE(split_var == COMBO_SPLIT_VAR[[population]])) {
     return(pretty_combo_level(x, COMBO_GROUP_LABELS[[population]]))
   }
+  # Dit gaat voor de 0/1-vuistregel hieronder: de niveaus van
+  # aantal_ondersteuningsvormen zijn "0" t/m "3", en een slice waarin alleen
+  # "0" en "1" overblijven zou anders als nee/ja gelezen worden.
+  if (isTRUE(split_var %in% ONDERSTEUNING_SPLITS)) return(pretty_ondersteuning(x))
   if (all(x %in% c("0", "1"))) {
     return(c("0" = "nee", "1" = "ja")[x])
   }
@@ -205,10 +244,22 @@ ui <- fluidPage(
     .note { font-size: 12px; color: %3$s; line-height: 1.45; }
     .chart-title { font-weight: 600; font-size: 15px; margin-bottom: 8px; color: %1$s; }
     .nav-tabs > li.active > a { border-top: 2px solid %2$s !important; }
+    .venn-tab { width: 100%%; border-collapse: collapse; font-size: 12.5px; }
+    .venn-tab th, .venn-tab td { padding: 5px 9px; border-bottom: 1px solid #e6ebee; }
+    .venn-tab thead th { color: %1$s; font-weight: 600; border-bottom: 1.5px solid %1$s; }
+    .venn-tab th.venn-tab-span { text-align: center; }
+    .venn-tab .venn-tab-groep { text-align: left; }
+    .venn-tab .venn-tab-num, .venn-tab .venn-tab-n { text-align: right;
+        font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .venn-tab td.venn-tab-n { color: %3$s; }
+    .venn-tab tr.venn-tab-none td { background: %5$s; }
+    .venn-tab tbody tr:hover td { background: %4$s; }
+    .venn-tab-na { color: %3$s; cursor: help; }
   ", ahti_branding$colors$grijs_blauw,
      ahti_branding$colors$helder_blauw,
      ahti_branding$colors$midden_grijs,
-     ahti_branding$colors$licht_grijs)))),
+     ahti_branding$colors$licht_grijs,
+     VENN_NONE_FILL)))),
 
   h2("Dynamo Amsterdam", class = "app-title"),
   div("Risicostapeling bij huishoudens met kinderen en ouderen, 2018-2024. ",
@@ -242,10 +293,8 @@ ui <- fluidPage(
                 selectInput("k_niveau", "Regioniveau", choices = REGION_LEVELS, selected = "wijk")
               ),
               control_card(
-                selectInput("k_var", "Risicoscore (R_...)", choices = NULL),
-                div(class = "note", style = "margin: -6px 0 10px;",
-                    "Alle scores hieronder zijn risico-indicatoren: waarde één betekent",
-                    " dat dit risico aanwezig is bij het huishouden/de oudere."),
+                selectInput("k_var", "Indicator", choices = NULL),
+                uiOutput("k_var_note"),
                 selectInput("k_val", "Waarde van de indicator", choices = NULL),
                 selectInput("k_metric", "Metric", choices = NULL)
               ),
@@ -255,7 +304,7 @@ ui <- fluidPage(
                   "input.k_split != '(totaal)'",
                   selectInput("k_level", "Toon welk niveau", choices = NULL)
                 ),
-                uiOutput("k_combo_legend")
+                uiOutput("k_split_note")
               ),
               control_card(
                 radioButtons("k_weergave", "Weergave",
@@ -287,10 +336,8 @@ ui <- fluidPage(
                 selectizeInput("r_regio", "Regio", choices = NULL)
               ),
               control_card(
-                selectInput("r_var", "Risicoscore (R_...)", choices = NULL),
-                div(class = "note", style = "margin: -6px 0 10px;",
-                    "Alle scores hieronder zijn risico-indicatoren: waarde één betekent",
-                    " dat dit risico aanwezig is bij het huishouden/de oudere."),
+                selectInput("r_var", "Indicator", choices = NULL),
+                uiOutput("r_var_note"),
                 selectInput("r_val", "Waarde van de indicator", choices = NULL),
                 selectInput("r_metric", "Metric", choices = NULL)
               ),
@@ -340,9 +387,8 @@ ui <- fluidPage(
                   " erbuiten, anders bepaalt die in haar eentje de hele schaal."),
               uiOutput("venn"),
               uiOutput("venn_legenda"),
-              div(style = "text-align: center; margin-top: 14px;",
-                  downloadButton("r_venn_dl", "Download figuur (svg)", class = "btn-default"),
-                  downloadButton("r_venn_dl_data", "Download data (xlsx)", class = "btn-default"))
+              uiOutput("venn_tabel"),
+              uiOutput("venn_downloads")
             )
           )
         )
@@ -374,22 +420,21 @@ server <- function(input, output, session) {
     vocab[population == input$populatie]
   })
 
-  # Within one population the indicator / metric / split vocabulary is fixed, so
+  # Within one population the indicator and metric vocabulary is fixed, so
   # these only ever need refreshing when the population changes. "Waarde van
-  # de indicator" (k_val/r_val) is handled separately below: it depends on
-  # which indicator is selected, not just the population -- the individual
-  # risk factors are binary (0/1) but the totaalscore is a stapeling (0/1/2/
-  # 3plus), so a fixed population-wide list would offer values that don't
-  # apply to the chosen indicator.
+  # de indicator" (k_val/r_val) and "Splits uit naar" (k_split/r_split) are
+  # handled separately below: both depend on which indicator is selected, not
+  # just on the population -- the individual risk factors are binary (0/1) but
+  # the totaalscore is a stapeling (0/1/2/3plus), and the derived
+  # ondersteunings-indicators only exist on the total row, so a fixed
+  # population-wide list would offer combinations that have no rows at all.
   observeEvent(input$populatie, {
     v <- pop_vocab()
 
     vars    <- sort(unique(v$variable_name))
     metrics <- sort(unique(v$metric_name))
-    splits  <- unique(v$split_var)
-    splits  <- c(TOTAL_LABEL, sort(setdiff(splits, TOTAL_LABEL)))
 
-    ids <- paste0(rep(c("k", "r"), each = 3), c("_var", "_metric", "_split"))
+    ids <- paste0(rep(c("k", "r"), each = 2), c("_var", "_metric"))
 
     # Read the current picks BEFORE freezing: a frozen input throws a silent
     # error when read, which would abort this observer before it sends any
@@ -405,15 +450,13 @@ server <- function(input, output, session) {
     # not updated here: they depend on k_var/r_var (see below), which is
     # itself mid-change, so any stale read of k_val this same flush must also
     # be halted rather than paired with the wrong population's indicator.
-    for (i in c(ids, "k_val", "r_val")) freezeReactiveValue(input, i)
+    for (i in c(ids, "k_val", "r_val", "k_split", "r_split")) freezeReactiveValue(input, i)
 
     for (p in c("k", "r")) {
       update_preserving(session, paste0(p, "_var"),    named(vars, pretty_var),
                         current[[paste0(p, "_var")]])
       update_preserving(session, paste0(p, "_metric"), named(metrics, pretty_metric),
                         current[[paste0(p, "_metric")]])
-      update_preserving(session, paste0(p, "_split"),  named(splits, pretty_split),
-                        current[[paste0(p, "_split")]])
     }
   }, ignoreInit = FALSE)
 
@@ -428,7 +471,8 @@ server <- function(input, output, session) {
     vals <- sort(unique(pop_vocab()[variable_name == input$k_var]$variable_value))
     cur <- isolate(input$k_val)
     freezeReactiveValue(input, "k_val")
-    update_preserving(session, "k_val", vals, cur)
+    update_preserving(session, "k_val",
+                      setNames(vals, pretty_value(vals, input$k_var)), cur)
   })
   observeEvent(list(input$populatie, input$r_var), {
     req(input$r_var)
@@ -436,7 +480,34 @@ server <- function(input, output, session) {
     vals <- sort(unique(pop_vocab()[variable_name == input$r_var]$variable_value))
     cur <- isolate(input$r_val)
     freezeReactiveValue(input, "r_val")
-    update_preserving(session, "r_val", vals, cur)
+    update_preserving(session, "r_val",
+                      setNames(vals, pretty_value(vals, input$r_var)), cur)
+  })
+
+  # "Splits uit naar": which splits actually have rows for the CURRENTLY
+  # selected indicator. The risk scores carry every split variable; the two
+  # derived ondersteunings-indicators only exist on the total row, because the
+  # delivery never has two splits at once and the ondersteuning already sits in
+  # their variable_value. Offering them a split would produce an empty slice
+  # that reads as a bug rather than as an impossible combination.
+  observeEvent(list(input$populatie, input$k_var), {
+    req(input$k_var)
+    req(input$k_var %in% pop_vocab()$variable_name)
+    sp <- unique(pop_vocab()[variable_name == input$k_var]$split_var)
+    sp <- c(TOTAL_LABEL, sort(setdiff(sp, TOTAL_LABEL)))
+    cur <- isolate(input$k_split)
+    # k_level hangt aan k_split en moet dus mee bevriezen, net als hierboven.
+    for (i in c("k_split", "k_level")) freezeReactiveValue(input, i)
+    update_preserving(session, "k_split", named(sp, pretty_split), cur)
+  })
+  observeEvent(list(input$populatie, input$r_var), {
+    req(input$r_var)
+    req(input$r_var %in% pop_vocab()$variable_name)
+    sp <- unique(pop_vocab()[variable_name == input$r_var]$split_var)
+    sp <- c(TOTAL_LABEL, sort(setdiff(sp, TOTAL_LABEL)))
+    cur <- isolate(input$r_split)
+    freezeReactiveValue(input, "r_split")
+    update_preserving(session, "r_split", named(sp, pretty_split), cur)
   })
 
   # Levels of the chosen split variable (map tab only -- the line chart draws
@@ -450,15 +521,55 @@ server <- function(input, output, session) {
     update_preserving(session, "k_level", named_levels(lv, input$k_split, input$populatie), cur)
   })
 
-  # Legend explaining O_MPG1/2/3 (or O_OUD1/2/3) whenever that's the chosen
-  # map split -- otherwise NULL (hidden). The venn panel on the Per regio tab
-  # carries the same legend permanently, since it always shows this split.
-  output$k_combo_legend <- renderUI({
+  # Vaste toelichting onder "Risicoscore". De R_-scores delen er een; de twee
+  # afgeleide ondersteuningsindicatoren zijn geen risico-indicator en hebben
+  # hun eigen kanttekening, want hun beschikbaarheid hangt aan de
+  # CBS-onderdrukking en verschilt sterk per regioniveau (zie PLAN.md 6).
+  var_note <- function(var_name) {
+    if (isTRUE(var_name %in% ONDERSTEUNING_INDICATOREN)) {
+      if (isTRUE(grepl("_aantal_vormen$", var_name))) {
+        tags$div(class = "note", style = "margin: -6px 0 10px;",
+                 "Afgeleid uit de ondersteuningscombinaties. Deze telling vraagt",
+                 " alle acht combinaties tegelijk, en die zijn onder buurt- en",
+                 " wijkniveau bijna altijd deels onderdrukt: verwacht hier vooral",
+                 " op gebieds-, stadsdeel- en gemeenteniveau cijfers.")
+      } else {
+        tags$div(class = "note", style = "margin: -6px 0 10px;",
+                 "Afgeleid uit de ondersteuningscombinaties: heeft dit huishouden/",
+                 "deze oudere \u00fcberhaupt een ondersteuningssignaal? Bij",
+                 " \u201cAandeel (%)\u201d is de noemer de hele populatie, dus dat",
+                 " leest als het percentage dat een vorm van ondersteuning gebruikt.")
+      }
+    } else {
+      tags$div(class = "note", style = "margin: -6px 0 10px;",
+               "Alle scores hieronder zijn risico-indicatoren: waarde \u00e9\u00e9n betekent",
+               " dat dit risico aanwezig is bij het huishouden/de oudere.")
+    }
+  }
+  output$k_var_note <- renderUI(var_note(input$k_var))
+  output$r_var_note <- renderUI(var_note(input$r_var))
+
+  # Toelichting onder "Splits uit naar" op de Kaart-tab: de O_MPG1/2/3-legenda
+  # bij de combinatiesplitsing, en bij de twee afgeleide splitsingen wat de
+  # noemer daar betekent. Anders NULL (verborgen). Het vennpaneel op "Per
+  # regio" draagt diezelfde legenda permanent, want het toont altijd die split.
+  output$k_split_note <- renderUI({
     req(input$populatie, input$k_split)
-    if (!isTRUE(input$k_split == COMBO_SPLIT_VAR[[input$populatie]])) return(NULL)
-    gl <- COMBO_GROUP_UITLEG[[input$populatie]]
-    tags$div(class = "note", style = "margin-top: -4px;",
-             HTML(paste(sprintf("<b>%s</b> %s", names(gl), gl), collapse = "<br/>")))
+    if (isTRUE(input$k_split == COMBO_SPLIT_VAR[[input$populatie]])) {
+      gl <- COMBO_GROUP_UITLEG[[input$populatie]]
+      return(tags$div(class = "note", style = "margin-top: -4px;",
+                      HTML(paste(sprintf("<b>%s</b> %s", names(gl), gl), collapse = "<br/>"))))
+    }
+    if (isTRUE(input$k_split %in% ONDERSTEUNING_SPLITS)) {
+      return(tags$div(class = "note", style = "margin-top: -4px;",
+                      "Afgeleid uit de ondersteuningscombinaties. Bij",
+                      " \u201cAandeel (%)\u201d is de noemer de gekozen groep zelf,",
+                      " dus dat leest als: van de groep met dit ondersteuningsbeeld",
+                      " heeft x% deze risicoscore. Kies de indicator",
+                      " \u201cOndersteuningssignaal (wel/geen)\u201d voor het",
+                      " omgekeerde: het aandeel van de hele populatie."))
+    }
+    NULL
   })
 
   # Region picker follows the region level.
@@ -735,22 +846,67 @@ server <- function(input, output, session) {
   # never drift apart.
   venn_vals <- reactive({
     d <- venn_data()
-
-    codes <- names(COMBO_GROUP_LABELS[[input$populatie]])  # e.g. O_MPG1/2/3
-    get_val <- function(level) {
+    lev <- venn_levels(names(COMBO_GROUP_LABELS[[input$populatie]]))
+    vapply(lev, function(level) {
       row <- d[split_level == level]
       if (nrow(row) == 0) NA_real_ else row$waarde[1]
+    }, numeric(1))
+  })
+
+  # De venn hoort bij een risicoscore: hij kruist de ondersteuningscombinatie
+  # met een waarde daarvan. Bij de twee afgeleide ondersteuningsindicatoren
+  # bestaat die kruising niet (de ondersteuning zit daar zelf in
+  # variable_value), en zou de figuur als volledig onderdrukt tekenen -- wat
+  # als "geen waarnemingen" leest in plaats van als "niet van toepassing".
+  venn_speelt <- reactive({
+    req(input$r_var)
+    !isTRUE(input$r_var %in% ONDERSTEUNING_INDICATOREN)
+  })
+
+  # Dezelfde slice als de venn, maar over alle waarden van de risicoscore. Dat
+  # is precies wat de figuur niet kan tonen -- die staat per definitie op een
+  # gekozen waarde -- en wat de tabel eronder toevoegt: per venn-vakje de hele
+  # risicoverdeling.
+  venn_matrix_data <- reactive({
+    req(input$populatie, input$r_niveau, input$r_regio,
+        input$r_var, input$r_metric, input$r_venn_jaar)
+
+    d <- ds |>
+      filter(population    == !!input$populatie,
+             region_level  == !!input$r_niveau,
+             region_code   == !!input$r_regio,
+             variable_name == !!input$r_var,
+             metric_name   == !!input$r_metric,
+             split_var     == !!COMBO_SPLIT_VAR[[input$populatie]],
+             year          == !!as.integer(input$r_venn_jaar)) |>
+      collect() |>
+      as.data.table()
+
+    add_display(d, input$r_weergave)
+  })
+
+  # De matrix achter de tabel: 8 deelgebieden x de waarden van de risicoscore,
+  # plus per deelgebied zijn eigen noemer (n). Een ontbrekende rij blijft NA en
+  # wordt "onvoldoende waarnemingen", nooit een nul.
+  venn_matrix <- reactive({
+    d   <- venn_matrix_data()
+    lev <- venn_levels(names(COMBO_GROUP_LABELS[[input$populatie]]))
+    # De waardenreeks komt uit de vocabulaire, niet uit de slice: zo krijgt een
+    # regio waar een hele risicowaarde onderdrukt is toch die kolom, met
+    # "onvoldoende waarnemingen" erin.
+    waarden <- sort(unique(pop_vocab()[variable_name == input$r_var]$variable_value))
+
+    m <- matrix(NA_real_, nrow = length(lev), ncol = length(waarden),
+                dimnames = list(names(lev), waarden))
+    n <- setNames(rep(NA_real_, length(lev)), names(lev))
+
+    for (k in names(lev)) {
+      rows <- d[split_level == lev[[k]] & variable_value %in% waarden]
+      if (nrow(rows) == 0) next
+      m[k, rows$variable_value] <- rows$waarde
+      n[[k]] <- rows$denominator[1]
     }
-    c(
-      none = get_val("none"),
-      A    = get_val(codes[1]),
-      B    = get_val(codes[2]),
-      C    = get_val(codes[3]),
-      AB   = get_val(paste(codes[1], codes[2], sep = " + ")),
-      AC   = get_val(paste(codes[1], codes[3], sep = " + ")),
-      BC   = get_val(paste(codes[2], codes[3], sep = " + ")),
-      ABC  = get_val(paste(codes, collapse = " + "))
-    )
+    list(m = m, n = n, waarden = waarden)
   })
 
   # The venn is its own chart with its own year, so it needs its own title
@@ -767,6 +923,14 @@ server <- function(input, output, session) {
   })
 
   output$venn <- renderUI({
+    if (!venn_speelt()) {
+      return(tags$div(class = "note", style = "text-align: center; padding: 28px 12px;",
+                      "Het vennfiguur kruist de ondersteuningscombinatie met een",
+                      " risicoscore. Bij ", tags$b(pretty_var(input$r_var)),
+                      " zit de ondersteuning zelf al in de waarde, dus die kruising",
+                      " bestaat niet. Kies hierboven een R-risicoscore om het",
+                      " figuur en de tabel te zien."))
+    }
     # No title: the heading above the figure already carries it on screen.
     HTML(venn_svg(venn_vals(), input$r_weergave,
                   names(COMBO_GROUP_LABELS[[input$populatie]]),
@@ -777,9 +941,40 @@ server <- function(input, output, session) {
 
   output$venn_legenda <- renderUI({
     req(input$populatie)
+    if (!venn_speelt()) return(NULL)
     gl <- COMBO_GROUP_UITLEG[[input$populatie]]
     tags$div(class = "note", style = "margin-top: 8px; text-align: center;",
              HTML(paste(sprintf("<b>%s</b> %s", names(gl), gl), collapse = "&nbsp;&nbsp;&middot;&nbsp;&nbsp;")))
+  })
+
+  # De figuur in tabelvorm: dezelfde acht deelgebieden, maar met de hele
+  # risicoverdeling ernaast in plaats van een gekozen waarde.
+  output$venn_tabel <- renderUI({
+    if (!venn_speelt()) return(NULL)
+    mm <- venn_matrix()
+    tagList(
+      div(class = "chart-title", style = "margin-top: 18px;",
+          "Dezelfde acht groepen per risicoscore"),
+      div(class = "note", style = "margin-bottom: 8px;",
+          if (input$r_weergave == "rel")
+            paste("Per rij verdeeld over de waarden van de risicoscore; elke rij telt op tot",
+                  "100%. n is de omvang van die groep.")
+          else
+            "Aantallen per groep en risicowaarde. n is de omvang van die groep.",
+          " Een streepje betekent onvoldoende waarnemingen, geen nul."),
+      HTML(venn_matrix_html(mm$m, mm$n, input$r_weergave,
+                            names(COMBO_GROUP_LABELS[[input$populatie]]),
+                            COMBO_GROUP_LABELS[[input$populatie]],
+                            var_label = pretty_var(input$r_var)))
+    )
+  })
+
+  # De twee knoppen onder de venn horen bij een figuur dat er niet altijd is.
+  output$venn_downloads <- renderUI({
+    if (!venn_speelt()) return(NULL)
+    div(style = "text-align: center; margin-top: 14px;",
+        downloadButton("r_venn_dl", "Download figuur (svg)", class = "btn-default"),
+        downloadButton("r_venn_dl_data", "Download data (xlsx)", class = "btn-default"))
   })
 
   # -------------------------------------------------------------- Downloads ---
@@ -856,9 +1051,15 @@ server <- function(input, output, session) {
   # The venn's own slice: a different year and a different split than the line
   # chart above it, so the export panel next to that chart does not cover it.
   # No think-cell route either -- like the choropleth, a venn has no template.
+  # Twee tabbladen: de slice achter de figuur (een risicowaarde) en de slice
+  # achter de tabel (alle risicowaarden). De tabel is strikt ruimer, maar de
+  # figuur-slice apart houden scheelt de lezer het uitfilteren van de waarde
+  # waar de figuur op staat.
   output$r_venn_dl_data <- downloadHandler(
     filename = function() sprintf("dynamo_venn_%s_%s.xlsx", input$r_venn_jaar, Sys.Date()),
-    content  = function(file) write_xlsx(export_cols(venn_data()), file)
+    content  = function(file) write_xlsx(
+      list(figuur = export_cols(venn_data()),
+           risicomatrix = export_cols(venn_matrix_data())), file)
   )
 
   # Vector, not a bitmap: the figure is already an SVG, so the download is the

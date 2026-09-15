@@ -415,3 +415,98 @@ venn_svg <- function(vals, weergave, group_codes, group_labels,
     caption_svg,
     '</svg>')
 }
+
+# ---------------------------------------------------------------------------
+# De venn als tabel
+# ---------------------------------------------------------------------------
+#
+# De figuur toont per deelgebied een waarde bij een gekozen risicowaarde. De
+# tabel hieronder zet er de hele risicoverdeling naast: dezelfde acht
+# deelgebieden als rijen, de categorieen van de risicoscore als kolommen. Dat
+# is wat je uit de figuur niet kunt aflezen -- die is per definitie een
+# momentopname bij een waarde -- en het is precies de kruising waar de
+# risicostapeling zichtbaar wordt.
+
+#' De 8 deelgebieden van de venn, in tekenvolgorde, met per sleutel het
+#' combinatieniveau zoals het in split_level staat.
+#' Een sleutelvector, gedeeld door de figuur en de tabel, zodat de twee niet
+#' uiteen kunnen lopen over welk niveau in welk vakje hoort.
+venn_levels <- function(group_codes) {
+  stopifnot(length(group_codes) == 3)
+  g <- unname(group_codes)
+  c(none = "none", A = g[1], B = g[2], C = g[3],
+    AB  = paste(g[1], g[2], sep = " + "),
+    AC  = paste(g[1], g[3], sep = " + "),
+    BC  = paste(g[2], g[3], sep = " + "),
+    ABC = paste(g, collapse = " + "))
+}
+
+#' Dezelfde 8 sleutels, maar met de leesbare groepsnaam -- zoals de tooltips in
+#' venn_svg() hem opbouwen.
+venn_region_labels <- function(group_codes, group_labels) {
+  g <- unname(group_codes)
+  lab <- function(...) paste(group_labels[g[c(...)]], collapse = " + ")
+  c(none = "Geen ondersteuningssignaal",
+    A = lab(1), B = lab(2), C = lab(3),
+    AB = lab(1, 2), AC = lab(1, 3), BC = lab(2, 3), ABC = lab(1, 2, 3))
+}
+
+#' De venn als HTML-tabel: rijen = de 8 deelgebieden, kolommen = de waarden
+#' van de risicoscore.
+#'
+#' @param m Numerieke matrix met 8 rijen (namen = de sleutels van
+#'   venn_levels(), in die volgorde) en een kolom per risicowaarde
+#'   (kolomnamen = de waarden zelf). NA = onderdrukt.
+#' @param n Numerieke vector van 8, het totaal per deelgebied over de
+#'   risicowaarden (de noemer achter een percentage). NA waar onbekend.
+#' @param weergave "rel" of "abs" -- bepaalt of de cellen percentages of
+#'   aantallen zijn, net als in de figuur.
+#' @param group_codes,group_labels Zoals bij venn_svg().
+#' @param var_label Omschrijving van de risicoscore, boven de waardekolommen.
+#' @return Een HTML-string voor HTML()/renderUI().
+venn_matrix_html <- function(m, n, weergave, group_codes, group_labels,
+                             var_label = "Risicoscore") {
+  keys <- names(venn_levels(group_codes))
+  stopifnot(is.matrix(m), identical(rownames(m), keys), length(n) == length(keys))
+
+  labels <- venn_region_labels(group_codes, group_labels)
+  waarden <- colnames(m)
+
+  fmt <- function(v, rel) {
+    if (is.na(v)) {
+      return(sprintf('<span class="venn-tab-na" title="onvoldoende waarnemingen">%s</span>',
+                     VENN_SUPPRESSED_MARK))
+    }
+    if (rel) sprintf("%.1f%%", v)
+    else venn_esc(format(round(v), big.mark = ".", decimal.mark = ","))
+  }
+  rel <- weergave == "rel"
+
+  kop <- paste0(
+    '<thead>',
+    '<tr>',
+    '<th rowspan="2" class="venn-tab-groep">Ondersteuningscombinatie</th>',
+    sprintf('<th colspan="%d" class="venn-tab-span">%s</th>', length(waarden), venn_esc(var_label)),
+    '<th rowspan="2" class="venn-tab-n">n</th>',
+    '</tr><tr>',
+    paste0(sprintf('<th class="venn-tab-num">%s</th>', venn_esc(waarden)), collapse = ""),
+    '</tr></thead>')
+
+  rijen <- vapply(seq_along(keys), function(i) {
+    k <- keys[i]
+    paste0(
+      # De "none"-rij staat buiten de cirkels en krijgt, net als in de figuur,
+      # een eigen streepje mee zodat hij niet als vierde groep leest.
+      sprintf('<tr%s>', if (k == "none") ' class="venn-tab-none"' else ""),
+      sprintf('<td class="venn-tab-groep">%s</td>', venn_esc(labels[[k]])),
+      paste0(vapply(waarden, function(w) sprintf('<td class="venn-tab-num">%s</td>',
+                                                 fmt(m[k, w], rel)), character(1)),
+             collapse = ""),
+      sprintf('<td class="venn-tab-n">%s</td>', fmt(n[[i]], rel = FALSE)),
+      '</tr>')
+  }, character(1))
+
+  paste0(
+    '<table class="venn-tab">', kop,
+    '<tbody>', paste0(rijen, collapse = ""), '</tbody></table>')
+}

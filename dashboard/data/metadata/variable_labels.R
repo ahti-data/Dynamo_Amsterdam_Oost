@@ -73,3 +73,41 @@ ONDERSTEUNING_GROEP_UITLEG_OUD <- c(
   O_OUD2 = "Psychosociale zorg: GGZ-gebruik, of psychofarmaca.",
   O_OUD3 = "Sociaaleconomische ondersteuning: bijzondere bijstand, of WSNP."
 )
+
+# ---------------------------------------------------------------------------
+# Afgeleide ondersteuningsvariabelen
+# ---------------------------------------------------------------------------
+#
+# Niet uit Outcomes.xlsx: deze staan niet als kolom in de levering maar worden
+# in de prep-stap uit `O_MPG_combination`/`O_OUD_combination` afgeleid (zie
+# data-prep/derive_support_splits.R). De omschrijvingen hieronder beschrijven
+# dus wat de afleiding doet, niet een variabele uit het outputformulier.
+
+#' Als indicator (`variable_name`): de ondersteuning zit in `variable_value`,
+#' dus de noemer is de hele populatie en "Aandeel (%)" leest als *het
+#' percentage huishoudens/ouderen dat ondersteuning gebruikt*.
+ONDERSTEUNING_INDICATOR_LABELS <- c(
+  O_MPG_ondersteuning = "Ondersteuningssignaal (wel/geen)",
+  O_MPG_aantal_vormen = "Aantal vormen ondersteuning (0-3)",
+  O_OUD_ondersteuning = "Ondersteuningssignaal (wel/geen)",
+  O_OUD_aantal_vormen = "Aantal vormen ondersteuning (0-3)"
+)
+
+#' Als splitsvariabele (`split_var`): `variable_value` blijft de risicoscore,
+#' dus dit kruist de ondersteuning met de risicostapeling.
+ONDERSTEUNING_SPLIT_LABELS <- c(
+  ondersteuningssignaal       = "wel/geen ondersteuningssignaal",
+  aantal_ondersteuningsvormen = "aantal vormen ondersteuning"
+)
+
+#' De categorieen van beide afgeleide variabelen, in beide vormen: als
+#' `variable_value` van de indicator en als `split_level` van de splitsing zijn
+#' het dezelfde codes.
+ONDERSTEUNING_NIVEAU_LABELS <- c(
+  geen = "Geen ondersteuningssignaal",
+  wel  = "Wel een ondersteuningssignaal",
+  "0"  = "Geen ondersteuning",
+  "1"  = "1 vorm ondersteuning",
+  "2"  = "2 vormen ondersteuning",
+  "3"  = "Alle 3 de vormen"
+)

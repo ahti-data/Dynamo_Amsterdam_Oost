@@ -17,10 +17,12 @@ person-level records.
 - `data/geo/` — Amsterdam geometry (buurten / wijken / gebieden), copied from
   `dashboard_client/data-prep/geo/`.
 - `data/app_data/` — the prep step's parquet + geo output; this is what the app reads, and what
-  the deploy workflow ships. **Committed to git** (~7.6 MB, already-aggregated CBS output under
+  the deploy workflow ships. **Committed to git** (~9.9 MB, already-aggregated CBS output under
   the same rounding/suppression as the delivery it's built from) — unlike `data/output_data/`,
   which stays local-only. Re-run `data-prep/01_build_app_data.R` and commit the result whenever
-  `data/output_data/` gets a new delivery; nothing regenerates it automatically.
+  `data/output_data/` gets a new delivery; nothing regenerates it automatically. Change only
+  the derivation in `data-prep/derive_support_splits.R` and `02_add_derived_splits.R` refreshes
+  the committed parquet in seconds, without needing the raw delivery.
 - `data/metadata/brand_colors.R` — ahti branding palette, shared with the template.
 - `data/metadata/variable_labels.R` — Dutch labels for every `R_`/`O_`-variable, taken from
   `Outcomes.xlsx` (see PLAN.md §3). Update this file from a new `Outcomes.xlsx`, never guess a
@@ -48,6 +50,15 @@ These are verified against the actual delivery, not assumed from the output form
   2018–2021), so a single geojson vintage is correct for the whole 2018–2024 series.
 - `OT_OUD` has **three** split variables, not four — the output form lists a `langwonende_hh`
   column that is not in the file.
+- The 8 `O_MPG_combination`/`O_OUD_combination` levels **partition the population** — their sum
+  matches the total row up to rounding. That is what makes the derived
+  `ondersteuningssignaal` / `aantal_ondersteuningsvormen` splits and the
+  `O_*_ondersteuning` / `O_*_aantal_vormen` indicators valid (PLAN.md §7). Suppression is a
+  **missing row**, not an `NA` — the lowest `metric_value` anywhere in the delivery is 10 — so
+  any sum over combination levels silently counts a suppressed cell as zero. Every derived cell
+  is therefore written only when all of its building blocks are published, and the "wel" level
+  comes from *total − none* rather than summing the other seven. Don't relax that without
+  documenting the resulting error margin.
 
 ## Structure
 
@@ -56,7 +67,10 @@ These are verified against the actual delivery, not assumed from the output form
   in-memory objects (`dt_huishoudens_agg_OT1`, `st_read("wc.shp")`). Does not run locally;
   kept as a reference for intended interaction only.
 - `data-prep/` — one-off scripts that turn an RA delivery into `data/app_data/`. Re-run by
-  hand after each new delivery; not part of the app's runtime.
+  hand after each new delivery; not part of the app's runtime. `derive_support_splits.R` is
+  the shared derivation of the support splits/indicators (PLAN.md §7), called by both `01_`
+  and `02_` so the two routes cannot drift apart; it is the one `data-prep/` file the test
+  suite covers.
 - `utils/` — reusable functions shared across the app, incl. `auth.R` (shinymanager) and the
   think-cell export stack. `venn_diagram.R` is Dynamo-specific (a hand-built 3-circle SVG venn
   for `O_MPG_combination`/`O_OUD_combination`), not shared with sibling dashboards. One
@@ -65,7 +79,12 @@ These are verified against the actual delivery, not assumed from the output form
   scales the UI offers live in `VENN_PALETTES` in that same file. The **"none" region is
   deliberately off the colour scale** (`VENN_NONE_FILL`) — it is 60–90% of a selection, so on
   the shared scale it flattened all seven circle regions into one tint. Its value is still in
-  the label and the tooltip.
+  the label and the tooltip. The same file also renders **the venn as a table**
+  (`venn_matrix_html()`): the eight regions × the risk score's categories, which is the one
+  view the figure cannot give (it stands on a single chosen value). Figure and table share
+  `venn_levels()` — one key vector, so a combination level can never land in a different cell
+  in the two. The table's styling lives with the rest of the app's CSS in `app.R`, unlike
+  `venn_svg()`, which stays self-contained because it also ships as a standalone `.svg`.
 - `templates/` — built-in think-cell `.pptx` slide templates for the "Download slide" export.
   The line chart on **Per regio** is the one chart wired to the export layer
   (`chart_data_downloads_ui`/`_server`, id `r_downloads`, `chart_type = "line"`); the
@@ -137,7 +156,9 @@ Run the suite after changing anything in `utils/`.
 
 `tests/testthat.R` sources `data/metadata/brand_colors.R` and `utils/venn_diagram.R` and loads
 `leaflet` — `venn_svg()` needs `ahti_branding` and `colorNumeric()`, which the app itself gets
-from `app.R`.
+from `app.R`. It also sources `data-prep/derive_support_splits.R` and loads `data.table`: the
+derivation runs in the prep step rather than in `utils/`, but the CBS rule it enforces (a
+suppressed cell is never summed as zero) is worth a test.
 
 Current failure baseline on this machine: **FAIL 36** — identical to the same suite in
 `shiny_dashboard_template`, so it is not something this repo introduced. Every failure comes
