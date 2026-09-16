@@ -165,9 +165,21 @@ losse risicofactoren zijn binair (0/1), de totaalscore is een stapeling (0/1/2/3
 vaste lijst voor de hele populatie zou hier onterecht waarden aanbieden.
 
 #### Subtab 1 — Kaart
-Besturing: jaar · regioniveau (buurt / wijk / gebied / stadsdeel) · indicator
-(`variable_name`) · waarde (`variable_value`) · metric · split_by (+ welk niveau daarvan) ·
-absoluut/relatief.
+Besturing: jaar · regioniveau (buurt / wijk / gebied / stadsdeel) · **toon** (heel Amsterdam
+of één stadsdeel) · indicator (`variable_name`) · waarde (`variable_value`) · metric ·
+split_by (+ welk niveau daarvan) · absoluut/relatief.
+
+"Toon" begrenst de kaart tot één stadsdeel en zoomt erop in, zodat er een kaart van alleen
+Oost uit te lichten is. Het filtert de geometrie, niet de data. **Westpoort valt overal weg**
+(`UITGESLOTEN_STADSDEEL`): haven- en bedrijventerrein, twee wijken, nauwelijks huishoudens —
+het kleurt mee als een gewone wijk en trekt met zijn kleine aantallen de schaal scheef. De
+parquet houdt het; alleen de app verbergt het.
+
+Naast de xlsx-download staat **"Download kaart (png)"**: `utils/map_download.R` tekent
+dezelfde laag opnieuw met ggplot2 + geom_sf. Leaflet tekent in de browser en laat zich op de
+server niet wegschrijven (daar is een headless browser voor nodig). De klassegrenzen komen uit
+`kaart_bins()` in de app en niet uit `colorBin()`, zodat de figuur en het scherm aantoonbaar
+dezelfde indeling en kleuren hebben.
 
 `leaflet` choropleth: hover-tooltip met naam + waarde + n, klik-popup met de volledige
 context, legenda, en **grijs met expliciet "onvoldoende waarnemingen"** voor onderdrukte
@@ -176,7 +188,9 @@ regio's — belangrijk dat onderdrukt niet als nul leest. Bij `O_MPG_combination
 "Jeugdhulp"), plus een vaste toelichtingsbox met de volledige omschrijving per groep.
 
 #### Subtab 2 — Per regio
-Besturing: regioniveau + regio · indicator · metric · split_by.
+Besturing: regioniveau + regio · indicator · metric · split_by. Hier zit **"Heel Amsterdam"**
+wél bij de regio's (de kaart kent het niet: een choropleth van één vlak zegt niets) en het is
+de standaardkeuze — dat is de vergelijkingsbasis.
 
 `plotly` lijndiagram 2018–2024, één lijn per niveau van de gekozen splitvariabele (bij
 "(totaal)" één lijn). Hover met jaar + waarde. Zelfde absoluut/relatief-keuze.
@@ -208,10 +222,31 @@ ondersteuningsgroep zichtbaar wordt. Bij "Aandeel (%)" telt elke rij op tot 100%
 xlsx-download onder de figuur heeft daarom twee tabbladen: `figuur` (de slice van de figuur)
 en `risicomatrix` (alle risicowaarden).
 
-De figuur en de tabel delen één sleutelvector, `venn_levels()` — dat is wat garandeert dat
-een combinatieniveau in beide in hetzelfde vakje terechtkomt. Kiest de gebruiker een van de
-twee afgeleide ondersteuningsindicatoren (§7), dan bestaat die kruising niet en tonen figuur
-en tabel een uitleg in plaats van een volledig grijs figuur.
+De venn heeft een **eigen indicatorkeuze**, los van het lijndiagram erboven:
+
+- **"(alle)"** (de standaard) kleurt naar de verdeling zelf — welk deel van de populatie in
+  welk deelgebied zit. Dat leest uit `O_MPG_combinatie`/`O_OUD_combinatie` (§7), waar het
+  combinatieniveau de `variable_value` is en de noemer dus de hele populatie. Zo is de
+  ondersteuning te zien zonder een risicoscore te kiezen, voor heel Amsterdam en per
+  stadsdeel, wijk of buurt.
+- **een risicoscore** kleurt naar het aandeel daarvan *binnen* elk deelgebied, zoals eerst.
+
+Onder de figuur staan twee tabellen. De eerste (alleen bij een gekozen risicoscore) zet de
+acht deelgebieden tegen de categorieën van die score. De tweede staat er altijd: de acht
+deelgebieden × de **losse risicofactoren** (R1…R9 / R1…R5), met per cel het aandeel van dat
+deelgebied waarbij die factor speelt. Rijen tellen daar niet op tot 100% — een huishouden kan
+meerdere risicofactoren tegelijk hebben. Die tabel maakt de gradiënt in één oogopslag
+zichtbaar; stadsdeel Oost 2024: werkloosheid speelt bij 14,7% van de gezinnen zonder
+ondersteuningssignaal en bij 76,9% van de gezinnen met alle drie de vormen.
+
+Figuur en tabellen delen één sleutelvector, `venn_levels()` — dat is wat garandeert dat een
+combinatieniveau overal in hetzelfde vakje terechtkomt.
+
+**Let op bij de risicofactor-tabel:** niet elke factor loopt door tot 2024. `R_MPG1_armoede_hh`
+stopt na 2023 en `R_MPG9_wanbet_zv_hh` na 2022 — die bronregisters zitten niet in de laatste
+jaren van de levering (Amsterdam-breed 5.400 en 3.100 in hun laatste jaar, ruim boven elke
+onderdrukkingsdrempel). Een lege kolom is daar dus géén onderdrukking, en de tabel zegt dat
+er met zoveel woorden onder.
 
 ---
 
@@ -353,7 +388,21 @@ de noemer is de hele populatie:
 | `variable_name` | waarden |
 |---|---|
 | `O_MPG_ondersteuning` / `O_OUD_ondersteuning` | `geen`, `wel` |
-| `O_MPG_aantal_vormen` / `O_OUD_aantal_vormen` | `0`, `1`, `2`, `3` |
+| `O_MPG_aantal_vormen` / `O_OUD_aantal_vormen` | `0`, `1`, `2`, `3`, `onbekend` |
+| `O_MPG_combinatie` / `O_OUD_combinatie` | de 8 combinatieniveaus, `onbekend` |
+
+`*_combinatie` zet het combinatieniveau zelf in `variable_value`. Dat is wat de venn leest als
+er geen risicoscore gekozen is, en het levert meteen een kaart per deelgebied ("welk deel van
+de gezinnen zit in Jeugdhulp + Sociaaleconomisch").
+
+`onbekend` is de restcategorie: het deel van de populatie dat door onderdrukking aan geen
+enkele categorie toe te wijzen is. Die hoort er expliciet bij te staan, want de noemer is de
+som over de categorieën — zonder restcategorie zou die te klein zijn en elk percentage te
+hoog. Mét die categorie klopt de noemer exact, blijven de getoonde categorieën exact (het
+restant *is* de ontbrekende categorie, geen ruis erbovenop) en is zichtbaar wat de
+onderdrukking kost. Op gemeenteniveau is het restant 10 huishoudens; op buurtniveau is het
+mediaan een derde, en dan zegt de app erbij dat je daar even naar moet kijken voordat je
+buurten onderling vergelijkt.
 
 Bij "Aandeel (%)" leest dat als *x% van de gezinnen gebruikt een vorm van ondersteuning* —
 de kaart die gevraagd is. Amsterdam 2024, `n_households`: **42,9% wel, 57,1% geen**; naar
@@ -426,6 +475,11 @@ Dekking van de indicatorvorm (aandeel slices met een cijfer), vóór en na deze 
 | gebied | 97% | 99% | 46% | 65% |
 | wijk | 90% | **99,7%** | 4% | **23%** |
 | buurt | 63% | **99,4%** | 0% | **4%** |
+
+Met de restcategorie erbij (zie hierboven) verschijnt een losse categorie zodra díé af te
+leiden is, in plaats van pas als alle vier het zijn. Voor de kaart van "1 vorm ondersteuning",
+2024, `n_households` scheelt dat 99 van de 108 wijken en 185 van de ~410 buurten, tegen
+respectievelijk 59 en 37 onder de alles-of-niets-regel.
 
 ### De harde grens bij `*_aantal_vormen`
 

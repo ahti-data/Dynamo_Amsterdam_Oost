@@ -89,8 +89,10 @@ ONDERSTEUNING_GROEP_UITLEG_OUD <- c(
 ONDERSTEUNING_INDICATOR_LABELS <- c(
   O_MPG_ondersteuning = "Ondersteuningssignaal (wel/geen)",
   O_MPG_aantal_vormen = "Aantal vormen ondersteuning (0-3)",
+  O_MPG_combinatie    = "Ondersteuningscombinatie (welke groepen)",
   O_OUD_ondersteuning = "Ondersteuningssignaal (wel/geen)",
-  O_OUD_aantal_vormen = "Aantal vormen ondersteuning (0-3)"
+  O_OUD_aantal_vormen = "Aantal vormen ondersteuning (0-3)",
+  O_OUD_combinatie    = "Ondersteuningscombinatie (welke groepen)"
 )
 
 #' Als splitsvariabele (`split_var`): `variable_value` blijft de risicoscore,
@@ -104,6 +106,7 @@ ONDERSTEUNING_SPLIT_LABELS <- c(
 #' `variable_value` van de indicator en als `split_level` van de splitsing zijn
 #' het dezelfde codes.
 ONDERSTEUNING_NIVEAU_LABELS <- c(
+  onbekend = "Niet toe te wijzen (onderdrukt)",
   geen = "Geen ondersteuningssignaal",
   wel  = "Wel een ondersteuningssignaal",
   "0"  = "Geen ondersteuning",

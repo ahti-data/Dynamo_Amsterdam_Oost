@@ -462,15 +462,25 @@ venn_region_labels <- function(group_codes, group_labels) {
 #' @param weergave "rel" of "abs" -- bepaalt of de cellen percentages of
 #'   aantallen zijn, net als in de figuur.
 #' @param group_codes,group_labels Zoals bij venn_svg().
-#' @param var_label Omschrijving van de risicoscore, boven de waardekolommen.
+#' @param var_label Omschrijving boven de waardekolommen.
+#' @param kolomlabels Korte koppen boven de kolommen; standaard de kolomnamen
+#'   van `m` zelf. Voor de risicofactor-tabel zijn dat codes (R1, R2, ...) die
+#'   in een kolomkop passen, met de volledige omschrijving in `kolomtitels`.
+#' @param kolomtitels Volledige omschrijving per kolom, als hover-title. NULL
+#'   betekent geen title-attribuut.
+#' @param n_label Kop boven de laatste kolom.
 #' @return Een HTML-string voor HTML()/renderUI().
 venn_matrix_html <- function(m, n, weergave, group_codes, group_labels,
-                             var_label = "Risicoscore") {
+                             var_label = "Risicoscore",
+                             kolomlabels = colnames(m), kolomtitels = NULL,
+                             n_label = "n") {
   keys <- names(venn_levels(group_codes))
   stopifnot(is.matrix(m), identical(rownames(m), keys), length(n) == length(keys))
 
   labels <- venn_region_labels(group_codes, group_labels)
   waarden <- colnames(m)
+  stopifnot(length(kolomlabels) == length(waarden),
+            is.null(kolomtitels) || length(kolomtitels) == length(waarden))
 
   fmt <- function(v, rel) {
     if (is.na(v)) {
@@ -487,9 +497,12 @@ venn_matrix_html <- function(m, n, weergave, group_codes, group_labels,
     '<tr>',
     '<th rowspan="2" class="venn-tab-groep">Ondersteuningscombinatie</th>',
     sprintf('<th colspan="%d" class="venn-tab-span">%s</th>', length(waarden), venn_esc(var_label)),
-    '<th rowspan="2" class="venn-tab-n">n</th>',
+    sprintf('<th rowspan="2" class="venn-tab-n">%s</th>', venn_esc(n_label)),
     '</tr><tr>',
-    paste0(sprintf('<th class="venn-tab-num">%s</th>', venn_esc(waarden)), collapse = ""),
+    paste0(vapply(seq_along(waarden), function(i) {
+      titel <- if (is.null(kolomtitels)) "" else sprintf(' title="%s"', venn_esc(kolomtitels[i]))
+      sprintf('<th class="venn-tab-num"%s>%s</th>', titel, venn_esc(kolomlabels[i]))
+    }, character(1)), collapse = ""),
     '</tr></thead>')
 
   rijen <- vapply(seq_along(keys), function(i) {

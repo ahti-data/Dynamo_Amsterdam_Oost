@@ -154,19 +154,37 @@ test_that("een onderdrukte losse groep haalt de indicator niet onderuit", {
   expect_equal(sum(aantal$metric_value), 2000)                    # de hele populatie
 })
 
-test_that("de indicator valt weg zodra geen enkele route sluit", {
-  # Nu is er bij waarde "1" zowel een losse groep als een paar onderdrukt: dan
-  # is noch "1 vorm" noch "2 vormen" te bepalen, en verschijnt de hele
-  # aantal-vormen-indicator niet -- een halve partitie zou het percentage te
-  # hoog maken.
+test_that("wat niet toe te wijzen is wordt een eigen categorie, geen weggelaten slice", {
+  # Bij waarde "1" is zowel een losse groep als een paar onderdrukt: noch
+  # "1 vorm" noch "2 vormen" is dan te bepalen. De categorieen die wel bekend
+  # zijn blijven staan, en de rest komt als "onbekend" op tafel -- zo is de
+  # noemer nog steeds de hele populatie en klopt elk percentage.
   dt <- rbind(maak_slice(WAARDEN, 1000, variable_value = "0"),
               maak_slice(WAARDEN, 1000, variable_value = "1",
                          niveaus = setdiff(ALLE_NIVEAUS, c("O_MPG2", "O_MPG1 + O_MPG2"))))
   out <- add_support_derivations(dt)
 
-  expect_equal(nrow(out[variable_name == "O_MPG_aantal_vormen"]), 0)
-  # Het signaal hangt alleen aan de none-rij en blijft wel staan.
+  aantal <- out[variable_name == "O_MPG_aantal_vormen"]
+  expect_true(SUPPORT_UNKNOWN %in% aantal$variable_value)
+  expect_equal(aantal[variable_value == "0"]$metric_value, 1200)
+  expect_equal(aantal[variable_value == "3"]$metric_value, 60)
+  # De categorieen tellen samen op tot de populatie, dus de noemer klopt.
+  expect_equal(sum(aantal$metric_value), 2000)
   expect_equal(nrow(out[variable_name == "O_MPG_ondersteuning"]), 2)
+})
+
+test_that("de combinatie is ook als indicator beschikbaar, zonder risicoscore", {
+  dt <- rbind(maak_slice(WAARDEN, 1000, variable_value = "0"),
+              maak_slice(WAARDEN, 1000, variable_value = "1"))
+  out <- add_support_derivations(dt)
+
+  comb <- out[variable_name == "O_MPG_combinatie"]
+  expect_setequal(comb$variable_value, ALLE_NIVEAUS)     # geen restcategorie nodig
+  expect_equal(comb[variable_value == "none"]$metric_value, 1200)
+  expect_equal(comb[variable_value == "O_MPG1 + O_MPG2 + O_MPG3"]$metric_value, 60)
+  expect_equal(sum(comb$metric_value), 2000)             # de hele populatie
+  # Staat op de totaalrij: dit is een indicator, geen uitsplitsing.
+  expect_true(all(comb$split_var == SUPPORT_TOTAL_LABEL))
 })
 
 test_that("een bron met een categorie in deze regio is bruikbaar, niet verdacht", {

@@ -50,6 +50,12 @@ These are verified against the actual delivery, not assumed from the output form
   2018–2021), so a single geojson vintage is correct for the whole 2018–2024 series.
 - `OT_OUD` has **three** split variables, not four — the output form lists a `langwonende_hh`
   column that is not in the file.
+- **Not every risk factor runs to 2024.** `R_MPG1_armoede_hh` stops after 2023 and
+  `R_MPG9_wanbet_zv_hh` after 2022 — those source registers simply aren't in the delivery's
+  last years (Amsterdam-wide counts of 5.400 and 3.100 in their final year, far above any
+  suppression threshold). An empty column for those in a recent year is *not* "onvoldoende
+  waarnemingen", and the risk-factor table under the venn says so explicitly. Check this per
+  factor before reading a gap as suppression.
 - The 8 `O_MPG_combination`/`O_OUD_combination` levels **partition the population** — their sum
   matches the total row up to rounding. That is what makes the derived
   `ondersteuningssignaal` / `aantal_ondersteuningsvormen` splits and the
@@ -79,6 +85,13 @@ These are verified against the actual delivery, not assumed from the output form
   the shared derivation of the support splits/indicators (PLAN.md §7), called by both `01_`
   and `02_` so the two routes cannot drift apart; it is the one `data-prep/` file the test
   suite covers.
+- `utils/map_download.R` — Dynamo-specific, like `venn_diagram.R`. Leaflet draws in the
+  browser and can't be written to a file server-side (that needs a headless browser, which
+  the server doesn't have), so this redraws the same layer with ggplot2 + geom_sf for the
+  "Download kaart (png)" button. The class breaks come from the app (`kaart_bins()`), not from
+  `colorBin()`, so the figure and the screen provably share one classification — that is why
+  the app computes them itself. `choropleth_klassen()` holds the part that can go wrong
+  (breaks, labels, colours) and is tested without sf or a graphics device.
 - `utils/` — reusable functions shared across the app, incl. `auth.R` (shinymanager) and the
   think-cell export stack. `venn_diagram.R` is Dynamo-specific (a hand-built 3-circle SVG venn
   for `O_MPG_combination`/`O_OUD_combination`), not shared with sibling dashboards. One
@@ -120,6 +133,16 @@ push to `main` (path-filtered to `dashboard/**`) and on manual dispatch, reads `
 every other dashboard built from this template. See the `healthinsights-server-admin` skill for
 how the server itself treats a newly-uploaded `/apps/` folder (protected by default, no config
 change needed).
+
+## Display choices that are not in the data
+
+- **Westpoort is excluded everywhere** (`UITGESLOTEN_STADSDEEL` in `app.R`) — harbour and
+  industrial estate, two wijken, almost no households. On the map it colours in like any other
+  wijk and its tiny counts skew the scale. The parquet keeps it; only the app hides it.
+- The map has no gemeente level (a choropleth of one polygon), but **"Heel Amsterdam" is a
+  region on the Per regio tab** and is its default — that is the comparison baseline.
+- The Kaart tab's "Toon" control limits the map to one stadsdeel and zooms to it, so a map of
+  Oost alone can be lifted out. It filters the geometry, not the data.
 
 ## Conventions
 

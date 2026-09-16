@@ -59,8 +59,20 @@ Dat is de vorm van de levering, niet de berekening: de combinaties staan er alle
 met een risicoscore. Een ongekruiste combinatietelling in de volgende RA-levering lost het op
 — zie PLAN.md §7.
 
-Onder het vennfiguur op **Per regio** staat dezelfde figuur in tabelvorm: de acht
-deelgebieden × de categorieën van de gekozen risicoscore.
+De venn op **Per regio** heeft een eigen indicatorkeuze. Standaard staat die op **(alle)**:
+dan kleurt hij naar de verdeling zelf — welk deel van de populatie in welk deelgebied zit —
+zonder dat je een risicoscore hoeft te kiezen. Kies je er wel een, dan kleurt hij naar het
+aandeel daarvan binnen elk deelgebied. Eronder staan twee tabellen: de acht deelgebieden ×
+de categorieën van de gekozen score, en de acht deelgebieden × de losse risicofactoren
+(R1…R9). Let op: `R1` (armoede) loopt tot 2023 en `R9` (betalingsachterstand zorgverzekering)
+tot 2022 — een lege kolom is daar geen onderdrukking maar een bronregister dat niet doorloopt.
+
+## Kaart
+
+De kaart kan tot één stadsdeel begrensd worden ("Toon"), zodat er een kaart van alleen Oost
+uit te lichten is, en is als **png** te downloaden naast de xlsx. **Westpoort valt overal
+weg**: haven- en bedrijventerrein, nauwelijks huishoudens, en het trekt de kleurschaal scheef.
+Op **Per regio** is "Heel Amsterdam" een van de regio's en de standaardkeuze.
 
 ## Let op bij de cijfers
 

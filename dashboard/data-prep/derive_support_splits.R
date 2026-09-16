@@ -85,6 +85,23 @@ SUPPORT_INDICATOR_COUNT <- c(
   "ouderen (65+)"            = "O_OUD_aantal_vormen"
 )
 
+# population -> de combinatie zelf als indicator: variable_value is dan het
+# combinatieniveau ("none", "O_MPG1", ... , "O_MPG1 + O_MPG2 + O_MPG3"). Zo is
+# de ondersteuningsverdeling te zien zonder een risicoscore te kiezen -- wat de
+# venn nodig heeft als er geen indicator geselecteerd is -- en levert de kaart
+# het aandeel van de populatie per deelgebied.
+SUPPORT_INDICATOR_COMBO <- c(
+  "huishoudens met kinderen" = "O_MPG_combinatie",
+  "ouderen (65+)"            = "O_OUD_combinatie"
+)
+
+# Restcategorie van `*_aantal_vormen`: het deel van de populatie dat door
+# onderdrukking niet aan 0, 1, 2 of 3 vormen toe te wijzen is. Zonder die
+# categorie zou de noemer (de som over de categorieen) te klein zijn en elk
+# percentage te hoog; met die categorie klopt de noemer exact en is meteen
+# zichtbaar hoeveel de onderdrukking kost.
+SUPPORT_UNKNOWN <- "onbekend"
+
 # Aantal deelgebieden per groepsgrootte in een 3-cirkel venn: 1 keer "geen",
 # 3 losse groepen, 3 paren, 1 keer alle drie. Dit is wat "compleet" betekent
 # voor de sommen hierboven.
@@ -293,20 +310,35 @@ derive_support_indicator_rows <- function(dt) {
     w[, `:=`(k1_complement = wel - k2 - k3, k2_complement = wel - k1 - k3)]
     w[is.na(k1), k1 := k1_complement]
     w[is.na(k2), k2 := k2_complement]
-    # Alles-of-niets: de noemer van deze indicator is de som over zijn eigen
-    # categorieen, dus een half aanwezige partitie zou het percentage te hoog
-    # maken.
-    w <- w[!is.na(k0) & !is.na(k1) & !is.na(k2) & !is.na(k3)]
+    # Wat overblijft is niet toe te wijzen. Dat als eigen categorie
+    # wegschrijven in plaats van de hele slice laten vallen: de noemer (de som
+    # over de categorieen) is dan nog steeds precies de populatie, dus elk
+    # percentage klopt, en hoeveel de onderdrukking kost is zichtbaar in plaats
+    # van verstopt. Zonder restcategorie zou een half aanwezige partitie elk
+    # percentage te hoog maken.
+    w[, (SUPPORT_UNKNOWN) := regio_totaal -
+        rowSums(.SD, na.rm = TRUE), .SDcols = c("k0", "k1", "k2", "k3")]
+    w <- w[!is.na(k0) | !is.na(k1) | !is.na(k2) | !is.na(k3)]
     if (nrow(w) > 0L) {
-      aantal <- melt(w, id.vars = IK, measure.vars = c("k0", "k1", "k2", "k3"),
+      aantal <- melt(w, id.vars = IK,
+                     measure.vars = c("k0", "k1", "k2", "k3", SUPPORT_UNKNOWN),
                      variable.name = "variable_value", value.name = "metric_value",
-                     variable.factor = FALSE)
+                     variable.factor = FALSE, na.rm = TRUE)
       aantal[, variable_value := sub("^k", "", variable_value)]
       aantal[, variable_name := unname(SUPPORT_INDICATOR_COUNT[population])]
     }
   }
 
-  ind <- rbind(signaal, aantal, use.names = TRUE, fill = TRUE)
+  # -- de combinatie zelf als indicator ---------------------------------------
+  # Elk deelgebied van de venn als eigen categorie, zodat de noemer de hele
+  # populatie is. Ook hier een restcategorie voor wat de onderdrukking kost.
+  combinatie <- lev[, .(variable_value = split_level, metric_value = niveau), by = IK]
+  rest <- combinatie[, .(metric_value = regio_totaal[1] - sum(metric_value)), by = IK]
+  rest[, variable_value := SUPPORT_UNKNOWN]
+  combinatie <- rbind(combinatie, rest, use.names = TRUE)
+  combinatie[, variable_name := unname(SUPPORT_INDICATOR_COMBO[population])]
+
+  ind <- rbind(signaal, aantal, combinatie, use.names = TRUE, fill = TRUE)
   ind <- ind[metric_value >= SUPPORT_MIN_CELL]
   if (nrow(ind) == 0L) return(leeg)
   ind[, `:=`(split_var = SUPPORT_TOTAL_LABEL, split_level = SUPPORT_TOTAL_LABEL,
@@ -326,7 +358,8 @@ add_support_derivations <- function(dt) {
   stopifnot(is.data.table(dt))
 
   dt <- dt[!split_var %in% c(SUPPORT_SPLIT_SIGNAL, SUPPORT_SPLIT_COUNT)]
-  dt <- dt[!variable_name %in% c(SUPPORT_INDICATOR_SIGNAL, SUPPORT_INDICATOR_COUNT)]
+  dt <- dt[!variable_name %in% c(SUPPORT_INDICATOR_SIGNAL, SUPPORT_INDICATOR_COUNT,
+                                 SUPPORT_INDICATOR_COMBO)]
 
   split_rows <- derive_support_split_rows(dt)
   ind_rows   <- derive_support_indicator_rows(dt)

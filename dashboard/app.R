@@ -19,6 +19,7 @@ suppressPackageStartupMessages({
 })
 
 source("utils/venn_diagram.R")
+source("utils/map_download.R")
 
 # The shared think-cell export stack from shiny_dashboard_template, in the order
 # the files build on each other (same order as tests/testthat.R). Wiring
@@ -45,6 +46,16 @@ if (!dir.exists(DATA_DIR)) {
 
 ds  <- open_dataset(file.path(DATA_DIR, "indicators.parquet"))
 geo <- readRDS(file.path(DATA_DIR, "geo.rds"))
+
+# Westpoort is haven- en bedrijventerrein: twee wijken, nauwelijks huishoudens.
+# Op de kaart kleurt het mee als een gewone wijk en trekt het door zijn kleine
+# aantallen de schaal scheef, terwijl er inhoudelijk niets te zien is. Het
+# stadsdeel blijft daarom overal buiten beeld -- kaart, regiokeuze, tabel en
+# downloads. De data zelf blijft ongemoeid: dit is een weergavekeuze, geen
+# correctie op de levering.
+UITGESLOTEN_STADSDEEL <- "Westpoort"
+
+geo <- lapply(geo, function(g) g[!(!is.na(g$stadsdeel) & g$stadsdeel == UITGESLOTEN_STADSDEEL), ])
 
 # Provenance stamped into every export (tc_build_datasheet_log() in
 # utils/slide_download.R): which RA delivery a chart's numbers came from, and
@@ -78,19 +89,33 @@ vocab <- ds |>
   collect() |>
   as.data.table()
 
-POPULATIONS   <- sort(unique(vocab$population))
-REGION_LEVELS <- c("buurt", "wijk", "gebied", "stadsdeel")  # gemeente has no map
-YEARS         <- sort(unique(vocab$year))
+POPULATIONS  <- sort(unique(vocab$population))
+YEARS        <- sort(unique(vocab$year))
+
+# De kaart kent geen gemeentevlak (dat is de buitenrand van alle stadsdelen
+# samen, en als choropleth van een regio zinloos); de tabbladen die een regio
+# uitkiezen kennen "Heel Amsterdam" wel -- dat is juist de vergelijkingsbasis.
+MAP_LEVELS   <- c("buurt", "wijk", "gebied", "stadsdeel")
+REGIO_LEVELS <- c(MAP_LEVELS, "gemeente")
+
+GEMEENTE_CODE <- "Amsterdam"
+GEMEENTE_NAAM <- "Heel Amsterdam"
+
+# Stadsdeel om op in te zoomen, of de hele stad. Zo is een kaart van alleen
+# Oost te maken, zonder de andere stadsdelen eromheen.
+SCOPE_ALLES <- "Heel Amsterdam"
+STADSDELEN  <- sort(unique(geo$stadsdeel$region_code))
 
 # Opening view: the city itself, not a default that includes Haarlem and Almere.
 AMS_BBOX <- st_bbox(geo$stadsdeel)
 
 # Region code -> name, per level, from the geometry (the delivery carries codes
-# only).
+# only). Gemeente heeft geen geometrie en komt uit de data zelf.
 region_choices <- lapply(geo, function(g) {
   d <- st_drop_geometry(g)
   setNames(d$region_code, d$region_name)[order(d$region_name)]
 })
+region_choices$gemeente <- setNames(GEMEENTE_CODE, GEMEENTE_NAAM)
 
 # Which split_var holds the O_MPG*/O_OUD* support-combination for each
 # population, and the matching label vectors from variable_labels.R -- keyed
@@ -122,6 +147,22 @@ RISICO_LABELS <- c(RISICO_LABELS_HHKIND, RISICO_LABELS_OUD)
 #     gebruikt een vorm van ondersteuning")
 ONDERSTEUNING_SPLITS      <- names(ONDERSTEUNING_SPLIT_LABELS)
 ONDERSTEUNING_INDICATOREN <- names(ONDERSTEUNING_INDICATOR_LABELS)
+
+# De combinatie als indicator: variable_value is dan het combinatieniveau zelf.
+# Dat is wat de venn leest als er geen risicoscore gekozen is.
+COMBO_INDICATOR <- c(
+  "huishoudens met kinderen" = "O_MPG_combinatie",
+  "ouderen (65+)"            = "O_OUD_combinatie"
+)
+# Sentinel voor "geen risicoscore" in de keuzelijst bij de venn.
+VENN_GEEN_VAR <- "(alle)"
+
+# De losse risicofactoren van een populatie, zonder de cumulatieve score: de
+# kolommen van de risicofactor-tabel onder de venn.
+RISICO_FACTOREN <- list(
+  "huishoudens met kinderen" = setdiff(names(RISICO_LABELS_HHKIND), "R_MPG_totaal"),
+  "ouderen (65+)"            = setdiff(names(RISICO_LABELS_OUD), "R_OUD_totaal")
+)
 
 # variable_name -> omschrijving, voor alles wat in "Risicoscore" kan staan.
 VAR_LABELS <- c(RISICO_LABELS, ONDERSTEUNING_INDICATOR_LABELS)
@@ -161,6 +202,10 @@ pretty_split <- function(x) {
 # Categorielabel voor een afgeleide ondersteuningswaarde ("wel", "2"), in
 # beide vormen: als variable_value van de indicator en als split_level van de
 # splitsing zijn het dezelfde codes. Onbekende codes blijven zichzelf.
+# "R_MPG1_armoede_hh" -> "R1": een kolomkop die in een tabelcel past. De
+# volledige omschrijving rijdt mee als hover-title en in de legenda eronder.
+risico_code <- function(x) sub("^R_(MPG|OUD)([0-9]+)_.*$", "R\\2", x)
+
 pretty_ondersteuning <- function(x) {
   x <- as.character(x)
   if (length(x) == 0L) return(character(0))  # ifelse() zou hier logical(0) geven
@@ -171,7 +216,15 @@ pretty_ondersteuning <- function(x) {
 # "Waarde van de indicator". De risicoscores houden hun ruwe waarde (0/1/2/
 # 3plus, zie PLAN.md 6, open punt 2); bij de afgeleide indicatoren is de
 # waarde zelf een categorie en krijgt hij zijn label mee.
-pretty_value <- function(x, variable_name) {
+pretty_value <- function(x, variable_name, population = NULL) {
+  # De combinatie-indicator draagt het combinatieniveau als waarde, dus die
+  # krijgt de groepsnamen; "onbekend" is de restcategorie en staat in
+  # ONDERSTEUNING_NIVEAU_LABELS.
+  if (!is.null(population) && isTRUE(variable_name == COMBO_INDICATOR[[population]])) {
+    lab <- pretty_combo_level(x, COMBO_GROUP_LABELS[[population]])
+    los <- ONDERSTEUNING_NIVEAU_LABELS[as.character(x)]
+    return(unname(ifelse(is.na(los), lab, los)))
+  }
   if (isTRUE(variable_name %in% ONDERSTEUNING_INDICATOREN)) return(pretty_ondersteuning(x))
   x
 }
@@ -290,7 +343,8 @@ ui <- fluidPage(
               width = 3,
               control_card(
                 selectInput("k_jaar", "Jaar", choices = YEARS, selected = max(YEARS)),
-                selectInput("k_niveau", "Regioniveau", choices = REGION_LEVELS, selected = "wijk")
+                selectInput("k_niveau", "Regioniveau", choices = MAP_LEVELS, selected = "wijk"),
+                selectInput("k_scope", "Toon", choices = c(SCOPE_ALLES, STADSDELEN))
               ),
               control_card(
                 selectInput("k_var", "Indicator", choices = NULL),
@@ -312,6 +366,7 @@ ui <- fluidPage(
                              selected = "rel")
               ),
               downloadButton("k_dl", "Download data (xlsx)", class = "btn-default"),
+              downloadButton("k_dl_fig", "Download kaart (png)", class = "btn-default"),
               div(class = "note", style = "margin-top: 10px;",
                   "Grijze gebieden hebben geen cijfer: door de CBS-uitvoerregels zijn ",
                   "aantallen onder de 10 onderdrukt. Dat is niet hetzelfde als nul.")
@@ -332,7 +387,7 @@ ui <- fluidPage(
             sidebarPanel(
               width = 3,
               control_card(
-                selectInput("r_niveau", "Regioniveau", choices = REGION_LEVELS, selected = "stadsdeel"),
+                selectInput("r_niveau", "Regioniveau", choices = REGIO_LEVELS, selected = "gemeente"),
                 selectizeInput("r_regio", "Regio", choices = NULL)
               ),
               control_card(
@@ -375,19 +430,20 @@ ui <- fluidPage(
 
               hr(),
               fluidRow(
-                column(5, div("Risicostapeling naar ondersteuningscombinatie", class = "chart-title")),
-                column(3, selectInput("r_venn_jaar", "Jaar", choices = YEARS, selected = max(YEARS))),
-                column(4, selectInput("r_venn_pal", "Kleurenschaal", choices = names(VENN_PALETTES)))
+                column(4, div("Ondersteuning naar combinatie", class = "chart-title")),
+                column(4, selectInput("r_venn_var", "Kleur de venn naar", choices = NULL)),
+                column(2, selectInput("r_venn_jaar", "Jaar", choices = YEARS, selected = max(YEARS))),
+                column(2, selectInput("r_venn_pal", "Kleurenschaal", choices = names(VENN_PALETTES)))
               ),
-              div(class = "note", style = "margin-bottom: 10px;",
-                  "Combinatie van ondersteuningsgroepen voor de gekozen regio/risicoscore/waarde/",
-                  "metric hierboven, voor het gekozen jaar. Dode ruimte buiten de cirkels = geen",
-                  " van de drie groepen; het overlappende gebied = beide/alle groepen tegelijk.",
-                  " De kleurenschaal loopt over de zeven cirkelvlakken; de dode ruimte valt",
-                  " erbuiten, anders bepaalt die in haar eentje de hele schaal."),
+              conditionalPanel(
+                "input.r_venn_var != '(alle)'",
+                fluidRow(column(4, selectInput("r_venn_val", "Waarde van de indicator", choices = NULL)))
+              ),
+              uiOutput("venn_uitleg"),
               uiOutput("venn"),
               uiOutput("venn_legenda"),
               uiOutput("venn_tabel"),
+              uiOutput("risico_tabel"),
               uiOutput("venn_downloads")
             )
           )
@@ -472,7 +528,7 @@ server <- function(input, output, session) {
     cur <- isolate(input$k_val)
     freezeReactiveValue(input, "k_val")
     update_preserving(session, "k_val",
-                      setNames(vals, pretty_value(vals, input$k_var)), cur)
+                      setNames(vals, pretty_value(vals, input$k_var, input$populatie)), cur)
   })
   observeEvent(list(input$populatie, input$r_var), {
     req(input$r_var)
@@ -481,7 +537,7 @@ server <- function(input, output, session) {
     cur <- isolate(input$r_val)
     freezeReactiveValue(input, "r_val")
     update_preserving(session, "r_val",
-                      setNames(vals, pretty_value(vals, input$r_var)), cur)
+                      setNames(vals, pretty_value(vals, input$r_var, input$populatie)), cur)
   })
 
   # "Splits uit naar": which splits actually have rows for the CURRENTLY
@@ -527,14 +583,23 @@ server <- function(input, output, session) {
   # CBS-onderdrukking en verschilt sterk per regioniveau (zie PLAN.md 6).
   var_note <- function(var_name) {
     if (isTRUE(var_name %in% ONDERSTEUNING_INDICATOREN)) {
-      if (isTRUE(grepl("_aantal_vormen$", var_name))) {
+      if (isTRUE(grepl("_combinatie$", var_name))) {
+        tags$div(class = "note", style = "margin: -6px 0 10px;",
+                 "Afgeleid uit de ondersteuningscombinaties: welke van de drie",
+                 " groepen tegelijk spelen. Bij \u201cAandeel (%)\u201d is de noemer",
+                 " de hele populatie, dus dat leest als het percentage dat in dat",
+                 " deelgebied van de venn valt. \u201cNiet toe te wijzen\u201d is het",
+                 " deel dat door CBS-onderdrukking aan geen enkel deelgebied",
+                 " toegewezen kon worden.")
+      } else if (isTRUE(grepl("_aantal_vormen$", var_name))) {
         tags$div(class = "note", style = "margin: -6px 0 10px;",
                  "Afgeleid uit de ondersteuningscombinaties. De levering telt die",
-                 " combinaties alleen gekruist met een risicoscore, en op buurtniveau",
-                 " valt daarvan bijna altijd een cel onder de tien: reken op cijfers",
-                 " voor gemeente, stadsdeel en gebied, ongeveer een kwart van de",
-                 " wijken en nauwelijks buurten. Waar het cijfer er niet is, is het",
-                 " onderdrukt \u2014 niet nul.")
+                 " alleen gekruist met een risicoscore, dus lang niet elke categorie",
+                 " is overal af te leiden. Wat overblijft staat als",
+                 " \u201cNiet toe te wijzen\u201d in de waardelijst: de noemer is dus",
+                 " altijd de hele populatie en de getoonde categorie\u00ebn kloppen,",
+                 " ook waar die restcategorie groot is. Kijk er even naar voordat je",
+                 " buurten onderling vergelijkt.")
       } else {
         tags$div(class = "note", style = "margin: -6px 0 10px;",
                  "Afgeleid uit de ondersteuningscombinaties: heeft dit huishouden/",
@@ -652,15 +717,46 @@ server <- function(input, output, session) {
                 AMS_BBOX[["xmax"]], AMS_BBOX[["ymax"]])
   })
 
+  # De kaartlaag: de geometrie van het gekozen niveau, begrensd tot het gekozen
+  # stadsdeel, met de cijfers eraan. Een reactive in plaats van inline in de
+  # tekenstap, want de download tekent exact dezelfde laag.
+  kaart_geo <- reactive({
+    req(input$k_niveau)
+    g <- geo[[input$k_niveau]]
+    scope <- input$k_scope %||% SCOPE_ALLES
+    if (!identical(scope, SCOPE_ALLES)) g <- g[!is.na(g$stadsdeel) & g$stadsdeel == scope, ]
+    merge(g, kaart_data()[, .(region_code, waarde, metric_value, n_totaal)],
+          by = "region_code", all.x = TRUE)
+  })
+
+  # De klassegrenzen worden hier berekend en niet aan colorBin() overgelaten,
+  # zodat de kaart op het scherm en de gedownloade figuur aantoonbaar dezelfde
+  # kleuren en dezelfde legenda hebben.
+  kaart_bins <- reactive({
+    w <- kaart_geo()$waarde
+    if (all(is.na(w))) return(numeric(0))
+    b <- unique(pretty(range(w, na.rm = TRUE), 6))
+    if (length(b) < 2) b <- c(min(w, na.rm = TRUE) - 0.5, max(w, na.rm = TRUE) + 0.5)
+    b
+  })
+
+  # Inzoomen als de gebruiker een stadsdeel kiest -- dat is de hele reden voor
+  # die keuze. Alleen hierop, niet bij elke andere selector: dan zou de kaart
+  # de pan/zoom van de gebruiker steeds terugzetten.
+  observeEvent(input$k_scope, {
+    req(input$k_scope)
+    bb <- if (identical(input$k_scope, SCOPE_ALLES)) AMS_BBOX else {
+      st_bbox(geo$stadsdeel[geo$stadsdeel$region_code == input$k_scope, ])
+    }
+    leafletProxy("kaart") |>
+      fitBounds(bb[["xmin"]], bb[["ymin"]], bb[["xmax"]], bb[["ymax"]])
+  }, ignoreInit = TRUE)
+
   # Redraw only the polygons, via a proxy, so changing a selector does not reset
   # the user's pan/zoom.
   observe({
-    d <- kaart_data()
+    m <- kaart_geo()
     req(input$k_niveau)
-    g <- geo[[input$k_niveau]]
-
-    m <- merge(g, d[, .(region_code, waarde, metric_value, n_totaal)],
-               by = "region_code", all.x = TRUE)
 
     proxy <- leafletProxy("kaart") |> clearShapes() |> clearControls()
 
@@ -671,8 +767,8 @@ server <- function(input, output, session) {
       return()
     }
 
-    pal <- colorBin("YlOrRd", domain = m$waarde, bins = 6,
-                    na.color = "#e0e0e0", pretty = TRUE)
+    pal <- colorBin("YlOrRd", domain = m$waarde, bins = kaart_bins(),
+                    na.color = "#e0e0e0")
 
     fmt <- function(x) {
       if (is.na(x)) return("onvoldoende waarnemingen")
@@ -815,31 +911,72 @@ server <- function(input, output, session) {
              modeBarButtonsToRemove = c("select2d", "lasso2d", "autoScale2d"))
   })
 
-  # -- Risicostapeling naar ondersteuningscombinatie (venn) --------------------
-  # Always shows the O_MPG_combination/O_OUD_combination split for the region
-  # + risicoscore + waarde + metric already chosen above -- independent of
-  # whatever input$r_split happens to be set to, and for one chosen year
-  # (r_venn_jaar) since a venn diagram is a single-year snapshot, unlike the
-  # line chart above it.
+  # -- Ondersteuning naar combinatie (venn) ------------------------------------
+  # Toont altijd de O_MPG_combination/O_OUD_combination-verdeling voor de regio
+  # + metric hierboven, voor een eigen gekozen jaar (een venn is een
+  # momentopname, geen tijdreeks) en een eigen gekozen kleuring. Die kleuring
+  # is los van het lijndiagram: bij "(alle)" is het de verdeling zelf -- welk
+  # deel van de populatie in welk deelgebied zit -- en bij een risicoscore het
+  # aandeel daarvan binnen elk deelgebied.
 
+  # Keuzelijst: "(alle)" plus de risicoscores van deze populatie. De afgeleide
+  # ondersteuningsindicatoren staan er niet in; die zeggen zelf al iets over de
+  # ondersteuning en kruisen dus niet met de combinatie.
+  observeEvent(input$populatie, {
+    req(input$populatie)
+    vars <- sort(intersect(unique(pop_vocab()$variable_name), names(RISICO_LABELS)))
+    ch <- c(setNames(VENN_GEEN_VAR, "(alle) \u2013 de verdeling zelf"), named(vars, pretty_var))
+    cur <- isolate(input$r_venn_var)
+    for (i in c("r_venn_var", "r_venn_val")) freezeReactiveValue(input, i)
+    update_preserving(session, "r_venn_var", ch, cur)
+  }, ignoreInit = FALSE)
+
+  observeEvent(list(input$populatie, input$r_venn_var), {
+    req(input$r_venn_var)
+    if (identical(input$r_venn_var, VENN_GEEN_VAR)) return()
+    req(input$r_venn_var %in% pop_vocab()$variable_name)
+    vals <- sort(unique(pop_vocab()[variable_name == input$r_venn_var]$variable_value))
+    cur <- isolate(input$r_venn_val)
+    freezeReactiveValue(input, "r_venn_val")
+    update_preserving(session, "r_venn_val",
+                      setNames(vals, pretty_value(vals, input$r_venn_var, input$populatie)), cur)
+  })
+
+  venn_zonder_score <- reactive(identical(input$r_venn_var %||% VENN_GEEN_VAR, VENN_GEEN_VAR))
+
+  # Bij "(alle)" komt het cijfer uit de combinatie-indicator: daar is het
+  # combinatieniveau de variable_value, dus is de noemer de hele populatie en
+  # leest het percentage als "dit deel van de gezinnen zit in dit deelgebied".
+  # Met een risicoscore komt het uit de combinatie-uitsplitsing en is de noemer
+  # het deelgebied zelf.
   venn_data <- reactive({
-    req(input$populatie, input$r_niveau, input$r_regio,
-        input$r_var, input$r_val, input$r_metric, input$r_venn_jaar)
+    req(input$populatie, input$r_niveau, input$r_regio, input$r_metric, input$r_venn_jaar)
 
-    combo_var <- COMBO_SPLIT_VAR[[input$populatie]]
+    q <- ds |>
+      filter(population   == !!input$populatie,
+             region_level == !!input$r_niveau,
+             region_code  == !!input$r_regio,
+             metric_name  == !!input$r_metric,
+             year         == !!as.integer(input$r_venn_jaar))
 
-    d <- ds |>
-      filter(population    == !!input$populatie,
-             region_level  == !!input$r_niveau,
-             region_code   == !!input$r_regio,
-             variable_name == !!input$r_var,
-             variable_value== !!input$r_val,
-             metric_name   == !!input$r_metric,
-             split_var     == !!combo_var,
-             year          == !!as.integer(input$r_venn_jaar)) |>
-      collect() |>
-      as.data.table()
-
+    d <- if (venn_zonder_score()) {
+      q |> filter(variable_name == !!unname(COMBO_INDICATOR[[input$populatie]])) |>
+        collect() |> as.data.table()
+    } else {
+      req(input$r_venn_val)
+      q |> filter(variable_name  == !!input$r_venn_var,
+                  variable_value == !!input$r_venn_val,
+                  split_var      == !!COMBO_SPLIT_VAR[[input$populatie]]) |>
+        collect() |> as.data.table()
+    }
+    # Het combinatieniveau zit in de ene vorm in variable_value en in de andere
+    # in split_level. Een extra kolom in plaats van een hernoeming, want de
+    # export heeft de oorspronkelijke kolommen nodig.
+    if (nrow(d) > 0) {
+      d[, niveau := if (venn_zonder_score()) variable_value else split_level]
+    } else {
+      d[, niveau := character()]
+    }
     add_display(d, input$r_weergave)
   })
 
@@ -850,34 +987,23 @@ server <- function(input, output, session) {
     d <- venn_data()
     lev <- venn_levels(names(COMBO_GROUP_LABELS[[input$populatie]]))
     vapply(lev, function(level) {
-      row <- d[split_level == level]
+      row <- d[niveau == level]
       if (nrow(row) == 0) NA_real_ else row$waarde[1]
     }, numeric(1))
   })
 
-  # De venn hoort bij een risicoscore: hij kruist de ondersteuningscombinatie
-  # met een waarde daarvan. Bij de twee afgeleide ondersteuningsindicatoren
-  # bestaat die kruising niet (de ondersteuning zit daar zelf in
-  # variable_value), en zou de figuur als volledig onderdrukt tekenen -- wat
-  # als "geen waarnemingen" leest in plaats van als "niet van toepassing".
-  venn_speelt <- reactive({
-    req(input$r_var)
-    !isTRUE(input$r_var %in% ONDERSTEUNING_INDICATOREN)
-  })
-
-  # Dezelfde slice als de venn, maar over alle waarden van de risicoscore. Dat
-  # is precies wat de figuur niet kan tonen -- die staat per definitie op een
-  # gekozen waarde -- en wat de tabel eronder toevoegt: per venn-vakje de hele
-  # risicoverdeling.
+  # Dezelfde slice als de venn, maar over alle waarden van de gekozen
+  # risicoscore -- wat de figuur per definitie niet kan tonen, want die staat op
+  # een waarde. Bij "(alle)" is er niets uit te splitsen en vervalt de tabel.
   venn_matrix_data <- reactive({
-    req(input$populatie, input$r_niveau, input$r_regio,
-        input$r_var, input$r_metric, input$r_venn_jaar)
+    req(input$populatie, input$r_niveau, input$r_regio, input$r_metric, input$r_venn_jaar)
+    req(!venn_zonder_score(), input$r_venn_var)
 
     d <- ds |>
       filter(population    == !!input$populatie,
              region_level  == !!input$r_niveau,
              region_code   == !!input$r_regio,
-             variable_name == !!input$r_var,
+             variable_name == !!input$r_venn_var,
              metric_name   == !!input$r_metric,
              split_var     == !!COMBO_SPLIT_VAR[[input$populatie]],
              year          == !!as.integer(input$r_venn_jaar)) |>
@@ -896,7 +1022,7 @@ server <- function(input, output, session) {
     # De waardenreeks komt uit de vocabulaire, niet uit de slice: zo krijgt een
     # regio waar een hele risicowaarde onderdrukt is toch die kolom, met
     # "onvoldoende waarnemingen" erin.
-    waarden <- sort(unique(pop_vocab()[variable_name == input$r_var]$variable_value))
+    waarden <- sort(unique(pop_vocab()[variable_name == input$r_venn_var]$variable_value))
 
     m <- matrix(NA_real_, nrow = length(lev), ncol = length(waarden),
                 dimnames = list(names(lev), waarden))
@@ -911,28 +1037,77 @@ server <- function(input, output, session) {
     list(m = m, n = n, waarden = waarden)
   })
 
-  # The venn is its own chart with its own year, so it needs its own title
-  # rather than borrowing the line chart's -- and the downloaded SVG carries
-  # it, which is what makes the file readable away from the dashboard.
+  # De tweede tabel: dezelfde acht deelgebieden, maar met de losse
+  # risicofactoren als kolommen in plaats van de waarden van een score. Elke
+  # cel is het aandeel van dat deelgebied waar die risicofactor speelt
+  # (variable_value "1"), dus deze tabel staat los van de gekozen risicoscore.
+  risico_matrix_data <- reactive({
+    req(input$populatie, input$r_niveau, input$r_regio, input$r_metric, input$r_venn_jaar)
+    factoren <- RISICO_FACTOREN[[input$populatie]]
+
+    d <- ds |>
+      filter(population     == !!input$populatie,
+             region_level   == !!input$r_niveau,
+             region_code    == !!input$r_regio,
+             variable_name %in% !!factoren,
+             variable_value == "1",
+             metric_name    == !!input$r_metric,
+             split_var      == !!COMBO_SPLIT_VAR[[input$populatie]],
+             year           == !!as.integer(input$r_venn_jaar)) |>
+      collect() |>
+      as.data.table()
+
+    add_display(d, input$r_weergave)
+  })
+
+  risico_matrix <- reactive({
+    d   <- risico_matrix_data()
+    lev <- venn_levels(names(COMBO_GROUP_LABELS[[input$populatie]]))
+    factoren <- RISICO_FACTOREN[[input$populatie]]
+
+    m <- matrix(NA_real_, nrow = length(lev), ncol = length(factoren),
+                dimnames = list(names(lev), factoren))
+    n <- setNames(rep(NA_real_, length(lev)), names(lev))
+    for (k in names(lev)) {
+      rows <- d[split_level == lev[[k]] & variable_name %in% factoren]
+      if (nrow(rows) == 0) next
+      m[k, rows$variable_name] <- rows$waarde
+      # De noemer van elke cel is het deelgebied zelf, en die is voor elke
+      # risicofactor dezelfde -- dus dat is meteen de omvang van de groep.
+      n[[k]] <- rows$denominator[1]
+    }
+    list(m = m, n = n)
+  })
+
+  # De venn is zijn eigen figuur met zijn eigen jaar en kleuring, dus hij heeft
+  # ook zijn eigen titel -- en de gedownloade SVG draagt hem, wat het bestand
+  # leesbaar maakt los van het dashboard dat hem maakte.
   venn_titel <- reactive({
-    req(input$r_var, input$r_val, input$r_metric, input$r_regio, input$r_venn_jaar)
+    req(input$r_metric, input$r_regio, input$r_venn_jaar)
     nm <- names(region_choices[[input$r_niveau]])[
       match(input$r_regio, region_choices[[input$r_niveau]])]
-    sprintf("Risicostapeling naar ondersteuningscombinatie | %s = %s | %s (%s) | %s | %s",
-            pretty_var(input$r_var), input$r_val,
-            pretty_metric(input$r_metric), eenheid(input$r_weergave),
+    kleuring <- if (venn_zonder_score()) "verdeling over de ondersteuningscombinaties"
+                else sprintf("%s = %s", pretty_var(input$r_venn_var), input$r_venn_val %||% "")
+    sprintf("Ondersteuning naar combinatie | %s | %s (%s) | %s | %s",
+            kleuring, pretty_metric(input$r_metric), eenheid(input$r_weergave),
             nm %||% input$r_regio, input$r_venn_jaar)
   })
 
+  output$venn_uitleg <- renderUI({
+    req(input$populatie)
+    tags$div(class = "note", style = "margin-bottom: 10px;",
+      "Dode ruimte buiten de cirkels = geen van de drie groepen; het overlappende",
+      " gebied = beide/alle groepen tegelijk. De kleurenschaal loopt over de zeven",
+      " cirkelvlakken; de dode ruimte valt erbuiten, anders bepaalt die in haar",
+      " eentje de hele schaal. ",
+      if (venn_zonder_score())
+        tags$b("Nu gekleurd naar de verdeling zelf: welk deel van de populatie in welk deelgebied zit.")
+      else
+        tags$b(sprintf("Nu gekleurd naar %s = %s, als aandeel binnen elk deelgebied.",
+                       pretty_var(input$r_venn_var), input$r_venn_val %||% "")))
+  })
+
   output$venn <- renderUI({
-    if (!venn_speelt()) {
-      return(tags$div(class = "note", style = "text-align: center; padding: 28px 12px;",
-                      "Het vennfiguur kruist de ondersteuningscombinatie met een",
-                      " risicoscore. Bij ", tags$b(pretty_var(input$r_var)),
-                      " zit de ondersteuning zelf al in de waarde, dus die kruising",
-                      " bestaat niet. Kies hierboven een R-risicoscore om het",
-                      " figuur en de tabel te zien."))
-    }
     # No title: the heading above the figure already carries it on screen.
     HTML(venn_svg(venn_vals(), input$r_weergave,
                   names(COMBO_GROUP_LABELS[[input$populatie]]),
@@ -943,7 +1118,6 @@ server <- function(input, output, session) {
 
   output$venn_legenda <- renderUI({
     req(input$populatie)
-    if (!venn_speelt()) return(NULL)
     gl <- COMBO_GROUP_UITLEG[[input$populatie]]
     tags$div(class = "note", style = "margin-top: 8px; text-align: center;",
              HTML(paste(sprintf("<b>%s</b> %s", names(gl), gl), collapse = "&nbsp;&nbsp;&middot;&nbsp;&nbsp;")))
@@ -952,11 +1126,11 @@ server <- function(input, output, session) {
   # De figuur in tabelvorm: dezelfde acht deelgebieden, maar met de hele
   # risicoverdeling ernaast in plaats van een gekozen waarde.
   output$venn_tabel <- renderUI({
-    if (!venn_speelt()) return(NULL)
+    if (venn_zonder_score()) return(NULL)
     mm <- venn_matrix()
     tagList(
       div(class = "chart-title", style = "margin-top: 18px;",
-          "Dezelfde acht groepen per risicoscore"),
+          "Dezelfde acht groepen per waarde van de risicoscore"),
       div(class = "note", style = "margin-bottom: 8px;",
           if (input$r_weergave == "rel")
             paste("Per rij verdeeld over de waarden van de risicoscore; elke rij telt op tot",
@@ -967,13 +1141,57 @@ server <- function(input, output, session) {
       HTML(venn_matrix_html(mm$m, mm$n, input$r_weergave,
                             names(COMBO_GROUP_LABELS[[input$populatie]]),
                             COMBO_GROUP_LABELS[[input$populatie]],
-                            var_label = pretty_var(input$r_var)))
-    )
+                            var_label = pretty_var(input$r_venn_var))))
   })
 
-  # De twee knoppen onder de venn horen bij een figuur dat er niet altijd is.
+  # De risicofactor-tabel: acht deelgebieden x de losse risicofactoren.
+  output$risico_tabel <- renderUI({
+    req(input$populatie, input$r_venn_jaar)
+    rm <- risico_matrix()
+    factoren <- colnames(rm$m)
+
+    # Niet elke risicofactor loopt tot 2024: armoede stopt na 2023 en
+    # betalingsachterstand zorgverzekering na 2022 -- die bronregisters zitten
+    # niet in de laatste jaren van de levering. Dat is iets anders dan een
+    # onderdrukte cel, en zonder dit onderschrift zou het streepje in die
+    # kolommen als "te weinig waarnemingen" gelezen worden.
+    jaar <- as.integer(input$r_venn_jaar)
+    in_jaar <- unique(pop_vocab()[year == jaar]$variable_name)
+    ontbreekt <- setdiff(factoren, in_jaar)
+
+    tagList(
+      div(class = "chart-title", style = "margin-top: 22px;",
+          "Risicofactoren per ondersteuningsgroep"),
+      div(class = "note", style = "margin-bottom: 8px;",
+          if (input$r_weergave == "rel")
+            "Per cel: het aandeel van die ondersteuningsgroep waarbij deze risicofactor speelt."
+          else
+            "Per cel: het aantal binnen die ondersteuningsgroep waarbij deze risicofactor speelt.",
+          " Rijen tellen hier niet op tot 100%: een huishouden/oudere kan meerdere",
+          " risicofactoren tegelijk hebben. Een streepje betekent onvoldoende waarnemingen."),
+      HTML(venn_matrix_html(rm$m, rm$n, input$r_weergave,
+                            names(COMBO_GROUP_LABELS[[input$populatie]]),
+                            COMBO_GROUP_LABELS[[input$populatie]],
+                            var_label = "Risicofactor",
+                            kolomlabels = risico_code(factoren),
+                            kolomtitels = unname(pretty_var(factoren)),
+                            n_label = "n")),
+      div(class = "note", style = "margin-top: 6px;",
+          HTML(paste(sprintf("<b>%s</b> %s", risico_code(factoren),
+                             venn_esc(unname(pretty_var(factoren)))),
+                     collapse = "&nbsp;&nbsp;&middot;&nbsp;&nbsp;"))),
+      if (length(ontbreekt)) {
+        div(class = "note", style = "margin-top: 6px;",
+            tags$b(sprintf("Niet in %d: %s.", jaar,
+                           paste(risico_code(ontbreekt), collapse = ", "))),
+            " Die bronregisters lopen niet door tot dit jaar; de lege kolom",
+            " betekent hier dus niet onvoldoende waarnemingen. Kies een eerder",
+            " jaar om ze te zien.")
+      })
+  })
+
+  # De twee knoppen onder de venn horen bij een figuur dat er altijd is.
   output$venn_downloads <- renderUI({
-    if (!venn_speelt()) return(NULL)
     div(style = "text-align: center; margin-top: 14px;",
         downloadButton("r_venn_dl", "Download figuur (svg)", class = "btn-default"),
         downloadButton("r_venn_dl_data", "Download data (xlsx)", class = "btn-default"))
@@ -998,6 +1216,37 @@ server <- function(input, output, session) {
   output$k_dl <- downloadHandler(
     filename = function() sprintf("dynamo_kaart_%s.xlsx", Sys.Date()),
     content  = function(file) write_xlsx(export_cols(kaart_data()), file)
+  )
+
+  # De kaart als plaatje. Leaflet tekent in de browser en laat zich hier niet
+  # wegschrijven, dus choropleth_ggplot() tekent dezelfde laag opnieuw met
+  # ggplot2 -- met dezelfde klassegrenzen (kaart_bins()), zodat de figuur en het
+  # scherm dezelfde indeling en kleuren hebben.
+  output$k_dl_fig <- downloadHandler(
+    filename = function() sprintf("dynamo_kaart_%s_%s.png", input$k_niveau, Sys.Date()),
+    contentType = "image/png",
+    content = function(file) {
+      laag <- kaart_geo()
+      scope <- input$k_scope %||% SCOPE_ALLES
+      p <- choropleth_ggplot(
+        laag, kaart_bins(), input$k_weergave,
+        titel = sprintf("%s = %s", pretty_var(input$k_var), input$k_val),
+        ondertitel = sprintf("%s (%s) | %s | %s%s",
+                             pretty_metric(input$k_metric), eenheid(input$k_weergave),
+                             input$k_jaar, input$k_niveau,
+                             if (identical(scope, SCOPE_ALLES)) ", heel Amsterdam"
+                             else sprintf(", stadsdeel %s", scope)),
+        bron = "Bron: CBS microdata via de Remote Access-omgeving.")
+      # Een kaart van een stadsdeel is hoger dan breed, de hele stad juist niet;
+      # het formaat volgt de verhouding van de laag zodat er geen witruimte
+      # naast de kaart komt te staan.
+      bb <- sf::st_bbox(laag)
+      ratio <- as.numeric((bb["ymax"] - bb["ymin"]) / (bb["xmax"] - bb["xmin"]))
+      breedte <- 9
+      ggplot2::ggsave(file, p, width = breedte,
+                      height = max(5, min(14, breedte * ratio * 0.75 + 2.2)),
+                      dpi = 200, units = "in", bg = "white")
+    }
   )
 
   # The table behind every Per regio export: exactly the rows the line chart
@@ -1059,9 +1308,18 @@ server <- function(input, output, session) {
   # waar de figuur op staat.
   output$r_venn_dl_data <- downloadHandler(
     filename = function() sprintf("dynamo_venn_%s_%s.xlsx", input$r_venn_jaar, Sys.Date()),
-    content  = function(file) write_xlsx(
-      list(figuur = export_cols(venn_data()),
-           risicomatrix = export_cols(venn_matrix_data())), file)
+    content  = function(file) {
+      # venn_data() draagt het combinatieniveau als `niveau` -- bij "(alle)"
+      # zit het in variable_value, anders in split_level -- dus dat wordt hier
+      # teruggezet op de kolomnaam die de export altijd had.
+      bladen <- list(figuur = export_cols(venn_data()),
+                     risicofactoren = export_cols(risico_matrix_data()))
+      # De risicomatrix bestaat alleen als er een score gekozen is.
+      if (!venn_zonder_score()) {
+        bladen$risicomatrix <- export_cols(venn_matrix_data())
+      }
+      write_xlsx(bladen, file)
+    }
   )
 
   # Vector, not a bitmap: the figure is already an SVG, so the download is the

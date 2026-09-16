@@ -96,3 +96,35 @@ test_that("een matrix met de verkeerde rijen wordt geweigerd", {
   expect_error(venn_matrix_html(m[8:1, ], rep(100, 8), "abs", CODES, LABELS))
   expect_error(venn_matrix_html(m, rep(100, 7), "abs", CODES, LABELS))
 })
+
+# De risicofactor-tabel gebruikt dezelfde renderer met andere kolommen: korte
+# codes in de kop (R1, R2, ...) en de volledige omschrijving als hover-title,
+# want negen omschrijvingen passen niet in negen kolomkoppen.
+
+test_that("kolomkoppen en hover-titels zijn los in te stellen", {
+  m <- matrix(1, nrow = 8, ncol = 2,
+              dimnames = list(KEYS, c("R_MPG1_armoede_hh", "R_MPG2_laagopl_hh")))
+  html <- venn_matrix_html(m, rep(100, 8), "rel", CODES, LABELS,
+                           var_label = "Risicofactor",
+                           kolomlabels = c("R1", "R2"),
+                           kolomtitels = c("Armoede", "Laag opleidingsniveau"),
+                           n_label = "populatie")
+  expect_true(grepl(">R1</th>", html, fixed = TRUE))
+  expect_true(grepl('title="Armoede"', html, fixed = TRUE))
+  expect_true(grepl(">populatie</th>", html, fixed = TRUE))
+  # de ruwe kolomnaam hoort niet in de kop te staan
+  expect_false(grepl("R_MPG1_armoede_hh", html, fixed = TRUE))
+})
+
+test_that("kolomlabels en -titels moeten bij de matrix passen", {
+  m <- matrix(1, nrow = 8, ncol = 2, dimnames = list(KEYS, c("a", "b")))
+  expect_error(venn_matrix_html(m, rep(100, 8), "rel", CODES, LABELS, kolomlabels = "R1"))
+  expect_error(venn_matrix_html(m, rep(100, 8), "rel", CODES, LABELS,
+                                kolomtitels = c("een", "twee", "drie")))
+})
+
+test_that("zonder hover-titels komt er geen leeg title-attribuut", {
+  m <- matrix(1, nrow = 8, ncol = 1, dimnames = list(KEYS, "1"))
+  html <- venn_matrix_html(m, rep(100, 8), "rel", CODES, LABELS)
+  expect_false(grepl('title=""', html, fixed = TRUE))
+})

@@ -4,6 +4,7 @@ library(data.table)  # data-prep/derive_support_splits.R werkt op data.tables
 
 source("../data/metadata/brand_colors.R")
 source("../utils/venn_diagram.R")
+source("../utils/map_download.R")
 source("../utils/format_thinkcell_download.R")
 source("../utils/slide_download.R")
 source("../utils/template_admin.R")
