@@ -92,6 +92,13 @@ These are verified against the actual delivery, not assumed from the output form
   `colorBin()`, so the figure and the screen provably share one classification — that is why
   the app computes them itself. `choropleth_klassen()` holds the part that can go wrong
   (breaks, labels, colours) and is tested without sf or a graphics device.
+  Two things there are load-bearing and easy to undo by accident: the fill colours are
+  **named** after their class (so `scale_fill_manual()` matches by name, not by position —
+  positional matching shifts the whole ramp as soon as one class has no regions in it), and
+  the legend uses its own **`draw_key_vlak()`** glyph. `geom_sf`'s default `draw_key_polygon()`
+  sizes the swatch from the row's `linewidth`, and a class no region falls into has no row —
+  which drew that class's swatch blank. `draw_key_vlak()` reads only `fill`, which the scale
+  supplies for every class.
 - `utils/` — reusable functions shared across the app, incl. `auth.R` (shinymanager) and the
   think-cell export stack. `venn_diagram.R` is Dynamo-specific (a hand-built 3-circle SVG venn
   for `O_MPG_combination`/`O_OUD_combination`), not shared with sibling dashboards. One

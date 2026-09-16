@@ -58,3 +58,33 @@ test_that("de weergave bepaalt de opmaak van de klasse-labels", {
   expect_false(any(grepl("%", abs)))
   expect_true(any(grepl("2.000", abs, fixed = TRUE)))   # duizendtallen met een punt
 })
+
+# De legenda toonde lege vakjes voor klassen waar geen enkele regio in viel:
+# geom_sf tekent zijn vakjes met draw_key_polygon(), die de afmeting uit de
+# rij haalt, en die rij is er voor zo'n klasse niet. Twee dingen houden dat nu
+# tegen -- kleuren op naam, en een glyph die alleen naar de vulling kijkt.
+
+test_that("de kleuren zijn benoemd naar hun klasse", {
+  # Zonder namen koppelt scale_fill_manual() op volgorde tegen de klassen die
+  # in de data voorkomen, en schuift de hele schaal op zodra er een ontbreekt.
+  k <- choropleth_klassen(c(17, 33), seq(16, 34, 2), "rel")
+  expect_equal(names(k$kleuren), levels(k$klasse))
+})
+
+test_that("ook een klasse zonder enkele regio houdt zijn eigen kleur", {
+  # 22%-24% en 26%-28% zijn leeg; hun kleur moet dezelfde zijn als wanneer ze
+  # wel gevuld waren geweest.
+  bins <- seq(16, 34, 2)
+  vol <- choropleth_klassen(seq(17, 33, 2), bins, "rel")
+  leeg <- choropleth_klassen(c(17, 33), bins, "rel")
+  expect_equal(leeg$kleuren, vol$kleuren)
+})
+
+test_that("de legenda-glyph tekent op de vulling alleen", {
+  # draw_key_polygon() valt om op een ontbrekende linewidth; deze niet.
+  g <- draw_key_vlak(list(fill = "#FD8D3C"), list(), 1)
+  expect_s3_class(g, "rect")
+  expect_equal(g$gp$fill, "#FD8D3C")
+  # geen fill in de rij (een klasse zonder data) levert nog steeds een vakje
+  expect_s3_class(draw_key_vlak(list(), list(), 1), "rect")
+})

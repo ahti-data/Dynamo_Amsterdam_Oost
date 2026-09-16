@@ -19,6 +19,20 @@
 # Zelfde grijs als de leaflet-kaart en de venn voor een onderdrukte regio.
 MAP_NA_FILL <- "#e0e0e0"
 
+#' Het vakje in de legenda: alleen de vulling, plus een dun kadertje.
+#'
+#' geom_sf tekent zijn legendavakjes standaard met draw_key_polygon(), en die
+#' leidt de afmeting van het vakje af uit `linewidth`/`size` van de rij. Voor
+#' een klasse waar geen enkele regio in valt is die rij er niet, en dan komt er
+#' helemaal geen vakje uit -- de legenda liet precies de lege klassen blanco.
+#' Deze glyph leest alleen `fill`, die de schaal voor elke klasse levert, dus
+#' elk vakje wordt getekend of er nu een regio in valt of niet. Het kadertje
+#' houdt de lichtste klasse zichtbaar op wit papier.
+draw_key_vlak <- function(data, params, size) {
+  vulling <- if (is.null(data$fill)) "grey20" else data$fill
+  grid::rectGrob(gp = grid::gpar(col = "#b9b9b9", fill = vulling, lwd = 0.7))
+}
+
 #' De klasse-indeling achter de figuur: waarde -> klasse-label, plus de kleur
 #' per klasse. Apart van de tekenstap, omdat dit het stuk is dat fout kan gaan
 #' (een verkeerde grens, een waarde die buiten de schaal valt, een kleur te
@@ -29,7 +43,9 @@ MAP_NA_FILL <- "#e0e0e0"
 #'   schalen valt.
 #' @param weergave "rel" of "abs".
 #' @return list(klasse = factor met alle klassen als levels, kleuren = evenveel
-#'   kleuren in dezelfde volgorde).
+#'   kleuren, benoemd naar diezelfde klassen). Die namen doen het werk:
+#'   scale_fill_manual() koppelt dan op naam in plaats van op volgorde, en dat
+#'   blijft kloppen ook als niet elke klasse in de data voorkomt.
 choropleth_klassen <- function(waarde, bins, weergave = "rel") {
   fmt <- function(v) {
     if (weergave == "rel") sprintf("%g%%", v)
@@ -61,7 +77,7 @@ choropleth_klassen <- function(waarde, bins, weergave = "rel") {
   n <- length(labels)
   kleuren <- if (n == 0L) character(0) else {
     ramp <- colorNumeric("YlOrRd", domain = c(0, 1))
-    ramp(if (n == 1L) 0.6 else seq(0, 1, length.out = n))
+    setNames(ramp(if (n == 1L) 0.6 else seq(0, 1, length.out = n)), labels)
   }
 
   list(klasse = klasse, kleuren = kleuren)
@@ -81,12 +97,13 @@ choropleth_ggplot <- function(laag, bins, weergave = "rel",
   laag$klasse <- ks$klasse
 
   ggplot2::ggplot(laag) +
-    ggplot2::geom_sf(ggplot2::aes(fill = klasse), colour = "#ffffff", linewidth = 0.15) +
+    ggplot2::geom_sf(ggplot2::aes(fill = klasse), colour = "#ffffff", linewidth = 0.15,
+                     key_glyph = draw_key_vlak) +
     ggplot2::scale_fill_manual(
       values = ks$kleuren, drop = FALSE, na.value = MAP_NA_FILL,
       name = if (weergave == "rel") "Aandeel (%)" else "Aantal",
       labels = function(x) x,
-      guide = ggplot2::guide_legend(reverse = TRUE, override.aes = list(colour = "#bbbbbb"))) +
+      guide = ggplot2::guide_legend(reverse = TRUE)) +
     ggplot2::labs(title = titel, subtitle = ondertitel,
                   caption = paste(c(bron, "Grijs = onvoldoende waarnemingen (CBS-onderdrukking), niet nul."),
                                   collapse = "\n")) +
