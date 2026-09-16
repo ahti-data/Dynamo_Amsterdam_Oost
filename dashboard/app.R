@@ -1239,11 +1239,16 @@ server <- function(input, output, session) {
         bron = "Bron: CBS microdata via de Remote Access-omgeving.")
       # Een kaart van een stadsdeel is hoger dan breed, de hele stad juist niet;
       # het formaat volgt de verhouding van de laag zodat er geen witruimte
-      # naast de kaart komt te staan.
+      # naast de kaart komt te staan. Een ontaarde bbox (een enkele regio, of
+      # een lege selectie) zou NaN geven -- dan de standaardverhouding.
       bb <- sf::st_bbox(laag)
-      ratio <- as.numeric((bb["ymax"] - bb["ymin"]) / (bb["xmax"] - bb["xmin"]))
+      breed <- as.numeric(bb[["xmax"]] - bb[["xmin"]])
+      hoog  <- as.numeric(bb[["ymax"]] - bb[["ymin"]])
+      ratio <- if (is.finite(breed) && is.finite(hoog) && breed > 0) hoog / breed else 0.9
       breedte <- 9
-      ggplot2::ggsave(file, p, width = breedte,
+      # device expliciet: downloadHandler geeft een tijdelijk bestand zonder
+      # extensie, en ggsave() leidt het device normaal juist daaruit af.
+      ggplot2::ggsave(file, p, device = "png", width = breedte,
                       height = max(5, min(14, breedte * ratio * 0.75 + 2.2)),
                       dpi = 200, units = "in", bg = "white")
     }
