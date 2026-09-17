@@ -24,18 +24,30 @@ MAP_NA_FILL <- "#e0e0e0"
 #' Vandaar: de noemer is de som over de *unieke* splitsniveaus. In beide
 #' gevallen komt daar hetzelfde uit als je met de hand zou rekenen.
 #'
-#' Onderdrukking: ontbreekt een van de gevraagde cellen voor een regio, dan zou
-#' de som stilzwijgend te laag uitvallen -- precies wat de CBS-uitvoerregels van
-#' dit project verbieden. Zo'n regio valt af en wordt grijs, net als elke andere
-#' onderdrukte cel.
+#' Onderdrukking: ontbreekt een van de gevraagde cellen voor een regio, dan
+#' telt de som alleen op wat er wél is. Dat getal is dan een **ondergrens**, en
+#' de regio wordt als zodanig gemarkeerd (`compleet = FALSE`) zodat de kaart,
+#' de tooltip en de export het kunnen zeggen. Dat is een bewuste afwijking van
+#' de regel elders in dit dashboard, waar een onvolledige optelling helemaal
+#' vervalt: bij een handmatig samengestelde groep is een ondergrens mét
+#' waarschuwing bruikbaarder dan een grijs vlak, zolang de lezer weet dat het er
+#' een is. Wie hem weer wil dichtzetten, filtert op `compleet`.
+#'
+#' Let op het verschil met de afgeleide indicatoren in
+#' `data-prep/derive_support_splits.R`: daar blijft alles-of-niets gelden, want
+#' daar bepaalt de optelling de *noemer* van een percentage, en een halve
+#' partitie zou dat percentage te hoog maken. Hier is de noemer meegeteld met de
+#' teller, dus een ontbrekende cel maakt beide te laag en verschuift de
+#' verhouding veel minder.
 #'
 #' @param d data.table met de opgehaalde slice (een rij per regio x
 #'   splitsniveau x indicatorwaarde).
 #' @param n_cellen Hoeveel rijen een regio moet hebben om compleet te zijn:
 #'   het aantal gekozen splitsniveaus maal het aantal gekozen waarden.
-#' @return data.table met een rij per regio. `variable_value`/`split_level`
-#'   dragen de gekozen verzameling als tekst, zodat de export zelf vertelt wat
-#'   er opgeteld is.
+#' @return data.table met een rij per regio, plus `compleet` (waren alle
+#'   gevraagde cellen gepubliceerd) en `n_gevonden`. `variable_value`/
+#'   `split_level` dragen de gekozen verzameling als tekst, zodat de export zelf
+#'   vertelt wat er opgeteld is.
 map_aggregate <- function(d, n_cellen) {
   stopifnot(is.data.table(d))
   if (nrow(d) == 0L) return(d)
@@ -54,8 +66,7 @@ map_aggregate <- function(d, n_cellen) {
                n_gevonden     = .N),
            by = .(population, region_level, region_code, region_name, stadsdeel,
                   year, metric_name)]
-  uit <- uit[n_gevonden == n_cellen]
-  uit[, n_gevonden := NULL]
+  uit[, compleet := n_gevonden == n_cellen]
   uit[]
 }
 
@@ -110,6 +121,11 @@ map_klem <- function(waarde, domein) {
 #' staan met zoveel woorden in het onderschrift -- "onvoldoende waarnemingen",
 #' nooit een nul aan de onderkant van de schaal.
 #'
+#' Regio's waar een van de gevraagde groepen onderdrukt was (`compleet =
+#' FALSE`) krijgen een gestippelde donkere rand: hun getal is een ondergrens, en
+#' zonder dat merkteken zou de figuur dat verschil niet dragen -- de tooltip van
+#' de kaart bestaat hier immers niet.
+#'
 #' @param laag sf-object met ten minste `waarde` en `region_name`.
 #' @param domein Lengte-2 kleurbereik, of NULL als er niets te schalen valt.
 #' @param weergave "rel" of "abs" -- bepaalt de opmaak van de legendalabels.
@@ -148,12 +164,30 @@ choropleth_ggplot <- function(laag, domein, weergave = "rel",
                                        ticks.colour = "#b9b9b9"))
   }
 
+  # `compleet` ontbreekt bij een enkelvoudige keuze -- daar is elke regio per
+  # definitie compleet -- en is NA voor een regio zonder cijfer, die toch al
+  # grijs is. Allebei een gewone rand.
+  if (is.null(laag$compleet)) laag$compleet <- TRUE
+  laag$compleet[is.na(laag$compleet)] <- TRUE
+  onvolledig <- sum(!laag$compleet)
+
+  onderschrift <- c(
+    bron,
+    "Grijs = onvoldoende waarnemingen (CBS-onderdrukking), niet nul.",
+    if (onvolledig > 0) sprintf(
+      paste("Gestippelde rand (%d regio's): een van de opgetelde groepen is daar onderdrukt,",
+            "dus het getal is een ondergrens."), onvolledig))
+
   ggplot2::ggplot(laag) +
-    ggplot2::geom_sf(ggplot2::aes(fill = waarde), colour = "#ffffff", linewidth = 0.15) +
+    ggplot2::geom_sf(ggplot2::aes(fill = waarde, colour = compleet, linetype = compleet),
+                     linewidth = 0.25) +
+    ggplot2::scale_colour_manual(values = c(`TRUE` = "#ffffff", `FALSE` = "#3b3b3b"),
+                                 guide = "none") +
+    ggplot2::scale_linetype_manual(values = c(`TRUE` = "solid", `FALSE` = "dotted"),
+                                   guide = "none") +
     schaal +
     ggplot2::labs(title = titel, subtitle = ondertitel,
-                  caption = paste(c(bron, "Grijs = onvoldoende waarnemingen (CBS-onderdrukking), niet nul."),
-                                  collapse = "\n")) +
+                  caption = paste(onderschrift, collapse = "\n")) +
     ggplot2::coord_sf(datum = NA) +
     ggplot2::theme_void(base_size = 11) +
     ggplot2::theme(

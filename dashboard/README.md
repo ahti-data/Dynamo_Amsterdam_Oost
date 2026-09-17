@@ -72,7 +72,8 @@ tot 2022 — een lege kolom is daar geen onderdrukking maar een bronregister dat
 De kaart kan tot één stadsdeel begrensd worden ("Toon"), zodat er een kaart van alleen Oost
 uit te lichten is, en is als **png** te downloaden naast de xlsx. Bij "Waarde van de indicator"
 en "Toon welk niveau" kun je **meerdere keuzes tegelijk** maken; die worden opgeteld, noemer
-inbegrepen, en een regio waar een van die groepen onderdrukt is blijft grijs. De kleurschaal
+inbegrepen. Is in een regio een van die groepen onderdrukt, dan telt hij op wat er wel is; dat
+cijfer is een ondergrens en krijgt een gestippelde rand, met het aantal boven de kaart. De kleurschaal
 loopt door in plaats van in klassen, en het bereik is zelf in te stellen — handig om twee
 kaarten op dezelfde schaal naast elkaar te leggen.
 

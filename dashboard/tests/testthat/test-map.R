@@ -46,12 +46,33 @@ test_that("niveaus en waarden tegelijk: som over beide, noemer per uniek niveau"
   expect_equal(uit$denominator, 300)
 })
 
-test_that("een regio met een onderdrukte cel valt af in plaats van te laag uit te vallen", {
+test_that("een regio met een onderdrukte cel blijft staan, maar wordt gemarkeerd", {
+  # Bewust anders dan elders in dit dashboard: bij een handmatig samengestelde
+  # groep is een ondergrens mét waarschuwing bruikbaarder dan een grijs vlak.
+  # De markering is wat dat verschil draagt -- kaart, tooltip en export lezen
+  # hem -- dus die moet er zijn en moet kloppen.
   d <- rijen(cel("A", "O_MPG1", "1", 30, 100), cel("A", "O_MPG2", "1", 20, 200),
              cel("B", "O_MPG1", "1", 40, 150))          # B mist O_MPG2
+  uit <- map_aggregate(d, 2)[order(region_code)]
+
+  expect_equal(uit$region_code, c("A", "B"))
+  expect_equal(uit$compleet, c(TRUE, FALSE))
+  # B telt op wat er is: een ondergrens, geen nul en geen weggelaten regio.
+  expect_equal(uit[region_code == "B"]$metric_value, 40)
+  expect_equal(uit[region_code == "B"]$denominator, 150)
+})
+
+test_that("bij een enkelvoudige keuze is elke regio compleet", {
+  d <- rijen(cel("A", "O_MPG1", "1", 30, 100), cel("B", "O_MPG1", "1", 40, 150))
+  expect_true(all(map_aggregate(d, 1)$compleet))
+})
+
+test_that("een regio zonder enkele gevraagde cel komt niet in beeld", {
+  # Anders dan een halve optelling: hier is er niets om op te tellen.
+  d <- rijen(cel("A", "O_MPG1", "1", 30, 100))
   uit <- map_aggregate(d, 2)
   expect_equal(uit$region_code, "A")
-  expect_false("B" %in% uit$region_code)
+  expect_false(uit$compleet)
 })
 
 test_that("de samenvatting vertelt zelf wat er opgeteld is", {

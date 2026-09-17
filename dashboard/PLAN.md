@@ -175,8 +175,18 @@ teller is een gewone som; de noemer niet, en daar zit de valkuil (`map_aggregate
 `utils/map.R`): over `variable_value` heen is de noemer voor elke rij dezelfde — hij ís de som
 over alle categorieën binnen die slice — dus optellen zou hem dubbel tellen en het percentage
 halveren. Over `split_level` heen heeft elk niveau juist zijn eigen noemer, en die moeten wel
-bij elkaar. Vandaar: de noemer is de som over de *unieke* splitsniveaus. Ontbreekt een van de
-gevraagde cellen in een regio, dan valt die regio weg in plaats van te laag uit te vallen.
+bij elkaar. Vandaar: de noemer is de som over de *unieke* splitsniveaus.
+
+Ontbreekt een van de gevraagde cellen in een regio, dan telt die regio op **wat er wel
+gepubliceerd is**. Dat cijfer is een ondergrens, en dat wordt ook zo getoond: de regio krijgt
+een gestippelde rand, boven de kaart staat hoeveel regio's het betreft, de tooltip zegt hoeveel
+van de gevraagde onderdelen er zijn ("1 van de 3" is iets heel anders dan "5 van de 6"), en de
+xlsx draagt `alle_groepen_aanwezig` en `onderdelen_gevonden`. Bewust anders dan de
+alles-of-niets-regel elders hier: met die regel kwam een wijkkaart van
+"O_MPG1 + O_MPG2 + de combinatie" volledig leeg uit (0 van de 11 wijken haalde het), terwijl
+een gemarkeerde ondergrens wél bruikbaar is. Het geldt **niet** voor de afgeleide indicatoren
+uit §7 — daar is de optelling de noemer van een percentage, en een halve partitie zou dat
+percentage te hoog maken.
 
 **De kleurschaal loopt door** in plaats van in klassen — tussen twee regio's in hetzelfde
 "vakje" ging het verschil anders verloren. Standaard loopt hij van de laagste tot de hoogste

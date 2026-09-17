@@ -314,6 +314,10 @@ ui <- fluidPage(
     .venn-tab tr.venn-tab-none td { background: %5$s; }
     .venn-tab tbody tr:hover td { background: %4$s; }
     .venn-tab-na { color: %3$s; cursor: help; }
+    .kaart-let-op { background: #FDF3E7; border-left: 4px solid #E8871A; border-radius: 3px;
+        padding: 8px 12px; margin-bottom: 10px; font-size: 12px; color: #6b4415;
+        line-height: 1.45; }
+    .kaart-let-op code { background: #f6e6d2; color: #6b4415; font-size: 11px; }
   ", ahti_branding$colors$grijs_blauw,
      ahti_branding$colors$helder_blauw,
      ahti_branding$colors$midden_grijs,
@@ -396,6 +400,7 @@ ui <- fluidPage(
             mainPanel(
               width = 9,
               div(textOutput("k_titel"), class = "chart-title"),
+              uiOutput("k_waarschuwing"),
               leafletOutput("kaart", height = 680)
             )
           )
@@ -771,6 +776,23 @@ server <- function(input, output, session) {
 
   output$k_titel <- renderText(kaart_titel())
 
+  # Bij een opgetelde selectie telt een regio waar een van de gekozen groepen
+  # onderdrukt is alleen op wat gepubliceerd is. Dat cijfer is dan een
+  # ondergrens, en dat hoort er hardop bij te staan -- niet alleen in de
+  # tooltip, want je ziet de kaart eerder dan dat je erover hovert.
+  output$k_waarschuwing <- renderUI({
+    d <- kaart_data()
+    if (!"compleet" %in% names(d) || nrow(d) == 0) return(NULL)
+    n <- sum(!d$compleet)
+    if (n == 0) return(NULL)
+    div(class = "kaart-let-op",
+        tags$b(sprintf("Let op: %d van de %d regio's tonen een ondergrens.", n, nrow(d))),
+        " Daar is een van de gekozen groepen onderdrukt (minder dan tien), dus telt",
+        " het cijfer alleen op wat wel gepubliceerd is. Die regio's hebben een",
+        " gestippelde rand; hover erover voor de bevestiging. In de xlsx staat het",
+        " als kolom ", tags$code("alle_groepen_aanwezig"), ".")
+  })
+
   output$kaart <- renderLeaflet({
     # Esri's grey canvas is keyless; CartoDB.Positron now watermarks its tiles
     # with "API KEY REQUIRED", which would show up on a deployed dashboard.
@@ -788,8 +810,10 @@ server <- function(input, output, session) {
     g <- geo[[input$k_niveau]]
     scope <- input$k_scope %||% SCOPE_ALLES
     if (!identical(scope, SCOPE_ALLES)) g <- g[!is.na(g$stadsdeel) & g$stadsdeel == scope, ]
-    merge(g, kaart_data()[, .(region_code, waarde, metric_value, n_totaal)],
-          by = "region_code", all.x = TRUE)
+    d <- kaart_data()
+    kolommen <- c("region_code", "waarde", "metric_value", "n_totaal",
+                  intersect(c("compleet", "n_gevonden"), names(d)))
+    merge(g, d[, ..kolommen], by = "region_code", all.x = TRUE)
   })
 
   # Inzoomen als de gebruiker een stadsdeel kiest -- dat is de hele reden voor
@@ -834,25 +858,42 @@ server <- function(input, output, session) {
       if (input$k_weergave == "rel") sprintf("%.1f%%", x) else format(round(x), big.mark = ".")
     }
 
-    labels <- mapply(function(nm, w, mv, nt) {
+    # Regio's waar een van de opgetelde groepen onderdrukt is: het cijfer telt
+    # alleen op wat gepubliceerd is en is dus een ondergrens. Die krijgen een
+    # gestippelde donkere rand, zodat het aan de kaart zelf te zien is en niet
+    # alleen aan de melding erboven.
+    onvolledig <- !is.na(m$compleet) & !m$compleet
+
+    # Hoeveel van de gevraagde onderdelen hier gepubliceerd zijn. "1 van de 3"
+    # zegt veel meer dan "ondergrens": bij 1 van de 3 kan het cijfer er ver
+    # naast zitten, bij 5 van de 6 nauwelijks.
+    gevraagd <- kaart_n_cellen()
+    gevonden <- if (is.null(m$n_gevonden)) rep(gevraagd, nrow(m)) else m$n_gevonden
+
+    labels <- mapply(function(nm, w, mv, nt, half, k) {
       HTML(sprintf(
-        "<b>%s</b><br/>%s: %s%s",
+        "<b>%s</b><br/>%s: %s%s%s",
         nm, pretty_metric(input$k_metric), fmt(w),
         if (is.na(w)) "" else sprintf("<br/><span style='color:#666'>n = %s van %s</span>",
                                       format(mv, big.mark = "."),
-                                      format(nt, big.mark = "."))
+                                      format(nt, big.mark = ".")),
+        if (isTRUE(half)) sprintf(
+          "<br/><span style='color:#b3541e'>ondergrens: %d van de %d gekozen onderdelen gepubliceerd</span>",
+          k, gevraagd) else ""
       ))
     # USE.NAMES = FALSE matters: mapply() would otherwise key the result by
     # region_name, and leaflet serialises a *named* list as one JS object that
     # every polygon then shares -- which renders as an empty tooltip.
-    }, m$region_name, m$waarde, m$metric_value, m$n_totaal,
+    }, m$region_name, m$waarde, m$metric_value, m$n_totaal, onvolledig, gevonden,
        SIMPLIFY = FALSE, USE.NAMES = FALSE)
 
     proxy |>
       addPolygons(
         data = m,
         fillColor = ~pal(kleurwaarde), fillOpacity = 0.8,
-        color = "#ffffff", weight = 1,
+        color = ifelse(onvolledig, "#3b3b3b", "#ffffff"),
+        weight = ifelse(onvolledig, 1.6, 1),
+        dashArray = ifelse(onvolledig, "3,4", ""),
         label = labels,
         labelOptions = labelOptions(direction = "auto", textsize = "13px"),
         highlightOptions = highlightOptions(weight = 3, color = "#272727",
@@ -1265,12 +1306,18 @@ server <- function(input, output, session) {
   # ui/server pair, never reimplementing any of it here.
 
   export_cols <- function(d) {
-    d[, .(populatie = population, regioniveau = region_level,
-          regiocode = region_code, regionaam = region_name, stadsdeel,
-          jaar = year, indicator = variable_name, waarde_indicator = variable_value,
-          metric = metric_name, aantal = metric_value,
-          n_totaal, noemer = denominator, weergegeven_waarde = waarde,
-          splitsvariabele = split_var, splitsniveau = split_level)]
+    uit <- d[, .(populatie = population, regioniveau = region_level,
+                 regiocode = region_code, regionaam = region_name, stadsdeel,
+                 jaar = year, indicator = variable_name, waarde_indicator = variable_value,
+                 metric = metric_name, aantal = metric_value,
+                 n_totaal, noemer = denominator, weergegeven_waarde = waarde,
+                 splitsvariabele = split_var, splitsniveau = split_level)]
+    # Alleen een opgetelde kaartselectie draagt deze markering; hij hoort mee de
+    # export in, anders is aan een cijfer niet te zien dat het een ondergrens is.
+    if ("compleet" %in% names(d)) {
+      uit[, `:=`(alle_groepen_aanwezig = d$compleet, onderdelen_gevonden = d$n_gevonden)]
+    }
+    uit[]
   }
 
   output$k_dl <- downloadHandler(
