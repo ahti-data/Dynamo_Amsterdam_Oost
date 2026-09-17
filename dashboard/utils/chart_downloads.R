@@ -484,17 +484,53 @@ chart_data_downloads_server <- function(
           )
           tc_data <- tc_reorder_by_categories(tc_data, names(ordered_matrix)[-1])
 
+          # Logged to Export History, same as the slide download. This table
+          # leaves the building and ends up in a deck just like a slide does,
+          # so "who exported which numbers, when" has to be answerable for it
+          # too -- and without an entry there is no download id to stamp,
+          # which left this the one export that couldn't be traced back from
+          # the file in someone's inbox.
+          #
+          # Skipped for faceted charts, the same scope limitation the slide
+          # path has (tc_data is a per-facet list there, which the history
+          # snapshot has no shape for). No captured PNG: there is no figure in
+          # this download to snapshot.
+          chart_id <- NULL
+          if (!is_tc_workbook_list(tc_data)) {
+            history_entry <- tc_history_capture(
+              tc_data           = tc_data,
+              chart_type        = resolved_chart_type,
+              slide_matrix      = ordered_matrix,
+              raw_data          = data(),
+              slide_title       = resolve_opt(slide_title),
+              figure_title      = resolve_opt(figure_title),
+              template_override = slide_effective_override(),
+              slide_order       = tc_or(input$slide_order, "auto"),
+              dashboard_title   = tc_ctx_dashboard_title(),
+              tab_label         = tc_ctx_active_tab(),
+              subtab_label      = tc_ctx_active_subtab(),
+              selections        = tc_ctx_selections(module_id = id),
+              source_output     = resolve_opt(source_output),
+              source_sheet      = resolve_opt(source_sheet),
+              source_mtime      = resolve_opt(source_mtime),
+              module_id         = id,
+              filename_prefix   = filename_prefix
+            )
+            history_entry$id <- export_history_new_id()
+            chart_id <- export_history_add(history_entry)
+          }
+
           # Same corner-cell provenance idea as the slide/favorites downloads
           # (see tc_build_ppttc_slide_block()), just stamped onto the plain
           # workbook's own header instead of a ppttc chart datasheet, since
-          # this export never goes through ppttc.exe. No chart_id: this
-          # download isn't logged to Export History.
+          # this export never goes through ppttc.exe.
           log_line <- tc_build_datasheet_log(
             dashboard_title = tc_ctx_dashboard_title(),
             tab_label       = tc_ctx_active_tab(),
             subtab_label    = tc_ctx_active_subtab(),
             chart_type      = resolved_chart_type,
             selections      = tc_ctx_selections(module_id = id),
+            chart_id        = chart_id,
             source_output   = resolve_opt(source_output),
             source_sheet    = resolve_opt(source_sheet),
             source_mtime    = resolve_opt(source_mtime)

@@ -13,7 +13,10 @@ Every chart that supports export offers, via `chart_data_downloads_ui()` /
 `chart_data_downloads_server()` in `utils/chart_downloads.R`:
 
 1. **Download data (raw)** — the exact data frame used to build the ggplot, written as `.xlsx` without reshaping.
-2. **Download data (think-cell)** — the same data passed through `format_tc_data()`, written as `.xlsx`.
+2. **Download data (think-cell)** — the same data passed through `format_tc_data()`, written as
+   `.xlsx`. Logged to **Export history** just like the slide download, and stamped with the
+   same short `download_id` in the workbook's corner cell — so a table that ends up in a deck
+   can be traced back to the entry that produced it.
 3. **Download slide (PowerPoint)** — shown automatically whenever a `templates/*.pptx` template
    matches the chart type (see `utils/slide_download.R`); returns a ZIP with the slide (or a
    graceful template+`.ppttc`+instructions fallback when no think-cell renderer is available)

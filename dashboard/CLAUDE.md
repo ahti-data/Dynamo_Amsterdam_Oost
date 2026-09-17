@@ -227,11 +227,15 @@ from `app.R`. It also sources `data-prep/derive_support_splits.R` and loads `dat
 derivation runs in the prep step rather than in `utils/`, but the CBS rule it enforces (a
 suppressed cell is never summed as zero) is worth a test.
 
-Current failure baseline on this machine: **FAIL 36** — identical to the same suite in
-`shiny_dashboard_template`, so it is not something this repo introduced. Every failure comes
-from `zip` not being on PATH, which only affects the slide/favorites ZIP paths. The
-template's `.claude/launch.json` works around it by prepending a `zip-shim` directory to
-PATH. Treat 36 as the pass mark until `zip` is available; a 37th failure is a real
-regression. Those 36 really are only the missing `zip`: on a Linux box that has `zip` (but
-no `readxl`) the same suite ran **FAIL 0 | PASS 483 | SKIP 9** — that count predates
-`test-venn_diagram.R`, which adds 59 passes plus one that needs `xml2` and skips without it.
+The suite is **green**: measured **PASS 724 | FAIL 0 | SKIP 11** on a Linux box with `zip` on
+PATH and a UTF-8 locale. Treat any failure as real.
+
+Two environment traps, both of which produce failures that have nothing to do with the code:
+
+- **`zip` must be on PATH**, or every slide/favorites ZIP path fails (that was the old "FAIL 36"
+  baseline). The template's `.claude/launch.json` works around it with a `zip-shim` directory.
+- **Run under a UTF-8 locale.** Under `C`, three `test-favorites.R` checks fail on the middot
+  and ellipsis in their expected strings — a multibyte character is no longer one character as
+  far as R is concerned. `LANG=C.UTF-8` is enough. This is the same trap `VENN_SUPPRESSED_MARK`
+  in `utils/venn_diagram.R` works around by writing an XML entity instead of a literal en dash
+  — that one matters in production too, because Shiny Server itself can run under `C`.

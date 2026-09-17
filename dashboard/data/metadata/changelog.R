@@ -15,6 +15,20 @@
 
 CHANGELOG <- list(
   list(
+    datum = "2026-09-18",
+    titel = "Think-cell-tabellen staan nu in Export history",
+    punten = c(
+      paste("\"Download data (think-cell)\" kwam niet in het tabblad Export history terecht --",
+            "alleen \"Download slide\" deed dat. Daardoor was dat de enige export die je niet",
+            "kon terugzoeken vanaf het bestand zelf."),
+      paste("Nu levert elke think-cell-download een regel op, met hetzelfde korte download-id",
+            "in de hoekcel van de werkmap. Zie je zo'n tabel ergens in een deck terug, dan vind",
+            "je daarmee precies welke selectie en welk moment erachter zat -- en je kunt hem",
+            "opnieuw downloaden of tegen de data van vandaag opnieuw laten bouwen."),
+      "De ruwe xlsx-download blijft ongelogd: die draagt geen herkomstregel."
+    )
+  ),
+  list(
     datum = "2026-09-17",
     titel = "Kaart: twee soorten aandeel, groepen optellen, instelbare kleurschaal",
     punten = c(
