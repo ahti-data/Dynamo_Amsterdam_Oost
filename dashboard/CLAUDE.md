@@ -106,6 +106,15 @@ These are verified against the actual delivery, not assumed from the output form
     `data-prep/derive_support_splits.R`: there the sum *is* the denominator of a percentage, so
     half a partition would make that percentage too high. Here the denominator is summed along
     with the numerator, so a missing cell lowers both and shifts the ratio far less.
+  - `map_noemer()` — which denominator a chosen "weergave" uses. The map offers two shares:
+    *van regiototaal* (everyone in that buurt/wijk/gebied/stadsdeel) and *binnen groep* (the
+    sum over the indicator's categories within the selection, the PLAN.md §6 convention and
+    the only one the app had before). The gap is large enough that it must never be implicit —
+    the same selection reads 16.0% within-group and 1.6% of the region total in Zuidoost — so
+    the chosen one is named in the title, the legend and the export. The region total is
+    **not** `n_totaal`: that counts households while the `n_kinderen_*` metrics count children,
+    so it comes from the total rows' own denominator instead. Per regio and the venn still send
+    the old `"rel"`, which keeps meaning within-group.
   - `map_domein()` / `map_klem()` — the colour range (data range, or the user's own) and
     clamping into it, so a region past the chosen maximum takes the end of the ramp instead of
     `colorNumeric()`'s NA colour, which would read as "onvoldoende waarnemingen".

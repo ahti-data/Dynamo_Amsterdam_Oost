@@ -73,7 +73,10 @@ De kaart kan tot één stadsdeel begrensd worden ("Toon"), zodat er een kaart va
 uit te lichten is, en is als **png** te downloaden naast de xlsx. Bij "Waarde van de indicator"
 en "Toon welk niveau" kun je **meerdere keuzes tegelijk** maken; die worden opgeteld, noemer
 inbegrepen. Is in een regio een van die groepen onderdrukt, dan telt hij op wat er wel is; dat
-cijfer is een ondergrens en krijgt een gestippelde rand, met het aantal boven de kaart. De kleurschaal
+cijfer is een ondergrens en krijgt een gestippelde rand, met het aantal boven de kaart. Bij "Weergave" kies je tegen welke noemer een aandeel afgezet wordt: het **regiototaal** (alle
+gezinnen in die buurt of wijk) of **binnen de groep** (de gekozen groep zelf). Dat scheelt
+flink — dezelfde selectie is in Zuidoost 16,0% binnen de groep en 1,6% van het regiototaal —
+dus de gekozen noemer staat in de titel en bij de legenda. De kleurschaal
 loopt door in plaats van in klassen, en het bereik is zelf in te stellen — handig om twee
 kaarten op dezelfde schaal naast elkaar te leggen.
 

@@ -16,8 +16,16 @@
 CHANGELOG <- list(
   list(
     datum = "2026-09-17",
-    titel = "Kaart: meerdere groepen optellen en een instelbare kleurschaal",
+    titel = "Kaart: twee soorten aandeel, groepen optellen, instelbare kleurschaal",
     punten = c(
+      paste("Bij \"Weergave\" kun je nu kiezen tegen welke noemer een aandeel afgezet",
+            "wordt. \"Van regiototaal\" is ten opzichte van alle huishoudens of ouderen in",
+            "die buurt, wijk, dat gebied of dat stadsdeel -- \"x% van alle gezinnen hier\".",
+            "\"Binnen groep\" is ten opzichte van de gekozen groep zelf -- \"van de gezinnen",
+            "met dit ondersteuningsbeeld heeft x% deze risicoscore\". Dat scheelt flink:",
+            "dezelfde selectie is in Zuidoost 16,0% binnen de groep en 1,6% van het",
+            "regiototaal. Welke van de twee je ziet staat in de titel en bij de legenda,",
+            "en beide noemers staan in de xlsx."),
       paste("Is in een regio een van de opgetelde groepen onderdrukt, dan telt die regio",
             "op wat er wel gepubliceerd is. Dat cijfer is een ondergrens, en dat staat er",
             "ook bij: een gestippelde rand om de regio, boven de kaart hoeveel regio's het",

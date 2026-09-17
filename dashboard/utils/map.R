@@ -70,6 +70,39 @@ map_aggregate <- function(d, n_cellen) {
   uit[]
 }
 
+#' Welke noemer hoort bij een gekozen weergave.
+#'
+#' Een aandeel kan tegen twee dingen afgezet worden, en dat verschil is precies
+#' waar een kaart verkeerd gelezen wordt:
+#'
+#' - **binnen de groep** (`"rel_groep"`, en `"rel"` als oude naam): de som over
+#'   de categorieen van de indicator binnen dezelfde selectie. Leest als "van de
+#'   gezinnen met dit ondersteuningsbeeld heeft x% deze risicoscore". Dit is de
+#'   afspraak uit PLAN.md 6 en de enige noemer die het dashboard eerst kende.
+#' - **van het regiototaal** (`"rel_regio"`): de hele buurt/wijk/gebied of het
+#'   hele stadsdeel. Leest als "x% van alle gezinnen in deze wijk". Dat is
+#'   bewust *niet* `n_totaal`: die telt huishoudens, terwijl de teller bij de
+#'   `n_kinderen_*`-metrics kinderen telt, en dan is de uitkomst geen
+#'   percentage. Het regiototaal komt daarom uit de noemer van de totaalrijen,
+#'   die per metric klopt.
+#'
+#' Alles wat geen aandeel is (`"abs"`) krijgt NULL: dan is er geen noemer.
+#'
+#' @param weergave "abs", "rel_groep"/"rel", of "rel_regio".
+#' @param binnen_groep,regio_totaal Numerieke vectoren van gelijke lengte.
+#' @return De te gebruiken noemer, of NULL bij een absolute weergave.
+map_noemer <- function(weergave, binnen_groep, regio_totaal = NULL) {
+  switch(weergave,
+         rel_groep = binnen_groep,
+         rel       = binnen_groep,
+         rel_regio = regio_totaal,
+         NULL)
+}
+
+#' Is deze weergave een aandeel? Bepaalt de opmaak (procentteken) op elke plek
+#' waar een getal getoond wordt.
+map_is_aandeel <- function(weergave) !identical(weergave, "abs")
+
 #' Het bereik waarover de kleurschaal loopt.
 #'
 #' Standaard de uiterste waarden van de selectie zelf. Een handmatig bereik

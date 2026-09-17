@@ -378,8 +378,17 @@ ui <- fluidPage(
               ),
               control_card(
                 radioButtons("k_weergave", "Weergave",
-                             c("Absoluut" = "abs", "Aandeel (%)" = "rel"),
-                             selected = "rel"),
+                             c("Absoluut" = "abs",
+                               "Aandeel van regiototaal (%)" = "rel_regio",
+                               "Aandeel binnen groep (%)" = "rel_groep"),
+                             selected = "rel_regio"),
+                div(class = "note", style = "margin: -6px 0 10px;",
+                    tags$b("Van regiototaal:"),
+                    " ten opzichte van alle huishoudens/ouderen in die buurt, wijk,",
+                    " dat gebied of dat stadsdeel \u2014 \"x% van alle gezinnen hier\". ",
+                    tags$b("Binnen groep:"),
+                    " ten opzichte van de gekozen groep zelf \u2014 \"van de gezinnen met",
+                    " dit ondersteuningsbeeld heeft x% deze risicoscore\"."),
                 checkboxInput("k_schaal_auto", "Kleurschaal volgt de data", TRUE),
                 conditionalPanel(
                   "!input.k_schaal_auto",
@@ -691,13 +700,34 @@ server <- function(input, output, session) {
       d[, waarde := numeric()]
       return(d[])
     }
-    d[, waarde := if (weergave == "rel") {
-        fifelse(denominator > 0, metric_value / denominator * 100, NA_real_)
-      } else as.numeric(metric_value)]
+    # Welke noemer bij welke weergave hoort staat in map_noemer() -- daar staat
+    # ook waarom het regiototaal niet n_totaal is. `regio_totaal` zit alleen op
+    # de kaartselectie; de andere tabbladen kennen alleen "binnen de groep".
+    noemer <- map_noemer(weergave, d$denominator,
+                         if ("regio_totaal" %in% names(d)) d$regio_totaal else NULL)
+    d[, waarde := if (!map_is_aandeel(weergave)) {
+        as.numeric(metric_value)
+      } else if (is.null(noemer)) {
+        # Een aandeel zonder noemer is geen aandeel. Liever leeg -- dat leest
+        # als "onvoldoende waarnemingen" -- dan aantallen die met een
+        # procentteken worden afgedrukt.
+        NA_real_
+      } else {
+        fifelse(!is.na(noemer) & noemer > 0, metric_value / noemer * 100, NA_real_)
+      }]
     d[]
   }
 
-  eenheid <- function(weergave) if (weergave == "rel") "%" else "aantal"
+  # Wat er achter een getal staat, en tegelijk het onderschrift van de legenda:
+  # bij een aandeel maakt het verschil of het tegen de groep of tegen de hele
+  # regio is afgezet, en dat hoort zichtbaar te zijn.
+  eenheid <- function(weergave) {
+    switch(weergave,
+           rel_regio = "% van regiototaal",
+           rel_groep = "% binnen groep",
+           rel       = "%",
+           "aantal")
+  }
 
   # ---------------------------------------------------------------- Kaart -----
 
@@ -731,10 +761,41 @@ server <- function(input, output, session) {
     length(lvl) * length(input$k_val %||% character(0))
   })
 
-  kaart_data <- reactive({
-    d <- map_aggregate(kaart_rijen(), kaart_n_cellen())
-    add_display(d, input$k_weergave)
+  # Het totaal van de regio voor deze metric: de noemer van de totaalrijen, dus
+  # de som over alle categorieen van de indicator. Bewust niet n_totaal -- die
+  # telt huishoudens, terwijl de teller bij de n_kinderen_*-metrics kinderen
+  # telt, en dan is de uitkomst geen percentage (PLAN.md 6). Per regio een
+  # waarde; de noemer is binnen een slice constant over de categorieen.
+  kaart_regio_totaal <- reactive({
+    req(input$populatie, input$k_jaar, input$k_niveau, input$k_var, input$k_metric)
+    ds |>
+      filter(population   == !!input$populatie,
+             region_level == !!input$k_niveau,
+             year          == !!as.integer(input$k_jaar),
+             variable_name == !!input$k_var,
+             metric_name   == !!input$k_metric,
+             split_var     == !!TOTAL_LABEL) |>
+      select(region_code, denominator) |>
+      distinct() |>
+      collect() |>
+      as.data.table()
   })
+
+  # Het regiototaal aanhaken. Ook de ruwe rijen krijgen hem, zodat het tweede
+  # tabblad van de export hetzelfde aandeel toont als de kaart en niet stilletjes
+  # op aantallen terugvalt.
+  met_regio_totaal <- function(d) {
+    if (nrow(d) == 0) {
+      d[, regio_totaal := numeric()]
+      return(d[])
+    }
+    merge(d, kaart_regio_totaal()[, .(region_code, regio_totaal = denominator)],
+          by = "region_code", all.x = TRUE)
+  }
+
+  kaart_data <- reactive(add_display(met_regio_totaal(map_aggregate(kaart_rijen(),
+                                                                   kaart_n_cellen())),
+                                     input$k_weergave))
 
   # Het bereik van de kleurschaal: standaard de uiterste waarden van de
   # selectie, of een handmatig bereik als de gebruiker dat aanzet.
@@ -855,7 +916,7 @@ server <- function(input, output, session) {
 
     fmt <- function(x) {
       if (is.na(x)) return("onvoldoende waarnemingen")
-      if (input$k_weergave == "rel") sprintf("%.1f%%", x) else format(round(x), big.mark = ".")
+      if (map_is_aandeel(input$k_weergave)) sprintf("%.1f%%", x) else format(round(x), big.mark = ".")
     }
 
     # Regio's waar een van de opgetelde groepen onderdrukt is: het cijfer telt
@@ -901,7 +962,7 @@ server <- function(input, output, session) {
       ) |>
       addLegend(position = "bottomright", pal = pal, values = domein,
                 title = eenheid(input$k_weergave), opacity = 0.9,
-                labFormat = labelFormat(suffix = if (input$k_weergave == "rel") "%" else ""),
+                labFormat = labelFormat(suffix = if (map_is_aandeel(input$k_weergave)) "%" else ""),
                 na.label = "onvoldoende")
   })
 
@@ -1317,6 +1378,9 @@ server <- function(input, output, session) {
     if ("compleet" %in% names(d)) {
       uit[, `:=`(alle_groepen_aanwezig = d$compleet, onderdelen_gevonden = d$n_gevonden)]
     }
+    # De twee noemers naast elkaar, zodat in de export na te rekenen is welk
+    # aandeel er getoond werd en wat het andere geweest zou zijn.
+    if ("regio_totaal" %in% names(d)) uit[, noemer_regiototaal := d$regio_totaal]
     uit[]
   }
 
@@ -1326,7 +1390,8 @@ server <- function(input, output, session) {
     # er getekend is, en de cellen waar die optelling uit komt.
     content  = function(file) write_xlsx(
       list(kaart = export_cols(kaart_data()),
-           onderliggend = export_cols(add_display(kaart_rijen(), input$k_weergave))), file)
+           onderliggend = export_cols(add_display(met_regio_totaal(copy(kaart_rijen())),
+                                                  input$k_weergave))), file)
   )
 
   # De kaart als plaatje. Leaflet tekent in de browser en laat zich hier niet

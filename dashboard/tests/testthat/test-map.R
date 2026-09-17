@@ -112,3 +112,32 @@ test_that("waarden buiten het bereik worden geklemd, niet weggegooid", {
   expect_true(is.na(map_klem(NA_real_, c(0, 100))))
   expect_equal(map_klem(c(1, 2), NULL), c(1, 2))
 })
+
+# Een aandeel kan tegen twee dingen afgezet worden, en dat verschil is groot:
+# dezelfde selectie in Zuidoost 2024 is 16,0% binnen de groep en 1,6% van het
+# regiototaal. Welke noemer bij welke keuze hoort mag dus niet verschuiven.
+
+test_that("elke weergave pakt zijn eigen noemer", {
+  groep <- c(670, 940)
+  regio <- c(5160, 9240)
+  expect_equal(map_noemer("rel_groep", groep, regio), groep)
+  expect_equal(map_noemer("rel_regio", groep, regio), regio)
+  expect_null(map_noemer("abs", groep, regio))
+})
+
+test_that("de oude naam blijft werken", {
+  # De tabbladen Per regio en de venn sturen nog "rel"; die kennen alleen de
+  # groepsnoemer en moeten niet stilletjes van betekenis veranderen.
+  expect_equal(map_noemer("rel", c(670), c(5160)), 670)
+})
+
+test_that("zonder regiototaal is er geen regio-aandeel", {
+  # Beter leeg dan terugvallen op de groepsnoemer: dat zou een heel ander
+  # cijfer zijn onder hetzelfde kopje.
+  expect_null(map_noemer("rel_regio", c(670, 940)))
+})
+
+test_that("alleen 'abs' is geen aandeel", {
+  expect_false(map_is_aandeel("abs"))
+  for (w in c("rel", "rel_groep", "rel_regio")) expect_true(map_is_aandeel(w))
+})

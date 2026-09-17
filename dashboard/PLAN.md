@@ -188,6 +188,22 @@ een gemarkeerde ondergrens wél bruikbaar is. Het geldt **niet** voor de afgelei
 uit §7 — daar is de optelling de noemer van een percentage, en een halve partitie zou dat
 percentage te hoog maken.
 
+**Twee soorten aandeel.** "Weergave" biedt naast absoluut twee noemers, want dat verschil
+bepaalt hoe een kaart gelezen wordt (`map_noemer()` in `utils/map.R`):
+
+- *van regiototaal* — alle huishoudens/ouderen in die regio. Bewust niet `n_totaal`: die telt
+  huishoudens, terwijl de teller bij de `n_kinderen_*`-metrics kinderen telt, en dan is de
+  uitkomst geen percentage. Het regiototaal komt daarom uit de noemer van de totaalrijen, die
+  per metric klopt.
+- *binnen groep* — de som over de categorieën van de indicator binnen dezelfde selectie; de
+  afspraak uit §6, en tot nu toe de enige die het dashboard kende.
+
+Het verschil is groot genoeg om niet impliciet te laten: dezelfde selectie (O_MPG1 + O_MPG2,
+R_MPG_totaal = 3plus, 2024) is in Zuidoost 16,0% binnen de groep en 1,6% van het regiototaal.
+De gekozen noemer staat daarom in de titel, bij de legenda en in de export, en beide noemers
+gaan mee in de xlsx. De tabbladen **Per regio** en de venn kennen alleen "binnen groep" — daar
+is de noemer ongewijzigd.
+
 **De kleurschaal loopt door** in plaats van in klassen — tussen twee regio's in hetzelfde
 "vakje" ging het verschil anders verloren. Standaard loopt hij van de laagste tot de hoogste
 waarde in de selectie; zet "Kleurschaal volgt de data" uit en je kiest het bereik zelf, wat
