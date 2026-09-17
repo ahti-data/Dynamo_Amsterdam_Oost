@@ -70,7 +70,14 @@ tot 2022 — een lege kolom is daar geen onderdrukking maar een bronregister dat
 ## Kaart
 
 De kaart kan tot één stadsdeel begrensd worden ("Toon"), zodat er een kaart van alleen Oost
-uit te lichten is, en is als **png** te downloaden naast de xlsx. **Westpoort valt overal
+uit te lichten is, en is als **png** te downloaden naast de xlsx. Bij "Waarde van de indicator"
+en "Toon welk niveau" kun je **meerdere keuzes tegelijk** maken; die worden opgeteld, noemer
+inbegrepen, en een regio waar een van die groepen onderdrukt is blijft grijs. De kleurschaal
+loopt door in plaats van in klassen, en het bereik is zelf in te stellen — handig om twee
+kaarten op dezelfde schaal naast elkaar te leggen.
+
+Rechtsboven staat **"Wat is er nieuw"**: wat er sinds je vorige bezoek veranderd is, uit
+`data/metadata/changelog.R`. Dat bestand hoort bij elke wijziging bijgewerkt te worden. **Westpoort valt overal
 weg**: haven- en bedrijventerrein, nauwelijks huishoudens, en het trekt de kleurschaal scheef.
 Op **Per regio** is "Heel Amsterdam" een van de regio's en de standaardkeuze.
 

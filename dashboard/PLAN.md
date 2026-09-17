@@ -166,8 +166,23 @@ vaste lijst voor de hele populatie zou hier onterecht waarden aanbieden.
 
 #### Subtab 1 — Kaart
 Besturing: jaar · regioniveau (buurt / wijk / gebied / stadsdeel) · **toon** (heel Amsterdam
-of één stadsdeel) · indicator (`variable_name`) · waarde (`variable_value`) · metric ·
-split_by (+ welk niveau daarvan) · absoluut/relatief.
+of één stadsdeel) · indicator (`variable_name`) · waarde(n) (`variable_value`) · metric ·
+split_by (+ welke niveaus daarvan) · absoluut/relatief · kleurschaal.
+
+**Waarde en niveau zijn meervoudig.** Meerdere keuzes worden opgeteld, zodat er bijvoorbeeld
+"Jeugdhulp, Psychosociale zorg en de combinatie daarvan" als één groep op de kaart komt. De
+teller is een gewone som; de noemer niet, en daar zit de valkuil (`map_aggregate()` in
+`utils/map.R`): over `variable_value` heen is de noemer voor elke rij dezelfde — hij ís de som
+over alle categorieën binnen die slice — dus optellen zou hem dubbel tellen en het percentage
+halveren. Over `split_level` heen heeft elk niveau juist zijn eigen noemer, en die moeten wel
+bij elkaar. Vandaar: de noemer is de som over de *unieke* splitsniveaus. Ontbreekt een van de
+gevraagde cellen in een regio, dan valt die regio weg in plaats van te laag uit te vallen.
+
+**De kleurschaal loopt door** in plaats van in klassen — tussen twee regio's in hetzelfde
+"vakje" ging het verschil anders verloren. Standaard loopt hij van de laagste tot de hoogste
+waarde in de selectie; zet "Kleurschaal volgt de data" uit en je kiest het bereik zelf, wat
+twee kaarten naast elkaar vergelijkbaar maakt. Regio's buiten dat bereik krijgen de rand van
+de schaal (`map_klem()`), niet de NA-kleur — die zou als "onvoldoende waarnemingen" lezen.
 
 "Toon" begrenst de kaart tot één stadsdeel en zoomt erop in, zodat er een kaart van alleen
 Oost uit te lichten is. Het filtert de geometrie, niet de data. **Westpoort valt overal weg**
@@ -175,11 +190,12 @@ Oost uit te lichten is. Het filtert de geometrie, niet de data. **Westpoort valt
 het kleurt mee als een gewone wijk en trekt met zijn kleine aantallen de schaal scheef. De
 parquet houdt het; alleen de app verbergt het.
 
-Naast de xlsx-download staat **"Download kaart (png)"**: `utils/map_download.R` tekent
-dezelfde laag opnieuw met ggplot2 + geom_sf. Leaflet tekent in de browser en laat zich op de
-server niet wegschrijven (daar is een headless browser voor nodig). De klassegrenzen komen uit
-`kaart_bins()` in de app en niet uit `colorBin()`, zodat de figuur en het scherm aantoonbaar
-dezelfde indeling en kleuren hebben.
+Naast de xlsx-download staat **"Download kaart (png)"**: `utils/map.R` tekent dezelfde laag
+opnieuw met ggplot2 + geom_sf. Leaflet tekent in de browser en laat zich op de server niet
+wegschrijven (daar is een headless browser voor nodig). Het kleurbereik komt uit
+`kaart_domein()` in de app, zodat de figuur en het scherm dezelfde schaal hebben — ook een
+handmatig ingesteld bereik. De xlsx heeft twee tabbladen: wat de kaart tekent, en de cellen
+waar die optelling uit komt.
 
 `leaflet` choropleth: hover-tooltip met naam + waarde + n, klik-popup met de volledige
 context, legenda, en **grijs met expliciet "onvoldoende waarnemingen"** voor onderdrukte
@@ -507,3 +523,22 @@ ongeveer 50% en op wijkniveau ongeveer 56% voor `*_aantal_vormen`. Dat is bewust
 ingebouwd: het betekent dat een categorie stilzwijgend te laag kan uitvallen, en die afweging
 hoort bij de onderzoekers, niet in een prep-script. Wie hem wil, bouwt hem in
 `derive_support_indicator_rows()` met de marge als expliciete, gedocumenteerde constante.
+
+
+---
+
+## 8. "Wat is er nieuw"
+
+Rechtsboven staat een knop die `data/metadata/changelog.R` toont: per datum wat er voor een
+gebruiker veranderd is. Geen technisch logboek — daar is de git-historie voor — maar wat
+iemand merkt: een nieuwe knop, een cijfer dat anders uitvalt, een kaart die het eerst niet
+deed.
+
+Het stipje ernaast betekent "hier heb je nog niet naar gekeken". Dat wordt in de browser
+onthouden (`localStorage`), niet op de server: het dashboard heeft geen accounts, dus er is
+geen plek om het per persoon te bewaren. Alles staat in een `try`/`catch` en het stipje begint
+*zichtbaar* — gaat er iets mis in de browser, dan blijft het staan, en dat is onschuldig.
+Andersom zou de melding stilletjes kunnen wegvallen.
+
+**Dit bestand hoort bij elke push mee** (zie CLAUDE.md, Conventions). Blijft het achter, dan
+concludeert iedereen dat er niets gebeurd is.

@@ -1,10 +1,13 @@
 library(testthat)
 library(leaflet)   # venn_diagram.R builds its colour ramp with colorNumeric()
 library(data.table)  # data-prep/derive_support_splits.R werkt op data.tables
+library(shiny)     # changelog_ui.R bouwt shiny-tags
 
 source("../data/metadata/brand_colors.R")
 source("../utils/venn_diagram.R")
-source("../utils/map_download.R")
+source("../utils/map.R")
+source("../data/metadata/changelog.R")
+source("../utils/changelog_ui.R")
 source("../utils/format_thinkcell_download.R")
 source("../utils/slide_download.R")
 source("../utils/template_admin.R")

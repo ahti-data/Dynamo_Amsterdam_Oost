@@ -27,6 +27,9 @@ person-level records.
 - `data/metadata/variable_labels.R` — Dutch labels for every `R_`/`O_`-variable, taken from
   `Outcomes.xlsx` (see PLAN.md §3). Update this file from a new `Outcomes.xlsx`, never guess a
   label from the column name.
+- `data/metadata/changelog.R` — what changed, **for the people who use the dashboard**. The
+  "Wat is er nieuw" button in the header reads it. See the convention below: every push that
+  changes anything a user can see adds an entry here.
 
 CBS output rules still apply to anything rendered: cells below 10 are suppressed and values
 are rounded to 10 in the delivery. **Render a suppressed region as explicitly "onvoldoende
@@ -85,20 +88,22 @@ These are verified against the actual delivery, not assumed from the output form
   the shared derivation of the support splits/indicators (PLAN.md §7), called by both `01_`
   and `02_` so the two routes cannot drift apart; it is the one `data-prep/` file the test
   suite covers.
-- `utils/map_download.R` — Dynamo-specific, like `venn_diagram.R`. Leaflet draws in the
-  browser and can't be written to a file server-side (that needs a headless browser, which
-  the server doesn't have), so this redraws the same layer with ggplot2 + geom_sf for the
-  "Download kaart (png)" button. The class breaks come from the app (`kaart_bins()`), not from
-  `colorBin()`, so the figure and the screen provably share one classification — that is why
-  the app computes them itself. `choropleth_klassen()` holds the part that can go wrong
-  (breaks, labels, colours) and is tested without sf or a graphics device.
-  Two things there are load-bearing and easy to undo by accident: the fill colours are
-  **named** after their class (so `scale_fill_manual()` matches by name, not by position —
-  positional matching shifts the whole ramp as soon as one class has no regions in it), and
-  the legend uses its own **`draw_key_vlak()`** glyph. `geom_sf`'s default `draw_key_polygon()`
-  sizes the swatch from the row's `linewidth`, and a class no region falls into has no row —
-  which drew that class's swatch blank. `draw_key_vlak()` reads only `fill`, which the scale
-  supplies for every class.
+- `utils/map.R` — Dynamo-specific, like `venn_diagram.R`: everything the map shares between
+  the screen and the download.
+  - `map_aggregate()` sums the selected combination levels and/or indicator values. **The
+    denominator rule is the part to be careful with**: across `variable_value` the denominator
+    is the *same* row value (it is by definition the sum over all categories in that slice),
+    so adding it up would double-count and halve the percentage; across `split_level` each
+    level has its *own* denominator and those do add up. Hence: sum over the *unique* split
+    levels. A region missing any requested cell drops out rather than summing short.
+  - `map_domein()` / `map_klem()` — the colour range (data range, or the user's own) and
+    clamping into it, so a region past the chosen maximum takes the end of the ramp instead of
+    `colorNumeric()`'s NA colour, which would read as "onvoldoende waarnemingen".
+  - `choropleth_ggplot()` redraws the layer with ggplot2 + geom_sf for the "Download kaart
+    (png)" button, on the same `kaart_domein()` as the screen. The scale is **continuous**
+    (`scale_fill_gradientn` + `scales::squish`), not binned — binning lost the difference
+    between two regions in the same class, and the colourbar guide sidesteps the empty-key
+    problem that the old discrete legend had.
 - `utils/` — reusable functions shared across the app, incl. `auth.R` (shinymanager) and the
   think-cell export stack. `venn_diagram.R` is Dynamo-specific (a hand-built 3-circle SVG venn
   for `O_MPG_combination`/`O_OUD_combination`), not shared with sibling dashboards. One
@@ -153,6 +158,11 @@ change needed).
 
 ## Conventions
 
+- **Every push that changes something a user can see adds an entry to
+  `data/metadata/changelog.R`** (newest first, ISO date, plain Dutch about what they will
+  notice — not about functions or columns). The header button shows the top entry's date and
+  marks it unseen in the reader's browser; leave the file behind and everyone concludes
+  nothing happened. A pure refactor or a docs-only change needs no entry.
 - Add reusable logic to `utils/`, not inline in `app.R`.
 - The deploy workflow ships only `app.R`, `data/`, `utils/` and `templates/`. Keep runtime
   dependencies inside those directories.

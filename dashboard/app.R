@@ -6,6 +6,7 @@
 
 source("data/metadata/brand_colors.R")
 source("data/metadata/variable_labels.R")
+source("data/metadata/changelog.R")
 
 suppressPackageStartupMessages({
   library(shiny)
@@ -19,7 +20,8 @@ suppressPackageStartupMessages({
 })
 
 source("utils/venn_diagram.R")
-source("utils/map_download.R")
+source("utils/map.R")
+source("utils/changelog_ui.R")
 
 # The shared think-cell export stack from shiny_dashboard_template, in the order
 # the files build on each other (same order as tests/testthat.R). Wiring
@@ -272,7 +274,11 @@ named <- function(values, labeller) setNames(values, labeller(values))
 # Keeps the user's current pick when it is still a valid choice, so changing an
 # unrelated selector does not silently reset the rest of the form.
 update_preserving <- function(session, id, choices, current) {
-  sel <- if (!is.null(current) && current %in% choices) current else choices[1]
+  # `current` kan meerdere waarden hebben (de kaartselectors staan op
+  # multiple = TRUE): alles wat nog bestaat blijft staan, en als er niets van
+  # overblijft valt hij terug op de eerste keuze in plaats van op leeg.
+  blijft <- current[!is.na(current) & current %in% choices]
+  sel <- if (length(blijft)) blijft else choices[1]
   updateSelectInput(session, id, choices = choices, selected = sel)
 }
 
@@ -314,9 +320,13 @@ ui <- fluidPage(
      ahti_branding$colors$licht_grijs,
      VENN_NONE_FILL)))),
 
-  h2("Dynamo Amsterdam", class = "app-title"),
-  div("Risicostapeling bij huishoudens met kinderen en ouderen, 2018-2024. ",
-      "Bron: CBS microdata via de Remote Access-omgeving.", class = "app-sub"),
+  fluidRow(
+    column(9,
+      h2("Dynamo Amsterdam", class = "app-title"),
+      div("Risicostapeling bij huishoudens met kinderen en ouderen, 2018-2024. ",
+          "Bron: CBS microdata via de Remote Access-omgeving.", class = "app-sub")),
+    column(3, div(style = "text-align: right; padding-top: 22px;", changelog_knop()))
+  ),
 
   tabsetPanel(
     id = "hoofdtab",
@@ -349,21 +359,33 @@ ui <- fluidPage(
               control_card(
                 selectInput("k_var", "Indicator", choices = NULL),
                 uiOutput("k_var_note"),
-                selectInput("k_val", "Waarde van de indicator", choices = NULL),
+                selectInput("k_val", "Waarde van de indicator", choices = NULL,
+                            multiple = TRUE),
                 selectInput("k_metric", "Metric", choices = NULL)
               ),
               control_card(
                 selectInput("k_split", "Splits uit naar", choices = NULL),
                 conditionalPanel(
                   "input.k_split != '(totaal)'",
-                  selectInput("k_level", "Toon welk niveau", choices = NULL)
+                  selectInput("k_level", "Toon welk niveau", choices = NULL,
+                              multiple = TRUE)
                 ),
                 uiOutput("k_split_note")
               ),
               control_card(
                 radioButtons("k_weergave", "Weergave",
                              c("Absoluut" = "abs", "Aandeel (%)" = "rel"),
-                             selected = "rel")
+                             selected = "rel"),
+                checkboxInput("k_schaal_auto", "Kleurschaal volgt de data", TRUE),
+                conditionalPanel(
+                  "!input.k_schaal_auto",
+                  fluidRow(
+                    column(6, numericInput("k_min", "Van", value = NA, width = "100%")),
+                    column(6, numericInput("k_max", "Tot", value = NA, width = "100%"))),
+                  div(class = "note", style = "margin-top: -4px;",
+                      "Een vast bereik maakt twee kaarten naast elkaar vergelijkbaar.",
+                      " Regio's erbuiten krijgen de rand van de schaal, niet grijs.")
+                )
               ),
               downloadButton("k_dl", "Download data (xlsx)", class = "btn-default"),
               downloadButton("k_dl_fig", "Download kaart (png)", class = "btn-default"),
@@ -674,34 +696,75 @@ server <- function(input, output, session) {
 
   # ---------------------------------------------------------------- Kaart -----
 
-  kaart_data <- reactive({
+  # De ruwe rijen achter de kaart: een per regio x gekozen splitsniveau x
+  # gekozen indicatorwaarde. Beide keuzelijsten staan op multiple, zodat er
+  # bijvoorbeeld "O1, O2 en O1+O2 samen" te bekijken is.
+  kaart_rijen <- reactive({
     req(input$populatie, input$k_jaar, input$k_niveau,
         input$k_var, input$k_val, input$k_metric, input$k_split)
 
     lvl <- if (input$k_split == TOTAL_LABEL) TOTAL_LABEL else req(input$k_level)
 
-    d <- ds |>
+    ds |>
       filter(population   == !!input$populatie,
              region_level == !!input$k_niveau,
              year          == !!as.integer(input$k_jaar),
              variable_name == !!input$k_var,
-             variable_value== !!input$k_val,
+             variable_value %in% !!input$k_val,
              metric_name   == !!input$k_metric,
              split_var     == !!input$k_split,
-             split_level   == !!lvl) |>
+             split_level %in% !!lvl) |>
       collect() |>
       as.data.table()
+  })
 
+  # Hoeveel rijen een regio moet hebben om compleet te zijn. Komt een cel niet
+  # voor, dan zou de optelling stilzwijgend te laag uitvallen, en valt de regio
+  # af -- zie map_aggregate().
+  kaart_n_cellen <- reactive({
+    lvl <- if (input$k_split == TOTAL_LABEL) TOTAL_LABEL else (input$k_level %||% character(0))
+    length(lvl) * length(input$k_val %||% character(0))
+  })
+
+  kaart_data <- reactive({
+    d <- map_aggregate(kaart_rijen(), kaart_n_cellen())
     add_display(d, input$k_weergave)
   })
 
+  # Het bereik van de kleurschaal: standaard de uiterste waarden van de
+  # selectie, of een handmatig bereik als de gebruiker dat aanzet.
+  kaart_domein <- reactive({
+    handmatig <- if (isTRUE(input$k_schaal_auto)) NULL else c(input$k_min, input$k_max)
+    map_domein(kaart_data()$waarde, handmatig)
+  })
+
+  # Zodra de gebruiker de schaal overneemt, staan de velden vast op wat er op
+  # dat moment te zien was -- dan hoeft niemand twee getallen te verzinnen.
+  observeEvent(input$k_schaal_auto, {
+    if (isTRUE(input$k_schaal_auto)) return()
+    d <- map_domein(kaart_data()$waarde)
+    req(d)
+    updateNumericInput(session, "k_min", value = signif(d[1], 3))
+    updateNumericInput(session, "k_max", value = signif(d[2], 3))
+  }, ignoreInit = TRUE)
+
+  # Een selectie van meerdere waarden of niveaus wordt opgeteld; de titel zegt
+  # welke, tot een stuk of drie. Daarboven wordt het een opsomming die de titel
+  # onleesbaar maakt, en volstaat het aantal.
+  som_label <- function(x) {
+    if (length(x) == 0) return("")
+    if (length(x) <= 3) paste(x, collapse = ", ") else sprintf("%d samengevoegd", length(x))
+  }
+
   kaart_titel <- reactive({
-    req(input$k_var, input$k_metric, input$k_jaar)
+    req(input$k_var, input$k_metric, input$k_jaar, input$k_val)
     sp <- if (input$k_split == TOTAL_LABEL) "" else
       sprintf(" | %s: %s", pretty_split(input$k_split),
-              pretty_level(input$k_level %||% "", input$k_split, input$populatie))
+              som_label(pretty_level(input$k_level %||% character(0),
+                                     input$k_split, input$populatie)))
     sprintf("%s = %s | %s (%s) | %s %s%s",
-            pretty_var(input$k_var), input$k_val,
+            pretty_var(input$k_var),
+            som_label(pretty_value(input$k_val, input$k_var, input$populatie)),
             pretty_metric(input$k_metric), eenheid(input$k_weergave),
             input$k_jaar, input$k_niveau, sp)
   })
@@ -727,17 +790,6 @@ server <- function(input, output, session) {
     if (!identical(scope, SCOPE_ALLES)) g <- g[!is.na(g$stadsdeel) & g$stadsdeel == scope, ]
     merge(g, kaart_data()[, .(region_code, waarde, metric_value, n_totaal)],
           by = "region_code", all.x = TRUE)
-  })
-
-  # De klassegrenzen worden hier berekend en niet aan colorBin() overgelaten,
-  # zodat de kaart op het scherm en de gedownloade figuur aantoonbaar dezelfde
-  # kleuren en dezelfde legenda hebben.
-  kaart_bins <- reactive({
-    w <- kaart_geo()$waarde
-    if (all(is.na(w))) return(numeric(0))
-    b <- unique(pretty(range(w, na.rm = TRUE), 6))
-    if (length(b) < 2) b <- c(min(w, na.rm = TRUE) - 0.5, max(w, na.rm = TRUE) + 0.5)
-    b
   })
 
   # Inzoomen als de gebruiker een stadsdeel kiest -- dat is de hele reden voor
@@ -767,8 +819,15 @@ server <- function(input, output, session) {
       return()
     }
 
-    pal <- colorBin("YlOrRd", domain = m$waarde, bins = kaart_bins(),
-                    na.color = "#e0e0e0")
+    # Continue schaal in plaats van klassen: de nuances tussen twee regio's in
+    # hetzelfde "vakje" gingen daar verloren. Het bereik komt uit
+    # kaart_domein(), zodat een handmatig ingesteld bereik ook hier geldt en
+    # twee kaarten naast elkaar te leggen zijn. Waarden erbuiten worden naar de
+    # rand geklemd -- colorNumeric() zou ze anders de NA-kleur geven, wat als
+    # "onvoldoende waarnemingen" leest.
+    domein <- kaart_domein()
+    pal <- colorNumeric("YlOrRd", domain = domein, na.color = MAP_NA_FILL)
+    m$kleurwaarde <- map_klem(m$waarde, domein)
 
     fmt <- function(x) {
       if (is.na(x)) return("onvoldoende waarnemingen")
@@ -792,15 +851,16 @@ server <- function(input, output, session) {
     proxy |>
       addPolygons(
         data = m,
-        fillColor = ~pal(waarde), fillOpacity = 0.8,
+        fillColor = ~pal(kleurwaarde), fillOpacity = 0.8,
         color = "#ffffff", weight = 1,
         label = labels,
         labelOptions = labelOptions(direction = "auto", textsize = "13px"),
         highlightOptions = highlightOptions(weight = 3, color = "#272727",
                                             fillOpacity = 0.9, bringToFront = TRUE)
       ) |>
-      addLegend(position = "bottomright", pal = pal, values = m$waarde,
+      addLegend(position = "bottomright", pal = pal, values = domein,
                 title = eenheid(input$k_weergave), opacity = 0.9,
+                labFormat = labelFormat(suffix = if (input$k_weergave == "rel") "%" else ""),
                 na.label = "onvoldoende")
   })
 
@@ -1215,13 +1275,17 @@ server <- function(input, output, session) {
 
   output$k_dl <- downloadHandler(
     filename = function() sprintf("dynamo_kaart_%s.xlsx", Sys.Date()),
-    content  = function(file) write_xlsx(export_cols(kaart_data()), file)
+    # Twee tabbladen sinds de kaart meerdere niveaus/waarden kan optellen: wat
+    # er getekend is, en de cellen waar die optelling uit komt.
+    content  = function(file) write_xlsx(
+      list(kaart = export_cols(kaart_data()),
+           onderliggend = export_cols(add_display(kaart_rijen(), input$k_weergave))), file)
   )
 
   # De kaart als plaatje. Leaflet tekent in de browser en laat zich hier niet
   # wegschrijven, dus choropleth_ggplot() tekent dezelfde laag opnieuw met
-  # ggplot2 -- met dezelfde klassegrenzen (kaart_bins()), zodat de figuur en het
-  # scherm dezelfde indeling en kleuren hebben.
+  # ggplot2 -- met hetzelfde kleurbereik (kaart_domein()), zodat de figuur en
+  # het scherm dezelfde schaal hebben.
   output$k_dl_fig <- downloadHandler(
     filename = function() sprintf("dynamo_kaart_%s_%s.png", input$k_niveau, Sys.Date()),
     contentType = "image/png",
@@ -1229,7 +1293,7 @@ server <- function(input, output, session) {
       laag <- kaart_geo()
       scope <- input$k_scope %||% SCOPE_ALLES
       p <- choropleth_ggplot(
-        laag, kaart_bins(), input$k_weergave,
+        laag, kaart_domein(), input$k_weergave,
         titel = sprintf("%s = %s", pretty_var(input$k_var), input$k_val),
         ondertitel = sprintf("%s (%s) | %s | %s%s",
                              pretty_metric(input$k_metric), eenheid(input$k_weergave),
@@ -1351,6 +1415,11 @@ server <- function(input, output, session) {
       writeLines(svg, con, useBytes = TRUE)
     }
   )
+
+  # "Wat is er nieuw": de lijst uit data/metadata/changelog.R. Het stipje op de
+  # knop wordt in de browser bijgehouden (zie utils/changelog_ui.R); de server
+  # hoeft alleen het venster te openen.
+  observeEvent(input$changelog_knop, showModal(changelog_venster()))
 
   # The three shared tabs. They read the same state/ files any chart writes to,
   # so nothing here needs to know which charts are wired up.
