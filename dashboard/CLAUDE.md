@@ -95,7 +95,17 @@ These are verified against the actual delivery, not assumed from the output form
     is the *same* row value (it is by definition the sum over all categories in that slice),
     so adding it up would double-count and halve the percentage; across `split_level` each
     level has its *own* denominator and those do add up. Hence: sum over the *unique* split
-    levels. A region missing any requested cell drops out rather than summing short.
+    levels.
+    A region missing one of the requested cells **keeps its number** and is marked
+    `compleet = FALSE`; the map dashes its border, names the count above the map, and the
+    tooltip says how many of the requested parts were published ("1 of 3" means something very
+    different from "5 of 6"). That is a deliberate exception to the all-or-nothing rule
+    elsewhere here: for a hand-picked group a flagged lower bound beats a grey shape — under
+    the strict rule a wijk map of "O_MPG1 + O_MPG2 + the combination" came out entirely empty
+    (0 of 11 wijken qualified). It does **not** extend to the derived indicators in
+    `data-prep/derive_support_splits.R`: there the sum *is* the denominator of a percentage, so
+    half a partition would make that percentage too high. Here the denominator is summed along
+    with the numerator, so a missing cell lowers both and shifts the ratio far less.
   - `map_domein()` / `map_klem()` — the colour range (data range, or the user's own) and
     clamping into it, so a region past the chosen maximum takes the end of the ramp instead of
     `colorNumeric()`'s NA colour, which would read as "onvoldoende waarnemingen".
