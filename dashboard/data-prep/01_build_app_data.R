@@ -77,15 +77,25 @@ TOTAL_LABEL <- SPLIT_TOTAL_LABEL
 #
 # Ze zijn tegelijk de verplichte kolommen: zonder een ervan valt er niets te
 # bouwen, en dat hoort meteen om te vallen in plaats van pas in het dashboard.
+#
+# `population` staat er ook in. De levering draagt hem als kolom (met dezelfde
+# waarde op elke rij van het bestand), en hij is geen uitsplitsing: welke
+# populatie het is, bepaalt deze stap zelf uit welk bestand hij leest -- zie
+# population_label in reshape_delivery().
 DELIVERY_FIXED_COLS <- c(
   "region_code", "region_agg_level", "year",
   "variable_name", "variable_value",
-  "n_totaal_population_in_region", "n_totaal_region_split",
-  "metric_name", "metric_value"
+  "n_totaal_population_in_region", "n_totaal_region_splitvar",
+  "metric_name", "metric_value", "population"
 )
 
 # De waarde waarmee de levering "niet naar deze variabele uitgesplitst" codeert.
 SPLIT_ALL <- "all"
+
+# Elk aantal in de levering is op tientallen afgerond. Twee kolommen die
+# hetzelfde tellen kunnen daardoor een tiental uiteenlopen zonder dat er iets
+# mis is; dat is de marge waarmee de controles hieronder rekenen.
+DELIVERY_ROUND_STEP <- 10
 
 # ---------------------------------------------------------------------------
 # Geometry
@@ -182,6 +192,50 @@ lees_levering <- function(pad) {
   d
 }
 
+# De klassen van de cumulatieve risicoscore (`R_*_totaal_cat`) heten 0, 1, 2 en
+# 3plus. In OT_HHKIND van output_1b is de vierde klasse *naamloos* geleverd: de
+# rijen staan er, met hun aantallen, maar variable_value is leeg. In OT_OUD
+# staat "3plus" er gewoon, en de RA-pipeline die de levering maakt kent alleen
+# die vier namen (scripts/R/02_enrich_and_score.R) -- het label is onderweg
+# kwijtgeraakt, de categorie niet.
+#
+# Hieronder wordt hij teruggezet, maar alleen als het beeld exact klopt: de
+# overige klassen zijn 0, 1 en 2, en 3plus komt nergens voor. Klopt dat niet,
+# dan is het iets anders dan deze bekende fout en hoort de bouw te stoppen in
+# plaats van een naam te verzinnen. Zodra de levering het label zelf meelevert
+# doet deze functie niets meer.
+LEGE_CATEGORIE_VAR      <- c("R_MPG_totaal_cat", "R_OUD_totaal_cat")
+LEGE_CATEGORIE_OVERIGE  <- c("0", "1", "2")
+LEGE_CATEGORIE_ONTBREEKT <- "3plus"
+
+herstel_lege_categorie <- function(dt) {
+  v <- as.character(dt$variable_value)
+  leeg <- is.na(v) | !nzchar(v)
+  if (!any(leeg)) return(invisible(dt))
+  # Een categorielabel is tekst. Leest fread de kolom als getal (dat kan zodra
+  # een levering alleen cijfers in variable_value heeft), dan gaat er anders een
+  # tekstwaarde in een numerieke kolom.
+  if (!is.character(dt$variable_value)) set(dt, j = "variable_value", value = v)
+
+  for (var in unique(dt$variable_name[leeg])) {
+    rijen <- leeg & dt$variable_name == var
+    overige <- setdiff(unique(v[!leeg & dt$variable_name == var]), NA_character_)
+    if (!var %in% LEGE_CATEGORIE_VAR || !setequal(overige, LEGE_CATEGORIE_OVERIGE)) {
+      stop(sprintf(paste("%s heeft %s rijen zonder variable_value, en de overige waarden zijn",
+                         "%s. Dat is niet de bekende fout (een naamloze \"%s\" bij %s);",
+                         "controleer de levering."),
+                   var, format(sum(rijen), big.mark = ".", decimal.mark = ","),
+                   paste(sprintf('"%s"', overige), collapse = ", "),
+                   LEGE_CATEGORIE_ONTBREEKT, paste(LEGE_CATEGORIE_VAR, collapse = "/")))
+    }
+    message(sprintf('  %s: %s naamloze rijen gelezen als "%s" (de klasse die verder ontbreekt).',
+                    var, format(sum(rijen), big.mark = ".", decimal.mark = ","),
+                    LEGE_CATEGORIE_ONTBREEKT))
+    set(dt, i = which(rijen), j = "variable_value", value = LEGE_CATEGORIE_ONTBREEKT)
+  }
+  invisible(dt)
+}
+
 #' Zet een leveringstabel om naar het lange schema.
 #'
 #' **Wat er veranderde met output_1b.** De vorige levering kruiste nooit twee
@@ -271,7 +325,7 @@ reshape_delivery <- function(dt, population_label) {
   out <- rbind(totals, marg, use.names = TRUE)
 
   setnames(out, "n_totaal_population_in_region", "n_totaal")
-  setnames(out, "n_totaal_region_split", "n_split")
+  setnames(out, "n_totaal_region_splitvar", "n_split")
   out[, `:=`(
     population   = population_label,
     region_level = unname(LEVEL_LABELS[region_agg_level]),
@@ -292,10 +346,12 @@ bestand_hh  <- vind_levering("OT_HHKIND")
 bestand_oud <- vind_levering("OT_OUD")
 
 hh <- lees_levering(bestand_hh)
+herstel_lege_categorie(hh)
 hh_long <- reshape_delivery(hh, population_label = "huishoudens met kinderen")
 rm(hh); invisible(gc())
 
 oud <- lees_levering(bestand_oud)
+herstel_lege_categorie(oud)
 oud_long <- reshape_delivery(oud, population_label = "ouderen (65+)")
 rm(oud); invisible(gc())
 
@@ -320,19 +376,28 @@ if (missing_name > 0L) {
   print(unique(dt[is.na(region_name), .(region_level, region_code)])[1:20])
 }
 
-# De levering levert n_totaal_region_split nu zelf; op een totaalrij hoort dat
+# De levering levert n_totaal_region_splitvar nu zelf; op een totaalrij hoort dat
 # hetzelfde te zijn als n_totaal. Dat is de goedkoopste controle dat de kolom
 # betekent wat we denken dat hij betekent -- en de aanname waarop de hele
 # afleiding hieronder staat.
+#
+# Een tiental verschil is geen afwijking. Beide kolommen worden in de levering
+# los van elkaar op tientallen afgerond (05_prepare_output_tables.R), dus
+# hetzelfde getal kan er de ene keer als 4590 en de andere keer als 4600
+# uitkomen. Alleen een groter verschil betekent dat de kolom iets anders telt.
 controle <- dt[split_var == TOTAL_LABEL & !is.na(n_split) & !is.na(n_totaal)]
 if (nrow(controle) > 0L) {
-  afwijkend <- controle[abs(n_split - n_totaal) > 0]
-  message(sprintf("n_split-controle op de totaalrijen: %s van %s rijen wijken af van n_totaal.",
-                  format(nrow(afwijkend), big.mark = ".", decimal.mark = ","),
-                  format(nrow(controle), big.mark = ".", decimal.mark = ",")))
+  afrondingsverschil <- controle[abs(n_split - n_totaal) > 0 &
+                                 abs(n_split - n_totaal) <= DELIVERY_ROUND_STEP]
+  afwijkend <- controle[abs(n_split - n_totaal) > DELIVERY_ROUND_STEP]
+  message(sprintf(paste("n_split-controle op de totaalrijen: %s van %s rijen wijken af van",
+                        "n_totaal (%s daarvan met niet meer dan een afrondingsstap)."),
+                  format(nrow(afwijkend) + nrow(afrondingsverschil), big.mark = ".", decimal.mark = ","),
+                  format(nrow(controle), big.mark = ".", decimal.mark = ","),
+                  format(nrow(afrondingsverschil), big.mark = ".", decimal.mark = ",")))
   if (nrow(afwijkend) > 0L) {
-    warning("n_totaal_region_split wijkt op totaalrijen af van n_totaal_population_in_region; ",
-            "controleer of de kolom betekent wat de afleiding aanneemt.")
+    warning("n_totaal_region_splitvar wijkt op totaalrijen meer dan een afrondingsstap af van ",
+            "n_totaal_population_in_region; controleer of de kolom betekent wat de afleiding aanneemt.")
     print(head(afwijkend[, .(population, region_level, region_code, year,
                              variable_name, metric_name, n_totaal, n_split)], 10))
   }
@@ -422,11 +487,20 @@ saveRDS(
 sz <- sum(file.info(list.files(pq_dir, recursive = TRUE, full.names = TRUE))$size)
 message(sprintf("Done. %s rows, %.1f MB on disk.", format(nrow(dt), big.mark = ".", decimal.mark = ","), sz / 1024^2))
 
-message("\nSanity check -- Amsterdam totals, n_households, R_MPG_totaal, 2024:")
+# De klassen van de risicostapeling horen op te tellen tot n_totaal, en dat is
+# meteen de controle dat de noemer klopt. Let op de variabelenaam: sinds
+# output_1b staan de klassen onder R_MPG_totaal_cat, want R_MPG_totaal draagt
+# alleen nog het gemiddelde -- dat krijgt zijn eigen controle hieronder.
+message("\nSanity check -- Amsterdam totals, n_households, R_MPG_totaal_cat, 2024:")
 print(dt[population == "huishoudens met kinderen" & region_level == "gemeente" &
-         year == 2024 & variable_name == "R_MPG_totaal" & metric_name == "n_households" &
+         year == 2024 & variable_name == "R_MPG_totaal_cat" & metric_name == "n_households" &
          split_var == TOTAL_LABEL,
          .(variable_value, metric_value, n_totaal, n_split, denominator)])
+
+message("\nSanity check -- een gemiddelde heeft geen noemer:")
+print(dt[population == "huishoudens met kinderen" & region_level == "gemeente" &
+         year == 2024 & metric_is_gemiddelde(metric_name) & split_var == TOTAL_LABEL,
+         .(variable_name, variable_value, metric_name, metric_value, denominator)])
 
 message("\nSanity check -- welke uitsplitsingen zitten er in de parquet:")
 print(dt[, .N, by = .(population, split_var)][order(population, -N)][, head(.SD, 12), by = population])

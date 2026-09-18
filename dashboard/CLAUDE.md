@@ -45,13 +45,14 @@ waarnemingen", never as 0** — the distinction matters and collapsing it misrea
 These are verified against the actual delivery, not assumed from the output form — check
 `PLAN.md` §2 before changing any aggregation logic.
 
-One caveat on the `output_1b` items: the raw delivery is gitignored and stays on the analyst's
-machine, so they were **not** re-measured the way the `output_1a` figures in PLAN.md §2 were.
-They follow from what that delivery adds, and the prep step checks them itself rather than
-trusting them — a missing column, a split column without an `all` value, an `n_split` that
-disagrees with `n_totaal` on a total row, or a separator inside a value all stop the build with
-a message naming the problem. If one of those fires, the assumption is what is wrong, not the
-data.
+The `output_1b` items were measured on the delivery itself (18-09-2026, `OT_HHKIND.csv`
+10.733.781 rows × 14 columns, `OT_OUD.csv` 721.821 × 13). The raw files are gitignored and stay
+on the analyst's machine, so re-measuring means running the prep step there. It checks these
+assumptions rather than trusting them anyway — a missing column, a split column without an `all`
+value, an `n_split` that disagrees with `n_totaal` on a total row by more than one rounding step,
+an unnamed category that is not the known `3plus` case, or a separator inside a value all stop
+the build with a message naming the problem. If one of those fires, the assumption is what is
+wrong, not the data.
 
 - **A row can be split by more than one variable at once** (since `output_1b`; `output_1a`
   never crossed two). `split_var` is therefore a *set* of names and `split_level` the matching
@@ -67,7 +68,7 @@ data.
   everything outside `DELIVERY_FIXED_COLS` is a split variable, and a candidate column with no
   `all` value anywhere stops the build (that is a new fixed column, not a split).
 - `n_totaal_population_in_region` is constant per region × year.
-- **`n_totaal_region_split` (in the parquet: `n_split`) is the published size of each
+- **`n_totaal_region_splitvar` (in the parquet: `n_split`) is the published size of each
   region × split cell**, new in `output_1b`. It is the exact denominator for metrics that count
   the population unit (`n_households`, `n_ouderen_with_var_value`) and it replaced a pile of
   back-calculation — see `utils/metrics.R` for which metric may be summed, divided, or neither.
@@ -82,6 +83,49 @@ data.
   2018–2021), so a single geojson vintage is correct for the whole 2018–2024 series.
 - `OT_OUD` has **three** split variables, not four — the output form lists a `langwonende_hh`
   column that is not in the file.
+- **`output_1b` only goes below gebied level for Oost.** 63 buurten and 15 wijken, all in
+  stadsdeel Oost; gebied, stadsdeel and gemeente still cover the whole city (`output_1a` had 451
+  buurten and 109 wijken citywide). That is the delivery's scope, not suppression and not a bug
+  in the derivation — a coverage count that drops against `output_1a` at those two levels is
+  expected. It matters for display: an undelivered region and a suppressed one are both a grey
+  shape, and that is exactly the distinction this project must not blur, so the app says which
+  stadsdelen a level covers (`dekking_note()`, built from `DEKKING_STADSDELEN`, which is read
+  from the data — a later delivery may be wider).
+- **Not every indicator has every metric** (since `output_1b`). `average_score` exists only on
+  `R_*_totaal`, and those carry nothing else. The "Metric" list therefore follows the selected
+  indicator, like "Waarde van de indicator" does (`update_indicator_keuzes()`); a
+  population-wide list opened the dashboard on an empty map, because `average_score` sorts
+  before `n_households`.
+- **A share can exceed 100% in the data.** Numerator and denominator now come from two
+  independently rounded sources (the published cell, or reference − none, against the published
+  group size), which could not happen when the denominator was the category sum from the same
+  slice. It hits 4.945 of 6,4M derived rows (0,08%), always at the suppression floor — 20 out of
+  a group of 10. `add_display()` caps the displayed share at 100%; the absolute count is left
+  alone.
+- **The delivery carries a `population` column of its own**, constant within each file. It is a
+  fixed column, not a split — `reshape_delivery()` overwrites it with the label the app uses
+  (`huishoudens_met_kinderen` → `huishoudens met kinderen`). Leave it out of
+  `DELIVERY_FIXED_COLS` and the build stops, correctly, on "a column with no `all` value".
+- **`output_1b` renamed the cumulative risk score.** `R_MPG_totaal`/`R_OUD_totaal` now carry
+  only the mean (`average_score`, `variable_value = "nvt"`); the 0/1/2/3plus classes moved to
+  `R_MPG_totaal_cat`/`R_OUD_totaal_cat`, and `R_MPG_all`/`R_OUD_all` is the whole population in
+  one category. Those three are summaries, not risk factors: `RISICO_TOTAAL_*` in
+  `variable_labels.R` keeps them out of the risk-factor table under the venn (`R_MPG_all` would
+  be a column of 100%).
+- **`R_MPG_totaal_cat`'s `3plus` class arrives unnamed in `OT_HHKIND`** — the rows and their
+  counts are there, `variable_value` is empty. `OT_OUD` spells it out, and the RA pipeline that
+  built the delivery knows only those four names, so the label got lost in transit, not the
+  category. `herstel_lege_categorie()` puts it back, but only where the picture matches exactly
+  (the other classes are 0/1/2 and `3plus` occurs nowhere); anything else stops the build rather
+  than inventing a name. Worth asking RA to fix at source — then that function does nothing.
+- **`n_totaal_region_splitvar` and `n_totaal_population_in_region` are rounded to tens
+  independently**, so on a total row they can legitimately land a ten apart (240 of 109.320 rows
+  in `output_1b`). The build's check tolerates one rounding step and only warns beyond it.
+- **The derivation runs per (population, region level), not over the whole table.** Every group
+  key in `derive_support_splits.R` carries `population` and `region_level`, so the result is
+  identical — but `output_1b` is 11.4M rows against `output_1a`'s 2.7M, and in one pass
+  data.table's grouping ran out of hash table on a 16 GB machine. `support_per_regioniveau()`
+  is what makes the prep step runnable; a test pins chunked == unchunked.
 - **Not every risk factor runs to 2024.** `R_MPG1_armoede_hh` stops after 2023 and
   `R_MPG9_wanbet_zv_hh` after 2022 — those source registers simply aren't in the delivery's
   last years (Amsterdam-wide counts of 5.400 and 3.100 in their final year, far above any
@@ -282,8 +326,9 @@ from `app.R`. It also sources `data-prep/derive_support_splits.R` and loads `dat
 derivation runs in the prep step rather than in `utils/`, but the CBS rule it enforces (a
 suppressed cell is never summed as zero) is worth a test.
 
-The suite is **green**: measured **PASS 811 | FAIL 0 | SKIP 12** on a Linux box with `zip` on
-PATH and a UTF-8 locale. Treat any failure as real.
+The suite is **green**: measured **PASS 837 | FAIL 0 | SKIP 5** on Windows (R 4.5.2) with a
+`zip` shim on `R_ZIPCMD`; the five skips are the platform- and `zip`-gated ones. Treat any
+failure as real.
 
 Two environment traps, both of which produce failures that have nothing to do with the code:
 

@@ -53,7 +53,7 @@ ondersteuningsvariabelen, berekend uit `O_MPG_combination`/`O_OUD_combination` (
 
 Een afgeleide *celwaarde* verschijnt alleen als alle onderliggende combinaties gepubliceerd
 zijn — anders staat er "onvoldoende waarnemingen", nooit een te laag getal. De *omvang* van
-elke groep komt sinds levering `output_1b` rechtstreeks uit de kolom `n_totaal_region_split` en
+elke groep komt sinds levering `output_1b` rechtstreeks uit de kolom `n_totaal_region_splitvar` en
 is dus exact; die hangt niet van de risicowaarde af, dus één gepubliceerde rij van een
 combinatieniveau is genoeg. Dat is precies waar `Aantal vormen ondersteuning` op wijk- en
 buurtniveau eerder op stukliep (zie PLAN.md §7 en §9).

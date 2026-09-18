@@ -58,7 +58,7 @@ ds  <- open_dataset(file.path(DATA_DIR, "indicators.parquet"))
 geo <- readRDS(file.path(DATA_DIR, "geo.rds"))
 
 # Levering output_1b draagt de exacte groepsomvang mee (`n_split`, uit
-# n_totaal_region_split). Daarop staat de noemer van elk aandeel en de n-kolom
+# n_totaal_region_splitvar). Daarop staat de noemer van elk aandeel en de n-kolom
 # onder de venn. Een parquet van voor die levering heeft de kolom niet; dan valt
 # de app terug op de oude, uit de categorieen teruggerekende noemer en zegt hij
 # dat met zoveel woorden -- liever een dashboard dat blijft werken met een
@@ -116,6 +116,27 @@ vocab <- ds |>
 
 POPULATIONS  <- sort(unique(vocab$population))
 YEARS        <- sort(unique(vocab$year))
+
+# Welke stadsdelen de levering op elk regioniveau dekt. Niet elke levering gaat
+# even diep over de hele stad: `output_1b` levert buurt en wijk alleen voor
+# Oost (63 buurten, 15 wijken) en pas vanaf gebiedsniveau de hele stad. Op de
+# kaart is dat niet te onderscheiden van onderdrukking -- allebei een grijs
+# vlak -- en dat is precies het verschil dat dit project niet mag vervagen. Uit
+# de data halen en niet vastzetten: een volgende levering kan weer breder zijn.
+DEKKING <- ds |>
+  select(region_level, region_code) |>
+  distinct() |>
+  collect() |>
+  as.data.table()
+DEKKING <- merge(DEKKING,
+                 unique(rbindlist(lapply(names(geo), function(lvl) {
+                   d <- sf::st_drop_geometry(geo[[lvl]])
+                   data.table(region_level = lvl, region_code = d$region_code,
+                              stadsdeel = d$stadsdeel)
+                 }))),
+                 by = c("region_level", "region_code"))
+# Per niveau: welke stadsdelen erin zitten, en hoeveel er in de geometrie zijn.
+DEKKING_STADSDELEN <- DEKKING[, .(stadsdelen = list(sort(unique(stadsdeel)))), by = region_level]
 
 # De kaart kent geen gemeentevlak (dat is de buitenrand van alle stadsdelen
 # samen, en als choropleth van een regio zinloos); de tabbladen die een regio
@@ -185,8 +206,8 @@ VENN_GEEN_VAR <- "(alle)"
 # De losse risicofactoren van een populatie, zonder de cumulatieve score: de
 # kolommen van de risicofactor-tabel onder de venn.
 RISICO_FACTOREN <- list(
-  "huishoudens met kinderen" = setdiff(names(RISICO_LABELS_HHKIND), "R_MPG_totaal"),
-  "ouderen (65+)"            = setdiff(names(RISICO_LABELS_OUD), "R_OUD_totaal")
+  "huishoudens met kinderen" = setdiff(names(RISICO_LABELS_HHKIND), RISICO_TOTAAL_HHKIND),
+  "ouderen (65+)"            = setdiff(names(RISICO_LABELS_OUD),    RISICO_TOTAAL_OUD)
 )
 
 # variable_name -> omschrijving, voor alles wat in "Risicoscore" kan staan.
@@ -473,6 +494,7 @@ ui <- fluidPage(
             mainPanel(
               width = 9,
               div(textOutput("k_titel"), class = "chart-title"),
+              uiOutput("k_dekking_note"),
               uiOutput("k_waarschuwing"),
               leafletOutput("kaart", height = 680)
             )
@@ -488,7 +510,8 @@ ui <- fluidPage(
               width = 3,
               control_card(
                 selectInput("r_niveau", "Regioniveau", choices = REGIO_LEVELS, selected = "gemeente"),
-                selectizeInput("r_regio", "Regio", choices = NULL)
+                selectizeInput("r_regio", "Regio", choices = NULL),
+                uiOutput("r_dekking_note")
               ),
               control_card(
                 selectInput("r_var", "Indicator", choices = NULL),
@@ -582,20 +605,22 @@ server <- function(input, output, session) {
     vocab[population == input$populatie]
   })
 
-  # Within one population the indicator and metric vocabulary is fixed, so
-  # these only ever need refreshing when the population changes. "Waarde van
-  # de indicator" (k_val/r_val) and "Splits uit naar" (k_split/r_split) are
-  # handled separately below: both depend on which indicator is selected, not
-  # just on the population -- the individual risk factors are binary (0/1) but
-  # the totaalscore is a stapeling (0/1/2/3plus), and the derived
-  # ondersteunings-indicators carry only the splits the derivation could make,
-  # so a fixed population-wide list would offer combinations that have no rows
-  # at all.
+  # Alleen de indicatorlijst hangt aan de populatie alleen. "Waarde van de
+  # indicator" (k_val/r_val), "Metric" (k_metric/r_metric) en "Splits uit naar"
+  # (k_split/r_split) hangen aan de gekozen *indicator* en worden hieronder
+  # bijgewerkt: een lijst voor de hele populatie zou combinaties aanbieden die
+  # nergens rijen hebben. De losse risicofactoren zijn binair (0/1) maar de
+  # stapeling heeft klassen, de afgeleide ondersteuningsindicatoren dragen
+  # alleen de splitsingen die de afleiding kon maken, en -- sinds levering
+  # output_1b -- heeft niet elke indicator elke metric: `average_score` bestaat
+  # alleen bij R_MPG_totaal/R_OUD_totaal, en die dragen juist alleen dat
+  # gemiddelde. Zolang de metriclijst hier stond, opende het dashboard op de
+  # alfabetisch eerste indicator met de alfabetisch eerste metric -- en dat is
+  # sinds output_1b een lege kaart.
   observeEvent(input$populatie, {
     v <- pop_vocab()
 
-    vars    <- sort(unique(v$variable_name))
-    metrics <- sort(unique(v$metric_name))
+    vars <- sort(unique(v$variable_name))
 
     ids <- paste0(rep(c("k", "r"), each = 2), c("_var", "_metric"))
 
@@ -609,43 +634,46 @@ server <- function(input, output, session) {
     # input$k_var still holds the OLD population's variable for one flush after
     # the update is sent. Freezing halts the downstream reactives until the new
     # value lands, instead of querying the new population with the old
-    # population's indicator. k_val/r_val are frozen too even though they are
-    # not updated here: they depend on k_var/r_var (see below), which is
-    # itself mid-change, so any stale read of k_val this same flush must also
-    # be halted rather than paired with the wrong population's indicator.
+    # population's indicator. k_val/r_val, k_metric/r_metric and k_split/r_split
+    # are frozen too even though they are not updated here: they depend on
+    # k_var/r_var (see update_indicator_keuzes() below), which is itself
+    # mid-change, so any stale read of them this same flush must also be halted
+    # rather than paired with the wrong population's indicator.
     for (i in c(ids, "k_val", "r_val", "k_split", "r_split")) freezeReactiveValue(input, i)
 
     for (p in c("k", "r")) {
-      update_preserving(session, paste0(p, "_var"),    named(vars, pretty_var),
+      update_preserving(session, paste0(p, "_var"), named(vars, pretty_var),
                         current[[paste0(p, "_var")]])
-      update_preserving(session, paste0(p, "_metric"), named(metrics, pretty_metric),
-                        current[[paste0(p, "_metric")]])
     }
   }, ignoreInit = FALSE)
 
-  # "Waarde van de indicator": which values actually occur for the CURRENTLY
-  # selected risicoscore, not the population as a whole -- see the comment
-  # above. req(k_var %in% ...) guards the one flush where k_var can still be
-  # stale for a population that was just switched away from: skip rather
-  # than compute choices against the wrong population's indicator.
-  observeEvent(list(input$populatie, input$k_var), {
-    req(input$k_var)
-    req(input$k_var %in% pop_vocab()$variable_name)
-    vals <- sort(unique(pop_vocab()[variable_name == input$k_var]$variable_value))
-    cur <- isolate(input$k_val)
-    freezeReactiveValue(input, "k_val")
-    update_preserving(session, "k_val",
-                      setNames(vals, pretty_value(vals, input$k_var, input$populatie)), cur)
-  })
-  observeEvent(list(input$populatie, input$r_var), {
-    req(input$r_var)
-    req(input$r_var %in% pop_vocab()$variable_name)
-    vals <- sort(unique(pop_vocab()[variable_name == input$r_var]$variable_value))
-    cur <- isolate(input$r_val)
-    freezeReactiveValue(input, "r_val")
-    update_preserving(session, "r_val",
-                      setNames(vals, pretty_value(vals, input$r_var, input$populatie)), cur)
-  })
+  #' Werkt "Waarde van de indicator" en "Metric" bij voor een van de twee
+  #' tabbladen. Allebei hangen ze aan de gekozen indicator, dus ze horen in
+  #' dezelfde flush bijgewerkt te worden -- anders staat er een moment lang een
+  #' waarde van de ene indicator naast een metric van de andere.
+  update_indicator_keuzes <- function(p) {
+    var_id <- paste0(p, "_var"); val_id <- paste0(p, "_val"); met_id <- paste0(p, "_metric")
+    var_name <- input[[var_id]]
+    req(var_name)
+    # De ene flush waarin de indicator nog van de vorige populatie kan zijn:
+    # overslaan in plaats van keuzes bouwen tegen de verkeerde populatie.
+    req(var_name %in% pop_vocab()$variable_name)
+    rijen <- pop_vocab()[variable_name == var_name]
+    vals <- sort(unique(rijen$variable_value))
+    mets <- sort(unique(rijen$metric_name))
+    # Lezen voor het bevriezen: een bevroren input geeft bij het lezen een
+    # stille fout, en dan stopt deze observer voor hij iets verstuurd heeft.
+    cur_val <- isolate(input[[val_id]])
+    cur_met <- isolate(input[[met_id]])
+    freezeReactiveValue(input, val_id)
+    freezeReactiveValue(input, met_id)
+    update_preserving(session, val_id,
+                      setNames(vals, pretty_value(vals, var_name, input$populatie)), cur_val)
+    update_preserving(session, met_id, named(mets, pretty_metric), cur_met)
+  }
+
+  observeEvent(list(input$populatie, input$k_var), update_indicator_keuzes("k"))
+  observeEvent(list(input$populatie, input$r_var), update_indicator_keuzes("r"))
 
   # "Splits uit naar": welke splitsvariabelen rijen hebben bij de op dit moment
   # gekozen indicator. De risicoscores dragen ze allemaal; de afgeleide
@@ -840,7 +868,18 @@ server <- function(input, output, session) {
         # procentteken worden afgedrukt.
         NA_real_
       } else {
-        fifelse(!is.na(noemer) & noemer > 0, metric_value / noemer * 100, NA_real_)
+        # Afgekapt op 100%. Sinds output_1b komen teller en noemer uit twee
+        # afzonderlijk op tientallen afgeronde getallen -- de celwaarde uit de
+        # levering (of uit referentierij - none), de noemer uit de gepubliceerde
+        # groepsomvang. Vlak boven de onderdrukkingsgrens kan de teller daardoor
+        # een tiental boven de noemer uitkomen: 20 van een groep van 10 leest dan
+        # als 200%, terwijl de echte waarden bijvoorbeeld 15 van 14 zijn. Het
+        # gaat om 0,08% van de afgeleide rijen, altijd bij zulke kleine
+        # aantallen. Een deel van een groep kan nooit meer dan de hele groep
+        # zijn, dus 100% is hier het eerlijkste getal; het absolute aantal blijft
+        # ongewijzigd zichtbaar onder "Aantal".
+        fifelse(!is.na(noemer) & noemer > 0,
+                pmin(metric_value / noemer * 100, 100), NA_real_)
       }]
     # Een gemiddelde staat los van de gekozen weergave: het getal zelf is de
     # waarde. Dit vangt ook de slice waarin meerdere metrics door elkaar staan.
@@ -985,12 +1024,35 @@ server <- function(input, output, session) {
     if (HEEFT_N_SPLIT) return(NULL)
     div(class = "kaart-let-op",
         tags$b("Deze dataset is nog van voor levering output_1b."),
-        " De exacte groepsomvang (", tags$code("n_totaal_region_split"),
+        " De exacte groepsomvang (", tags$code("n_totaal_region_splitvar"),
         ") zit er nog niet in, dus elke noemer is teruggerekend uit de",
         " gepubliceerde categorie\u00ebn en kan te klein zijn waar een categorie",
         " onderdrukt is. Draai ", tags$code("data-prep/01_build_app_data.R"),
         " op de nieuwe levering en commit de parquet.")
   })
+
+  # Dekt dit regioniveau maar een deel van de stad, dan hoort dat boven de kaart
+  # te staan. Een niet-geleverde regio en een onderdrukte regio zien er allebei
+  # uit als een grijs vlak, en dat verschil is hier groot: "hier wonen te weinig
+  # mensen om te publiceren" tegen "dit gebied zit niet in deze levering".
+  dekking_note <- function(niveau) {
+    if (is.null(niveau) || !nzchar(niveau)) return(NULL)
+    rij <- DEKKING_STADSDELEN[region_level == niveau]
+    if (nrow(rij) == 0L) return(NULL)
+    heeft <- setdiff(rij$stadsdelen[[1]], NA_character_)
+    mist  <- setdiff(STADSDELEN, heeft)
+    if (length(mist) == 0L) return(NULL)
+    div(class = "kaart-let-op",
+        tags$b(sprintf("Deze levering bevat op %sniveau alleen %s.",
+                       niveau, paste(heeft, collapse = ", "))),
+        sprintf(" De overige stadsdelen (%s) zijn hier niet geleverd en blijven leeg.",
+                paste(mist, collapse = ", ")),
+        " Dat is iets anders dan onvoldoende waarnemingen — er is daar niets",
+        " onderdrukt, er is niets aangeleverd. Kies gebied, stadsdeel of Heel",
+        " Amsterdam voor een beeld van de hele stad.")
+  }
+  output$k_dekking_note <- renderUI(dekking_note(input$k_niveau))
+  output$r_dekking_note <- renderUI(dekking_note(input$r_niveau))
 
   output$k_waarschuwing <- renderUI({
     d <- kaart_data()
@@ -1161,7 +1223,10 @@ server <- function(input, output, session) {
     sp <- if (identical(r_split_key(), TOTAL_LABEL)) "" else
       sprintf(" | uitgesplitst naar %s", pretty_split(r_split_key()))
     sprintf("%s = %s | %s (%s) | %s%s",
-            pretty_var(input$r_var), input$r_val,
+            pretty_var(input$r_var),
+            # Hetzelfde label als in de keuzelijst en op de Kaart-tab: daar
+            # stond "Geen ondersteuning" waar deze titel nog "0" zei.
+            pretty_value(input$r_val, input$r_var, input$populatie),
             pretty_metric(input$r_metric), eenheid(r_weergave()),
             nm %||% input$r_regio, sp)
   })
@@ -1342,7 +1407,7 @@ server <- function(input, output, session) {
   })
 
   # De omvang van een deelgebied: sinds levering output_1b staat die als
-  # gepubliceerd getal in de data (`n_split`, uit n_totaal_region_split), dus
+  # gepubliceerd getal in de data (`n_split`, uit n_totaal_region_splitvar), dus
   # hoeft hij niet meer uit de noemer van een cel te komen. Dat verschil is
   # zichtbaar: de noemer telde alleen de gepubliceerde categorieen mee, terwijl
   # n_split de hele groep telt -- ook de huishoudens zonder enkele risicofactor

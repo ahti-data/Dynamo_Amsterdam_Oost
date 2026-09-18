@@ -45,8 +45,12 @@ levering <- function(...) {
   vast <- data.table::data.table(
     region_code = "0363AA", region_agg_level = "wc", year = 2024L,
     variable_name = "R_MPG_totaal", variable_value = "1",
-    n_totaal_population_in_region = 1000, n_totaal_region_split = 1000,
-    metric_name = "n_households", metric_value = 100)
+    n_totaal_population_in_region = 1000, n_totaal_region_splitvar = 1000,
+    metric_name = "n_households", metric_value = 100,
+    # De levering draagt zelf een population-kolom, met op elke rij dezelfde
+    # waarde. Geen uitsplitsing dus -- en de prep-stap overschrijft hem met het
+    # label dat de app gebruikt (hier met een spatie in plaats van een _).
+    population = "huishoudens_met_kinderen")
   data.table::rbindlist(lapply(rijen, function(r) {
     d <- data.table::copy(vast)
     for (nm in names(r)) data.table::set(d, j = nm, value = r[[nm]])
@@ -93,9 +97,13 @@ test_that("de sleutel is die welke de app bouwt, ongeacht de kolomvolgorde", {
 test_that("de kolommen krijgen de namen die de app verwacht", {
   uit <- PREP$reshape_delivery(levering(rij()), "huishoudens met kinderen")
   expect_true(all(c("n_totaal", "n_split", "population", "region_level") %in% names(uit)))
-  expect_false("n_totaal_region_split" %in% names(uit))
+  expect_false("n_totaal_region_splitvar" %in% names(uit))
   expect_equal(uit$region_level, "wijk")     # wc -> wijk
   expect_equal(uit$n_split, 1000)
+  # De population-kolom uit de levering is geen uitsplitsing geworden, en draagt
+  # het label van de app in plaats van de schrijfwijze van het bestand.
+  expect_equal(uit$population, "huishoudens met kinderen")
+  expect_false(any(grepl("population", uit$split_var, fixed = TRUE)))
 })
 
 test_that("een lege cel telt als 'niet uitgesplitst'", {
@@ -106,9 +114,9 @@ test_that("een lege cel telt als 'niet uitgesplitst'", {
 
 test_that("een ontbrekende verplichte kolom stopt de bouw", {
   d <- levering(rij())
-  d[, n_totaal_region_split := NULL]
+  d[, n_totaal_region_splitvar := NULL]
   expect_error(PREP$reshape_delivery(d, "huishoudens met kinderen"),
-               "n_totaal_region_split", fixed = TRUE)
+               "n_totaal_region_splitvar", fixed = TRUE)
 })
 
 test_that("een kolom zonder 'all' is geen uitsplitsing en stopt de bouw", {

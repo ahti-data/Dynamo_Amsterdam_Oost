@@ -31,7 +31,7 @@
 #'
 #' ## Wat er met levering output_1b veranderde
 #'
-#' De levering draagt nu `n_totaal_region_split` (hier `n_split`): het aantal
+#' De levering draagt nu `n_totaal_region_splitvar` (hier `n_split`): het aantal
 #' huishoudens/ouderen in die regio x uitsplitsing. Daarmee is de *omvang* van
 #' elk combinatieniveau een gepubliceerd getal in plaats van iets wat
 #' teruggerekend moest worden uit de som over de risicocategorieen. Die
@@ -216,14 +216,18 @@ support_group_sizes <- function(combo) {
   }
   gs <- combo[!is.na(n_split), .(n = n_split[1], spreiding = diff(range(n_split))),
               by = c(SUPPORT_SIZE_KEY, "combo_level")]
-  # n_split hoort binnen deze sleutel constant te zijn. Is hij dat niet, dan
-  # betekent de kolom iets anders dan de afleiding aanneemt -- hardop zeggen,
-  # want alles hieronder rekent erop.
-  if (any(gs$spreiding > 0)) {
+  # n_split hoort binnen deze sleutel constant te zijn -- op afronding na. Elk
+  # aantal in de levering is los op tientallen afgerond, dus dezelfde groep kan
+  # er op de ene rij als 49.950 en op de andere als 49.960 in staan; in
+  # output_1b gebeurt dat in 2 van de 7.744 groepen, steeds precies een tiental.
+  # Loopt het verder uiteen, dan telt de kolom iets anders dan de afleiding
+  # aanneemt, en dat hoort hardop gezegd te worden -- alles hieronder rekent erop.
+  if (any(gs$spreiding > SUPPORT_ROUND_TOL)) {
     warning(sprintf(paste("n_split varieert binnen regio x jaar x uitsplitsing x",
-                          "combinatieniveau (%d groepen). De afleiding neemt de",
-                          "eerste waarde; controleer de levering."),
-                    sum(gs$spreiding > 0)))
+                          "combinatieniveau met meer dan een afrondingsstap (%d",
+                          "groepen). De afleiding neemt de eerste waarde;",
+                          "controleer de levering."),
+                    sum(gs$spreiding > SUPPORT_ROUND_TOL)))
   }
   gs[, spreiding := NULL]
   gs[]
@@ -441,6 +445,13 @@ derive_support_split_rows <- function(dt) {
 #' completeness-toets, geen mediaan over bronnen -- alleen de gepubliceerde
 #' getallen. Dit is de route die het dashboard standaard laat zien.
 #'
+#' Let op het verschil tussen de twee afgeleide vormen. Bij de *splits*vorm is de
+#' categorie de groep zelf, dus daar is de groepsomvang ook de noemer. Bij de
+#' *indicator*vorm staat de categorie in `variable_value` en is de noemer juist
+#' de hele populatie binnen de rest van de uitsplitsing -- anders leest elk
+#' aandeel als 100%. Vandaar dat `n_split` hier de referentie-omvang krijgt en
+#' niet de categorie-omvang.
+#'
 #' **Terugrekenen (de overige metrics).** De `n_kinderen_*`-metrics tellen
 #' kinderen, niet huishoudens, dus `n_split` is er de verkeerde eenheid voor en
 #' het niveautotaal moet nog steeds uit de som over de risicocategorieen komen.
@@ -505,6 +516,14 @@ support_indicator_exact <- function(dt, combo, ref) {
   ind <- merge(cat_n, mets, by = "population", allow.cartesian = TRUE)
   ind <- merge(ind, regio, by = c("population", "region_level", "region_code", "year"))
 
+  # De omvang van de *slice* waar deze rij in staat -- niet die van de categorie.
+  # Een indicatorrij draagt de ondersteuning in variable_value, dus de groep
+  # waarbinnen hij gelezen wordt is de hele populatie binnen de rest van de
+  # uitsplitsing: dat is precies wat `n_ref` telt. Zetten we hier de
+  # categorie-omvang neer (die is gelijk aan metric_value), dan wordt dat verderop
+  # de noemer en leest elk aandeel als 100%.
+  ind <- merge(ind, support_ref_sizes(ref), by = SUPPORT_SIZE_KEY, all.x = TRUE)
+
   # Welke van de drie afgeleide indicatoren hoort bij welke categorie.
   ind[, variable_name := fifelse(
     categorie %in% c("geen", "wel"), unname(SUPPORT_INDICATOR_SIGNAL[population]),
@@ -522,7 +541,7 @@ support_indicator_exact <- function(dt, combo, ref) {
 
   ind[, `:=`(variable_value = categorie,
              metric_value   = n,
-             n_split        = n,
+             n_split        = n_ref,
              split_var      = rest_var,
              split_level    = rest_level)]
   ind[, c(SUPPORT_IND_GROUP_COLS, "variable_name", "variable_value",
@@ -616,6 +635,44 @@ support_indicator_reconstructed <- function(dt, combo, ref) {
           "split_var", "split_level"), with = FALSE]
 }
 
+#' Leidt per (populatie, regioniveau) af in plaats van over de hele tabel ineens.
+#'
+#' Elke groepssleutel in dit bestand draagt `population` en `region_level`
+#' (SUPPORT_GROUP_COLS, SUPPORT_SIZE_KEY, SUPPORT_IND_GROUP_COLS), en een
+#' afgeleide rij put alleen uit rijen van diezelfde regio. Per stuk afleiden
+#' geeft dus exact hetzelfde resultaat -- maar de piek in geheugen is die van
+#' het grootste regioniveau in plaats van die van de hele levering.
+#'
+#' Dat is geen optimalisatie achteraf: `output_1b` is met ruim 11 miljoen rijen
+#' een veelvoud van `output_1a`, en ongesplitst liep de groepering van
+#' data.table hier vast op een hashtabel die niet meer paste (16 GB werkgeheugen,
+#' regioniveau `gebied` van OT_HHKIND alleen al 4,1 miljoen rijen).
+#'
+#' @param dt data.table in het lange schema.
+#' @param fn De afleiding, een functie van een data.table naar een data.table.
+support_per_regioniveau <- function(dt, fn) {
+  stukken <- unique(dt[, .(population, region_level)])
+  if (nrow(stukken) == 0L) return(fn(dt))
+  uit <- vector("list", nrow(stukken))
+  for (i in seq_len(nrow(stukken))) {
+    deel <- dt[population == stukken$population[i] & region_level == stukken$region_level[i]]
+    # Per stuk melden wat eraan komt en wat het opleverde. Deze stap duurt op de
+    # hele levering tientallen minuten; zonder deze regels is er geen enkel
+    # verschil te zien tussen "nog bezig" en "vastgelopen".
+    t0 <- Sys.time()
+    message(sprintf("  [%d/%d] %s, %s: %s rijen ...", i, nrow(stukken),
+                    stukken$population[i], stukken$region_level[i],
+                    format(nrow(deel), big.mark = ".", decimal.mark = ",")))
+    uit[[i]] <- fn(deel)
+    message(sprintf("        -> %s afgeleide rijen in %.0f s",
+                    format(nrow(uit[[i]]), big.mark = ".", decimal.mark = ","),
+                    as.numeric(difftime(Sys.time(), t0, units = "secs"))))
+    rm(deel)
+    invisible(gc(verbose = FALSE))
+  }
+  rbindlist(uit, use.names = TRUE)
+}
+
 #' Voegt beide afgeleide vormen toe aan de lange tabel.
 #'
 #' Draait voor de noemerberekening in 01_build_app_data.R: `denominator` wordt
@@ -629,7 +686,7 @@ support_indicator_reconstructed <- function(dt, combo, ref) {
 add_support_derivations <- function(dt) {
   stopifnot(is.data.table(dt))
   if (!"n_split" %in% names(dt)) {
-    stop("Kolom n_split ontbreekt. Die komt uit n_totaal_region_split in levering ",
+    stop("Kolom n_split ontbreekt. Die komt uit n_totaal_region_splitvar in levering ",
          "output_1b; bouw de parquet opnieuw met data-prep/01_build_app_data.R.")
   }
 
@@ -654,8 +711,8 @@ add_support_derivations <- function(dt) {
     return(dt[])
   }
 
-  split_rows <- derive_support_split_rows(dt)
-  ind_rows   <- derive_support_indicator_rows(dt)
+  split_rows <- support_per_regioniveau(dt, derive_support_split_rows)
+  ind_rows   <- support_per_regioniveau(dt, derive_support_indicator_rows)
 
   out <- rbind(dt, split_rows, ind_rows, use.names = TRUE, fill = TRUE)
   out[is.na(afgeleid), afgeleid := TRUE]

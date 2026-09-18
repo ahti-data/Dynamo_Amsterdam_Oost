@@ -60,7 +60,7 @@ CBS-output ontbreken (die bevat alleen codes).
 > **Deze paragraaf beschrijft levering `output_1a` (09-09-2026).** De getallen hieronder zijn
 > op die levering gemeten. `output_1b` heeft dezelfde opzet, maar drie dingen zijn anders en
 > die raken de aannames hier: er zijn meer splitvariabelen, een rij mag naar **meer dan één
-> variabele tegelijk** uitgesplitst zijn, en er is een kolom `n_totaal_region_split` plus een
+> variabele tegelijk** uitgesplitst zijn, en er is een kolom `n_totaal_region_splitvar` plus een
 > metric `average_score` bij gekomen. Zie **§9**. Wat daar botst met een aanname hieronder is
 > per punt aangetekend.
 
@@ -102,7 +102,7 @@ Geverifieerd: 0 van de 3.945 regio-jaarcombinaties heeft meer dan één waarde. 
 stabiele noemer.
 
 **(c) De categorieën tellen alleen op tot `n_totaal` bij `metric_name = n_households`.**
-*Sinds `output_1b` hoeft dat niet meer teruggerekend te worden: `n_totaal_region_split` geeft
+*Sinds `output_1b` hoeft dat niet meer teruggerekend te worden: `n_totaal_region_splitvar` geeft
 de omvang van elke regio × uitsplitsing rechtstreeks. Het verschil tussen teller- en
 noemer-eenheid blijft wel bestaan, zie §9.*
 Voor die metric is `sum(variable_value ∈ {0,1,2,3plus}) ≈ n_totaal` (ratio ≈ 1,0 bij 33.940
@@ -586,7 +586,12 @@ concludeert iedereen dat er niets gebeurd is.
 
 De tweede RA-levering heeft dezelfde opzet als `output_1a` — zelfde lange schema, zelfde
 regioniveaus, zelfde uitvoerregels — maar drie dingen zijn anders, en die drie raken elk een
-aanname uit §2.
+aanname uit §2. Onderdeel (d) hieronder is wat er bij het eerste draaien op de echte levering
+uitkwam: vier dingen die alleen met het bestand ernaast te zien waren.
+
+**Gemeten op de levering zelf (18-09-2026):** `OT_HHKIND.csv` 10.733.781 rijen × 14 kolommen
+(1.184 MB), `OT_OUD.csv` 721.821 × 13 (82 MB) — samen ruim vier keer `output_1a`. Beide zijn nu
+csv; `OT_OUD` was vorige keer xlsx.
 
 ### (a) Een rij mag naar meer dan één variabele tegelijk uitgesplitst zijn
 
@@ -618,7 +623,7 @@ leest de kop van het bestand en behandelt elke kolom die niet in `DELIVERY_FIXED
 als splitvariabele (en valt hard om als zo'n kolom nergens `all` bevat — dat is dan geen
 uitsplitsing maar een nieuwe vaste kolom).
 
-### (b) `n_totaal_region_split`: de groepsomvang staat er nu in
+### (b) `n_totaal_region_splitvar`: de groepsomvang staat er nu in
 
 De kolom geeft het aantal huishoudens/ouderen in die regio × uitsplitsing, en heet in de
 parquet `n_split` (net zoals `n_totaal_population_in_region` er `n_totaal` heet). Daarmee
@@ -666,6 +671,68 @@ maakt dat expliciet, en het dashboard doet er drie dingen mee:
 
 Een volgend gemiddelde (`average_*`, `mean_*`, `gemiddelde_*`) wordt aan zijn naam herkend, zodat
 het niet stilzwijgend als telling behandeld wordt.
+
+### (d) Wat er pas bij het draaien op de echte levering bleek
+
+Vier dingen die niet uit de opzet van de levering volgden maar uit het bestand zelf. Alle vier
+zijn ze in de prep-stap ondervangen; ze staan hier omdat de eerste twee de bouw hard stopten en
+de laatste twee iets over de levering zeggen dat RA kan willen weten.
+
+- **De kolom heet `n_totaal_region_splitvar`**, niet `n_totaal_region_split`. Verder niets aan
+  de hand — in de parquet blijft hij `n_split`.
+- **`population` is een vaste kolom in de levering**, met op elke rij dezelfde waarde
+  (`huishoudens_met_kinderen` / `ouderen (65+)`). Onder de regel van (a) — alles buiten
+  `DELIVERY_FIXED_COLS` is een splitvariabele — werd hij als uitsplitsing gelezen, en omdat hij
+  nergens `all` is stopte de bouw daarop. Hij hoort in `DELIVERY_FIXED_COLS`; de prep-stap
+  overschrijft hem met het label dat de app gebruikt.
+- **De cumulatieve risicoscore is hernoemd.** Tot `output_1a` droeg `R_MPG_totaal` /
+  `R_OUD_totaal` de klassen `0/1/2/3plus`. Nu draagt die naam alleen nog het gemiddelde
+  (`average_score`, met `variable_value = "nvt"`), staan de klassen onder
+  `R_MPG_totaal_cat` / `R_OUD_totaal_cat`, en is `R_MPG_all` / `R_OUD_all` erbij gekomen: de
+  hele populatie in één categorie (`variable_value = "1"`). Alle drie hebben een label nodig, en
+  alle drie horen buiten de risicofactor-tabel onder de venn — `R_MPG_all` zou daar een kolom van
+  100% worden. Daar is `RISICO_TOTAAL_*` in `variable_labels.R` voor.
+- **De klasse `3plus` komt in `OT_HHKIND` zonder naam binnen.** 439.176 rijen met een lege
+  `variable_value`; de aantallen zijn er wel, en de vier klassen tellen exact op tot de
+  populatie (Amsterdam 2024: 38.000 + 25.990 + 14.290 + 9.240 = 87.520 = `n_totaal`). In
+  `OT_OUD` staat `3plus` er gewoon, en de RA-pipeline die de levering maakt kent alleen die vier
+  namen (`scripts/R/02_enrich_and_score.R`), dus het label is onderweg kwijtgeraakt — de
+  categorie niet. `herstel_lege_categorie()` zet hem terug, maar alleen waar het beeld exact
+  klopt (de overige klassen zijn `0/1/2` en `3plus` komt nergens voor); in elk ander geval stopt
+  de bouw in plaats van een naam te verzinnen. **Dit is het waard om bij RA te melden**: wordt
+  het label aan de bron hersteld, dan doet die functie vanzelf niets meer.
+
+- **De levering gaat onder gebiedsniveau alleen over Oost.** 63 buurten en 15 wijken, allemaal
+  in stadsdeel Oost; gebied, stadsdeel en gemeente dekken nog wel de hele stad. `output_1a` had
+  op die twee niveaus 451 buurten en 109 wijken over de hele stad, dus een dekkingsvergelijking
+  met de vorige levering laat daar een scherpe daling zien -- dat is de scope van de levering,
+  niet de afleiding. Voor de weergave is het wel van belang: een niet-geleverde regio en een
+  onderdrukte regio zijn allebei een grijs vlak, en juist dat verschil mag hier niet vervagen.
+  Het dashboard zegt daarom per regioniveau welke stadsdelen erin zitten (`dekking_note()`,
+  gevoed door `DEKKING_STADSDELEN`, uit de data en niet vastgezet).
+- **Niet elke indicator heeft elke metric.** `average_score` bestaat alleen bij
+  `R_MPG_totaal`/`R_OUD_totaal`, en die dragen verder niets. De keuzelijst "Metric" hing aan de
+  populatie en niet aan de indicator, en omdat `average_score` alfabetisch voor `n_households`
+  komt opende het dashboard op een combinatie zonder rijen -- een lege kaart. De lijst volgt nu
+  de gekozen indicator (`update_indicator_keuzes()`), net als "Waarde van de indicator".
+- **Een aandeel kan boven de 100% uitkomen.** Teller en noemer komen nu uit twee los afgeronde
+  bronnen: de gepubliceerde celwaarde (of referentierij - none) tegen de gepubliceerde
+  groepsomvang. Zolang de noemer de categoriesom uit dezelfde slice was, kon dat niet. Het raakt
+  4.945 van de 6,4 miljoen afgeleide rijen (0,08%), altijd vlak boven de onderdrukkingsgrens --
+  20 van een groep van 10, waar de echte waarden bijvoorbeeld 15 van 14 zijn. `add_display()`
+  kapt het getoonde aandeel af op 100%; het absolute aantal blijft ongemoeid.
+
+Verder twee dingen die geen fout zijn maar wel opvielen:
+
+- **`n_split` en `n_totaal` zijn los van elkaar op tientallen afgerond**, dus op een totaalrij
+  kunnen ze legitiem een tiental uiteenlopen (240 van 109.320 totaalrijen; steeds precies 10).
+  De controle in de prep-stap laat één afrondingsstap toe en waarschuwt pas daarboven.
+- **De afleiding paste niet in het geheugen.** In één keer over de hele tabel liep de
+  groepering van data.table vast op een hashtabel die niet meer paste (16 GB werkgeheugen; het
+  regioniveau `gebied` van `OT_HHKIND` is alleen al 4,1 miljoen rijen). `derive_support_splits.R`
+  leidt daarom af per (populatie, regioniveau): elke groepssleutel in dat bestand draagt
+  `population` en `region_level`, dus het antwoord is hetzelfde en alleen de piek verschilt. Een
+  test legt dat vast (`support_per_regioniveau()` == in één keer).
 
 ### Wat er na de levering nog moet gebeuren
 

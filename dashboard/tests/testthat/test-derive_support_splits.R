@@ -16,7 +16,7 @@ ALLE_NIVEAUS <- c("none", CODES,
 # plus de 8 combinatieniveaus. `niveaus` laat weg wat onderdrukt is.
 #
 # `groottes` is de gepubliceerde omvang van elk combinatieniveau
-# (n_totaal_region_split): die hangt niet van de risicowaarde af, dus in een
+# (n_totaal_region_splitvar): die hangt niet van de risicowaarde af, dus in een
 # fixture met twee risicowaarden is hij het dubbele van de celwaarden.
 maak_slice <- function(waarden, totaal, variable_value = "1",
                        variable_name = "R_MPG_totaal",
@@ -206,6 +206,28 @@ test_that("de indicatorvorm komt uit de gepubliceerde groepsgroottes", {
   expect_equal(sum(aantal$metric_value), 2000)
 })
 
+test_that("de noemer van een indicatorrij is de hele populatie, niet de categorie", {
+  # Het verschil met de splitsvorm. Daar *is* de categorie de groep, dus is de
+  # groepsomvang ook de noemer. Hier staat de categorie in variable_value en
+  # hoort de noemer de hele populatie te zijn -- zet je er de categorie-omvang
+  # neer, dan is n_split gelijk aan metric_value en leest elk aandeel als 100%.
+  out <- add_support_derivations(maak_twee())
+
+  ind <- out[variable_name == "O_MPG_ondersteuning"]
+  expect_equal(unique(ind$n_split), 2000)            # de hele populatie
+  expect_false(any(ind$n_split == ind$metric_value))
+
+  aantal <- out[variable_name == "O_MPG_aantal_vormen"]
+  expect_equal(unique(aantal$n_split), 2000)
+
+  # En de splitsvorm houdt de omvang van de groep zelf: 800, de "wel"-groep over
+  # beide risicowaarden heen. De celwaarde is daar 400 per risicowaarde, dus ook
+  # hier is de noemer niet de teller.
+  sp <- out[split_var == SUPPORT_SPLIT_SIGNAL & split_level == "wel"]
+  expect_equal(unique(sp$n_split), 800)
+  expect_equal(sort(sp$metric_value), c(400, 400))
+})
+
 test_that("een enkele gepubliceerde risicowaarde is genoeg voor de indicator", {
   # Dit is de winst van output_1b. De oude route had een complete reeks
   # risicocategorieen nodig om een niveautotaal te kunnen optellen; n_split hangt
@@ -355,4 +377,40 @@ test_that("ouderen gebruiken hun eigen combinatie- en indicatornamen", {
   expect_equal(niveau(out, SUPPORT_SPLIT_SIGNAL, "wel"), 400)
   expect_true("O_OUD_ondersteuning" %in% out$variable_name)
   expect_false("O_MPG_ondersteuning" %in% out$variable_name)
+})
+
+# ------------------------------------------------------- stuksgewijs afleiden --
+
+# add_support_derivations() leidt per (populatie, regioniveau) af in plaats van
+# over de hele tabel ineens, omdat de hele levering niet in het geheugen past.
+# Dat mag het antwoord niet veranderen: elke groepssleutel draagt population en
+# region_level, dus geen enkele afgeleide rij put uit twee stukken tegelijk.
+# Deze test is wat die belofte bewaakt.
+maak_twee_niveaus <- function() {
+  wijk <- maak_twee()
+  gebied <- copy(wijk)
+  gebied[, `:=`(region_level = "gebied", region_code = "GA01", region_name = "Testgebied")]
+  # Andere aantallen, zodat een verwisseling tussen de twee niveaus opvalt.
+  gebied[, `:=`(metric_value = metric_value * 3, n_split = n_split * 3,
+                n_totaal = n_totaal * 3)]
+  rbind(wijk, gebied)
+}
+
+sorteer <- function(d) {
+  setorderv(copy(d), names(d))[]
+}
+
+test_that("stuksgewijs afleiden geeft hetzelfde als in een keer", {
+  dt <- maak_twee_niveaus()
+  expect_equal(sorteer(support_per_regioniveau(dt, derive_support_split_rows)),
+               sorteer(derive_support_split_rows(dt)))
+  expect_equal(sorteer(support_per_regioniveau(dt, derive_support_indicator_rows)),
+               sorteer(derive_support_indicator_rows(dt)))
+})
+
+test_that("elk regioniveau houdt zijn eigen cijfers", {
+  out <- add_support_derivations(maak_twee_niveaus())
+  wel <- out[split_var == SUPPORT_SPLIT_SIGNAL & split_level == "wel"]
+  expect_equal(unique(wel[region_level == "wijk"]$metric_value), 400)
+  expect_equal(unique(wel[region_level == "gebied"]$metric_value), 1200)
 })

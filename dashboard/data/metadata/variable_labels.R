@@ -12,6 +12,17 @@
 #' oudere. `R_MPG_totaal`/`R_OUD_totaal` zijn de cumulatieve score (hoeveel
 #' van de losse risico's tegelijk spelen).
 #'
+#' Levering `output_1b` splitst die cumulatieve score in tweeen, en dat is het
+#' enige dat aan deze namen veranderde:
+#'   - `R_MPG_totaal`/`R_OUD_totaal` draagt alleen nog het *gemiddelde* aantal
+#'     risicofactoren (metric `average_score`, variable_value "nvt");
+#'   - `R_MPG_totaal_cat`/`R_OUD_totaal_cat` draagt de klassen 0/1/2/3plus --
+#'     wat tot `output_1a` onder `R_MPG_totaal`/`R_OUD_totaal` zelf stond;
+#'   - `R_MPG_all`/`R_OUD_all` is de hele populatie in een enkele categorie
+#'     (variable_value 1), zonder risicovoorwaarde.
+#' Die drie zijn geen losse risicofactoren; RISICO_TOTAAL_* hieronder houdt ze
+#' uit de risicofactor-tabel onder de venn.
+#'
 #' De O_MPG*/O_OUD*-ondersteuningsgroepen zijn elk een OF over 2-3
 #' onderliggende ondersteuningsvormen (zie de pipeline,
 #' `output_src/.../R/02_enrich_and_score.R`, `scoring_cols` -- elke groep is
@@ -23,6 +34,8 @@
 #' variable_name -> omschrijving, voor huishoudens met kinderen (OT_HHKIND).
 RISICO_LABELS_HHKIND <- c(
   R_MPG_totaal                    = "Totale risicostapeling (aantal risicofactoren R1–R9)",
+  R_MPG_totaal_cat                = "Totale risicostapeling in klassen (0, 1, 2, 3 of meer risicofactoren R1–R9)",
+  R_MPG_all                       = "Alle huishoudens met kinderen (geen risicovoorwaarde)",
   R_MPG1_armoede_hh                = "Armoede (huishoudinkomen < 130% sociaal minimum)",
   R_MPG2_laagopl_hh                = "Laag opleidingsniveau (ouder(s) zonder startkwalificatie)",
   R_MPG3_nieuwenederlander_hh      = "Nieuwe Nederlander (< 5 jaar in Nederland)",
@@ -37,12 +50,22 @@ RISICO_LABELS_HHKIND <- c(
 #' variable_name -> omschrijving, voor ouderen (OT_OUD).
 RISICO_LABELS_OUD <- c(
   R_OUD_totaal                = "Totale risicostapeling (aantal risicofactoren R1–R5)",
+  R_OUD_totaal_cat            = "Totale risicostapeling in klassen (0, 1, 2, 3 of meer risicofactoren R1–R5)",
+  R_OUD_all                   = "Alle ouderen (65+) (geen risicovoorwaarde)",
   R_OUD1_armoede               = "Armoede (inkomen < 130% sociaal minimum)",
   R_OUD2_migratieachtergrond   = "Migratieachtergrond",
   R_OUD3_hhwijziging           = "Verweduwd/gescheiden (wijziging burgerlijke staat, afgelopen 3 jaar)",
   R_OUD4_alleenwonend          = "Alleenwonend",
   R_OUD5_geenkind              = "Geen levende/nabije kinderen"
 )
+
+#' De samenvattende R_-variabelen: de cumulatieve score (gemiddelde en klassen)
+#' en de populatie zelf. Ze horen wel in de keuzelijst "Risicoscore" -- je wilt
+#' de stapeling op de kaart kunnen zetten -- maar niet in de risicofactor-tabel
+#' onder de venn: die zet per deelgebied af welk aandeel *een losse* factor
+#' heeft, en `R_MPG_all` zou daar een kolom van 100% worden.
+RISICO_TOTAAL_HHKIND <- c("R_MPG_totaal", "R_MPG_totaal_cat", "R_MPG_all")
+RISICO_TOTAAL_OUD    <- c("R_OUD_totaal", "R_OUD_totaal_cat", "R_OUD_all")
 
 #' O_MPG1/2/3 -> korte naam. Voor compacte weergave: dropdown-opties,
 #' lijngrafiek-legenda, labels op de venn-cirkels.
