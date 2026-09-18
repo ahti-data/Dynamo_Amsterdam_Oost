@@ -114,6 +114,11 @@ vocab <- ds |>
   collect() |>
   as.data.table()
 
+# De keuzelijsten zetten "alle"/"elk niveau apart" als schildwacht naast de
+# echte niveaus. Draagt een levering diezelfde tekst ooit als waarde, dan zou
+# het dashboard stil de verkeerde rijen tonen; dan liever hier niet opstarten.
+split_check_keuzes(vocab$split_level)
+
 POPULATIONS  <- sort(unique(vocab$population))
 YEARS        <- sort(unique(vocab$year))
 
@@ -337,25 +342,17 @@ pretty_level_1 <- function(x, split_var = NULL, population = NULL) {
   x
 }
 
-named_levels <- function(values, split_var = NULL, population = NULL) {
-  setNames(values, pretty_level(values, split_var, population))
-}
-
 named <- function(values, labeller) setNames(values, labeller(values))
 
 # Keeps the user's current pick when it is still a valid choice, so changing an
 # unrelated selector does not silently reset the rest of the form.
-update_preserving <- function(session, id, choices, current, allow_empty = FALSE) {
+update_preserving <- function(session, id, choices, current) {
   # `current` kan meerdere waarden hebben (de kaartselectors staan op
   # multiple = TRUE): alles wat nog bestaat blijft staan, en als er niets van
   # overblijft valt hij terug op de eerste keuze in plaats van op leeg.
-  #
-  # `allow_empty` is voor de splitsselectors: daar *is* leeg een geldige keuze
-  # ("niet uitsplitsen"), en terugvallen op de eerste variabele zou de gebruiker
-  # ongevraagd een uitsplitsing opdringen.
   blijft <- current[!is.na(current) & current %in% choices]
   sel <- if (length(blijft)) blijft
-         else if (allow_empty || length(choices) == 0L) character(0)
+         else if (length(choices) == 0L) character(0)
          else choices[1]
   updateSelectInput(session, id, choices = choices, selected = sel)
 }
@@ -448,16 +445,14 @@ ui <- fluidPage(
                 selectInput("k_metric", "Metric", choices = NULL)
               ),
               control_card(
-                selectInput("k_split", "Splits uit naar", choices = NULL,
-                            multiple = TRUE),
-                div(class = "note", style = "margin: -6px 0 10px;",
-                    "Leeg = niet uitsplitsen. Meerdere tegelijk kan, zolang de",
-                    " levering die kruising publiceert."),
-                conditionalPanel(
-                  "input.k_split && input.k_split.length > 0",
-                  selectInput("k_level", "Toon welk niveau", choices = NULL,
-                              multiple = TRUE)
-                ),
+                tags$label(class = "control-label", "Splits uit naar"),
+                div(class = "note", style = "margin: 2px 0 10px;",
+                    "Elke uitsplitsing staat op \u201calle\u201d: dan telt hij niet mee",
+                    " in de selectie. Kies een niveau om er wel op te filteren.",
+                    " Meerdere niveaus van dezelfde uitsplitsing worden bij elkaar",
+                    " opgeteld; twee uitsplitsingen tegelijk geeft de gekruiste",
+                    " groep, zolang de levering die kruising publiceert."),
+                uiOutput("k_split_ui"),
                 uiOutput("k_split_note")
               ),
               control_card(
@@ -495,6 +490,7 @@ ui <- fluidPage(
               width = 9,
               div(textOutput("k_titel"), class = "chart-title"),
               uiOutput("k_dekking_note"),
+              uiOutput("k_som_waarschuwing"),
               uiOutput("k_waarschuwing"),
               leafletOutput("kaart", height = 680)
             )
@@ -520,11 +516,14 @@ ui <- fluidPage(
                 selectInput("r_metric", "Metric", choices = NULL)
               ),
               control_card(
-                selectInput("r_split", "Splits de lijn uit naar", choices = NULL,
-                            multiple = TRUE),
-                div(class = "note", style = "margin: -6px 0 0;",
-                    "Leeg = een lijn voor het geheel. Meerdere tegelijk geeft een",
-                    " lijn per kruising."),
+                tags$label(class = "control-label", "Splits de lijn uit naar"),
+                div(class = "note", style = "margin: 2px 0 10px;",
+                    "\u201cAlle\u201d laat de uitsplitsing weg. \u201cElk niveau apart\u201d",
+                    " geeft een lijn per niveau; kies je in plaats daarvan \u00e9\u00e9n",
+                    " niveau, dan gaat de hele figuur over die groep. Twee",
+                    " uitsplitsingen op \u201celk niveau apart\u201d geeft een lijn per",
+                    " kruising."),
+                uiOutput("r_split_ui"),
                 uiOutput("r_split_note")
               ),
               control_card(
@@ -638,8 +637,11 @@ server <- function(input, output, session) {
     # are frozen too even though they are not updated here: they depend on
     # k_var/r_var (see update_indicator_keuzes() below), which is itself
     # mid-change, so any stale read of them this same flush must also be halted
-    # rather than paired with the wrong population's indicator.
-    for (i in c(ids, "k_val", "r_val", "k_split", "r_split")) freezeReactiveValue(input, i)
+    # rather than paired with the wrong population's indicator. De
+    # splitsselectors staan er niet bij: die bestaan per variabele en worden
+    # door renderUI opnieuw opgebouwd, en split_selectie() negeert een waarde
+    # die bij deze populatie niet bestaat (zie daar).
+    for (i in c(ids, "k_val", "r_val")) freezeReactiveValue(input, i)
 
     for (p in c("k", "r")) {
       update_preserving(session, paste0(p, "_var"), named(vars, pretty_var),
@@ -676,58 +678,148 @@ server <- function(input, output, session) {
   observeEvent(list(input$populatie, input$r_var), update_indicator_keuzes("r"))
 
   # "Splits uit naar": welke splitsvariabelen rijen hebben bij de op dit moment
-  # gekozen indicator. De risicoscores dragen ze allemaal; de afgeleide
-  # ondersteuningsindicatoren dragen alleen wat de afleiding kon maken, want de
-  # ondersteuning zit daar al in hun variable_value. Een keuzelijst voor de hele
-  # populatie zou combinaties aanbieden die nergens rijen hebben, en dat leest
-  # als een bug in plaats van als een onmogelijke combinatie.
+  # gekozen indicator, en per variabele welke niveaus. De risicoscores dragen ze
+  # allemaal; de afgeleide ondersteuningsindicatoren dragen alleen wat de
+  # afleiding kon maken, want de ondersteuning zit daar al in hun
+  # variable_value. Een keuzelijst voor de hele populatie zou combinaties
+  # aanbieden die nergens rijen hebben, en dat leest als een bug in plaats van
+  # als een onmogelijke combinatie.
   #
-  # Sinds levering output_1b kan een rij naar meer dan een variabele tegelijk
-  # zijn uitgesplitst, dus dit is een meervoudige keuze: de gekozen verzameling
-  # wordt via split_key() een sleutel, en leeg betekent "niet uitsplitsen".
+  # Elke variabele krijgt haar eigen keuzelijst, met "alle" bovenaan. Dat is
+  # wat de levering ook doet -- een rij die niet naar deze variabele is
+  # uitgesplitst is gewoon een rij -- terwijl het in de oude gezamenlijke
+  # meerkeuzelijst alleen te bereiken was door de variabele weg te klikken.
   splits_keuzes <- function(var_name) {
-    split_vars_available(pop_vocab()[variable_name == var_name]$split_var)
+    v <- pop_vocab()[variable_name == var_name]
+    paren <- unique(v[, .(split_var, split_level)])
+    vars <- split_vars_available(paren$split_var)
+    setNames(lapply(vars, function(x)
+      split_levels_available(x, paren$split_var, paren$split_level)), vars)
   }
-  observeEvent(list(input$populatie, input$k_var), {
-    req(input$k_var)
-    req(input$k_var %in% pop_vocab()$variable_name)
-    cur <- isolate(input$k_split)
-    # k_level hangt aan k_split en moet dus mee bevriezen, net als hierboven.
-    for (i in c("k_split", "k_level")) freezeReactiveValue(input, i)
-    update_preserving(session, "k_split", named(splits_keuzes(input$k_var), pretty_split_1),
-                      cur, allow_empty = TRUE)
-  })
-  observeEvent(list(input$populatie, input$r_var), {
-    req(input$r_var)
-    req(input$r_var %in% pop_vocab()$variable_name)
-    cur <- isolate(input$r_split)
-    freezeReactiveValue(input, "r_split")
-    update_preserving(session, "r_split", named(splits_keuzes(input$r_var), pretty_split_1),
-                      cur, allow_empty = TRUE)
-  })
 
-  # De sleutel van de gekozen verzameling: "(totaal)" als er niets gekozen is,
+  # De naam van de variabele zit in de input-id, zodat de keuze bewaard blijft
+  # als renderUI de lijsten opnieuw opbouwt. Niet-alfanumerieke tekens eruit:
+  # een input-id moet een geldige naam zijn. De variabelenamen van de levering
+  # zijn dat al, dit is de vangnetregel voor een volgende levering.
+  split_input_id <- function(p, var) paste0(p, "_split_", gsub("[^A-Za-z0-9_]", "_", var))
+
+  # Dynamische inputs krijgen hun observer maar een keer. renderUI bouwt de
+  # lijst opnieuw op bij elke indicatorwissel, en een observeEvent() per render
+  # zou stapelen -- dan draait dezelfde correctie net zo vaak als er ooit
+  # gerenderd is.
+  split_geregistreerd <- new.env(parent = emptyenv())
+  registreer_alle_observer <- function(id) {
+    if (exists(id, envir = split_geregistreerd, inherits = FALSE)) return(invisible(FALSE))
+    assign(id, TRUE, envir = split_geregistreerd)
+    observeEvent(input[[id]], {
+      sel <- input[[id]]
+      if (length(sel) <= 1L || !SPLIT_ALLE %in% sel) return()
+      # "Alle" en een los niveau sluiten elkaar uit. Wat er het laatst bij
+      # kwam wint: klik je een niveau aan, dan valt "alle" weg; klik je "alle"
+      # aan, dan vallen de niveaus weg. selectize levert de waarden in
+      # aanklikvolgorde, dus het laatste element is de nieuwste keuze.
+      nieuw <- if (identical(sel[[length(sel)]], SPLIT_ALLE)) SPLIT_ALLE
+               else setdiff(sel, SPLIT_ALLE)
+      updateSelectInput(session, id, selected = nieuw)
+    }, ignoreInit = TRUE)
+    invisible(TRUE)
+  }
+
+  #' Een keuzelijst per splitsvariabele voor een van de twee tabbladen.
+  #'
+  #' @param p "k" of "r".
+  #' @param elk Biedt "elk niveau apart" aan (Per regio: dat tekent een lijn per
+  #'   niveau). Op de kaart bestaat die keuze niet -- een choropleth toont een
+  #'   getal per regio, dus daar worden meerdere niveaus opgeteld.
+  split_ui <- function(p, elk) {
+    var_name <- input[[paste0(p, "_var")]]
+    req(var_name)
+    req(var_name %in% pop_vocab()$variable_name)
+    keuzes <- splits_keuzes(var_name)
+    if (length(keuzes) == 0L) {
+      return(div(class = "note", "Deze indicator heeft geen uitsplitsingen."))
+    }
+    lapply(names(keuzes), function(v) {
+      id <- split_input_id(p, v)
+      lv <- keuzes[[v]]
+      ch <- c(setNames(SPLIT_ALLE, "(alle)"),
+              if (elk) setNames(SPLIT_ELK, "(elk niveau apart)"),
+              setNames(lv, pretty_level(lv, v, input$populatie)))
+      # De staande keuze overleeft een herbouw, zolang hij hier nog bestaat --
+      # een andere indicator of populatie kan dezelfde variabele met andere
+      # niveaus dragen.
+      cur <- isolate(input[[id]])
+      sel <- cur[!is.na(cur) & cur %in% ch]
+      if (!length(sel)) sel <- SPLIT_ALLE
+      # Alleen de meerkeuzelijst kan "alle" naast een niveau krijgen.
+      if (!elk) registreer_alle_observer(id)
+      selectInput(id, pretty_split_1(v), choices = ch, selected = sel,
+                  multiple = !elk)
+    })
+  }
+  output$k_split_ui <- renderUI(split_ui("k", elk = FALSE))
+  output$r_split_ui <- renderUI(split_ui("r", elk = TRUE))
+
+  #' Wat er op dit moment gekozen staat, uitgesplitst naar wat het betekent:
+  #'
+  #'   vars       de variabelen die meedoen (samen de sleutel)
+  #'   keuze      per variabele de gekozen niveaus -- alleen voor de variabelen
+  #'              die op een vast niveau staan; een variabele die hier ontbreekt
+  #'              telt in split_levels_matching() als "elk niveau"
+  #'   reeks_vars de variabelen op "elk niveau apart": die bepalen de reeksen
+  #'   key        de sleutel zoals de levering hem wegschrijft
+  #'
+  #' Een waarde die bij deze populatie/indicator niet bestaat wordt genegeerd en
+  #' leest dus als "alle". Dat is de ene flush waarin de keuzelijsten nog van de
+  #' vorige indicator zijn: liever de uitsplitsing even weglaten dan de
+  #' verkeerde rijen selecteren.
+  split_selectie <- function(p) {
+    var_name <- input[[paste0(p, "_var")]]
+    req(var_name)
+    req(var_name %in% pop_vocab()$variable_name)
+    keuzes <- splits_keuzes(var_name)
+    vars <- character(0)
+    keuze <- list()
+    for (v in names(keuzes)) {
+      sel <- input[[split_input_id(p, v)]]
+      sel <- sel[!is.na(sel) & sel %in% c(SPLIT_ALLE, SPLIT_ELK, keuzes[[v]])]
+      if (!length(sel) || SPLIT_ALLE %in% sel) next
+      vars <- c(vars, v)
+      if (!SPLIT_ELK %in% sel) keuze[[v]] <- sel
+    }
+    list(vars = vars, keuze = keuze, reeks_vars = setdiff(vars, names(keuze)),
+         key = split_key(vars))
+  }
+
+  k_split_sel <- reactive(split_selectie("k"))
+  r_split_sel <- reactive(split_selectie("r"))
+
+  # De sleutel van de gekozen verzameling: "(totaal)" als alles op "alle" staat,
   # en anders de namen alfabetisch aan elkaar -- precies zoals de prep-stap ze
   # in split_var heeft weggeschreven.
-  k_split_key <- reactive(split_key(input$k_split))
-  r_split_key <- reactive(split_key(input$r_split))
+  k_split_key <- reactive(k_split_sel()$key)
+  r_split_key <- reactive(r_split_sel()$key)
 
   # Bestaat deze kruising in de levering? Niet elke combinatie wordt
   # gepubliceerd, en een lege grafiek moet als "niet geleverd" leesbaar zijn.
   k_split_bestaat <- reactive(split_key_bestaat(k_split_key(), pop_vocab()$split_var))
   r_split_bestaat <- reactive(split_key_bestaat(r_split_key(), pop_vocab()$split_var))
 
-  # Levels of the chosen split (map tab only -- the line chart draws every level
-  # at once). Bij een samengestelde uitsplitsing zijn dat de gepubliceerde
-  # kruisingen zelf, niet het product van de losse niveaus.
-  observeEvent(list(input$populatie, input$k_split), {
-    sleutel <- k_split_key()
-    if (identical(sleutel, TOTAL_LABEL)) return()
-    cur <- isolate(input$k_level)  # read before freezing (see above)
-    lv <- sort(unique(pop_vocab()[split_var == sleutel]$split_level))
-    freezeReactiveValue(input, "k_level")
-    update_preserving(session, "k_level", named_levels(lv, sleutel, input$populatie), cur)
-  })
+  # Welke gepubliceerde split_level-waarden bij de keuze horen. Bewust de
+  # geleverde niveaus filteren en niet het product van de losse keuzes: de
+  # levering publiceert lang niet elke kruising (zie split_levels_matching()).
+  # Een lege selectie mag geen lege vector de filter in: `%in% character(0)`
+  # is bij arrow niet gegarandeerd dezelfde "niets" als bij een data.frame.
+  # Een waarde die in geen enkele levering voorkomt is dat wel.
+  niets_als_leeg <- function(x) if (length(x)) x else SPLIT_GEEN
+
+  split_niveaus <- function(sel) {
+    if (identical(sel$key, TOTAL_LABEL)) return(TOTAL_LABEL)
+    split_levels_matching(sel$key, pop_vocab()[split_var == sel$key]$split_level,
+                          sel$keuze)
+  }
+  k_split_levels <- reactive(split_niveaus(k_split_sel()))
+  r_split_levels <- reactive(split_niveaus(r_split_sel()))
 
   # Vaste toelichting onder "Risicoscore". De R_-scores delen er een; de twee
   # afgeleide ondersteuningsindicatoren zijn geen risico-indicator en hebben
@@ -799,11 +891,11 @@ server <- function(input, output, session) {
   }
   output$k_split_note <- renderUI({
     req(input$populatie)
-    split_note(input$k_split, k_split_bestaat())
+    split_note(k_split_sel()$vars, k_split_bestaat())
   })
   output$r_split_note <- renderUI({
     req(input$populatie)
-    split_note(input$r_split, r_split_bestaat())
+    split_note(r_split_sel()$vars, r_split_bestaat())
   })
 
   # Region picker follows the region level.
@@ -910,7 +1002,11 @@ server <- function(input, output, session) {
         input$k_var, input$k_val, input$k_metric)
 
     sleutel <- k_split_key()
-    lvl <- if (identical(sleutel, TOTAL_LABEL)) TOTAL_LABEL else req(input$k_level)
+    # Levert deze kruising geen enkel passend niveau op, dan blijft de selectie
+    # leeg en tekent de kaart "geen data" -- met de reden eronder in
+    # k_split_note(). Niet req(): dan zou de kaart de vorige selectie blijven
+    # tonen alsof er niets aan de hand is.
+    lvl <- niets_als_leeg(k_split_levels())
 
     ds |>
       filter(population   == !!input$populatie,
@@ -929,9 +1025,7 @@ server <- function(input, output, session) {
   # voor, dan zou de optelling stilzwijgend te laag uitvallen, en valt de regio
   # af -- zie map_aggregate().
   kaart_n_cellen <- reactive({
-    lvl <- if (identical(k_split_key(), TOTAL_LABEL)) TOTAL_LABEL
-           else (input$k_level %||% character(0))
-    length(lvl) * length(input$k_val %||% character(0))
+    length(k_split_levels()) * length(input$k_val %||% character(0))
   })
 
   # Het totaal van de regio voor deze metric: de noemer van de totaalrijen, dus
@@ -1001,8 +1095,7 @@ server <- function(input, output, session) {
     sleutel <- k_split_key()
     sp <- if (identical(sleutel, TOTAL_LABEL)) "" else
       sprintf(" | %s: %s", pretty_split(sleutel),
-              som_label(pretty_level(input$k_level %||% character(0),
-                                     sleutel, input$populatie)))
+              som_label(pretty_level(k_split_levels(), sleutel, input$populatie)))
     sprintf("%s = %s | %s (%s) | %s %s%s",
             pretty_var(input$k_var),
             som_label(pretty_value(input$k_val, input$k_var, input$populatie)),
@@ -1051,6 +1144,22 @@ server <- function(input, output, session) {
         " onderdrukt, er is niets aangeleverd. Kies gebied, stadsdeel of Heel",
         " Amsterdam voor een beeld van de hele stad.")
   }
+  # Meerdere niveaus van dezelfde uitsplitsing mogen (dat is hoe "O1, O2 en
+  # O1+O2 samen" te bekijken is), maar dan staat er een optelsom op de kaart en
+  # niet een groep. Met een keuzelijst per variabele is dat makkelijker per
+  # ongeluk te doen dan met de oude gezamenlijke niveaulijst, dus het hoort er
+  # hardop bij -- boven de kaart, want de titel leest niemand als controle.
+  output$k_som_waarschuwing <- renderUI({
+    req(input$populatie, input$k_var)
+    lvl <- k_split_levels()
+    if (identical(k_split_key(), TOTAL_LABEL) || length(lvl) <= 1L) return(NULL)
+    div(class = "kaart-let-op",
+        tags$b(sprintf("Let op: %d groepen worden bij elkaar opgeteld.", length(lvl))),
+        sprintf(" De kaart toont de som van %s, niet elke groep apart.",
+                som_label(pretty_level(lvl, k_split_key(), input$populatie))),
+        " Kies \u00e9\u00e9n niveau per uitsplitsing voor een enkele groep.")
+  })
+
   output$k_dekking_note <- renderUI(dekking_note(input$k_niveau))
   output$r_dekking_note <- renderUI(dekking_note(input$r_niveau))
 
@@ -1206,7 +1315,11 @@ server <- function(input, output, session) {
              variable_name == !!input$r_var,
              variable_value== !!input$r_val,
              metric_name   == !!input$r_metric,
-             split_var     == !!r_split_key()) |>
+             split_var     == !!r_split_key(),
+             # Staat een uitsplitsing op een vast niveau, dan gaat de hele
+             # figuur over die groep; op "elk niveau apart" zijn dit gewoon
+             # alle geleverde niveaus.
+             split_level %in% !!niets_als_leeg(r_split_levels())) |>
       collect() |>
       as.data.table()
 
@@ -1220,8 +1333,19 @@ server <- function(input, output, session) {
     req(input$r_var, input$r_metric, input$r_regio)
     nm <- names(region_choices[[input$r_niveau]])[
       match(input$r_regio, region_choices[[input$r_niveau]])]
-    sp <- if (identical(r_split_key(), TOTAL_LABEL)) "" else
-      sprintf(" | uitgesplitst naar %s", pretty_split(r_split_key()))
+    # De reeksvariabelen ("elk niveau apart") en de vastgezette variabelen
+    # lezen verschillend: het eerste zegt waar de lijnen vandaan komen, het
+    # tweede waar de hele figuur over gaat.
+    sel <- r_split_sel()
+    sp <- paste(c(
+      if (length(sel$reeks_vars))
+        sprintf("uitgesplitst naar %s", pretty_split(split_key(sel$reeks_vars))),
+      vapply(names(sel$keuze), function(v)
+        sprintf("%s: %s", pretty_split_1(v),
+                paste(pretty_level(sel$keuze[[v]], v, input$populatie),
+                      collapse = ", ")),
+        character(1))), collapse = " | ")
+    sp <- if (nzchar(sp)) paste0(" | ", sp) else ""
     sprintf("%s = %s | %s (%s) | %s%s",
             pretty_var(input$r_var),
             # Hetzelfde label als in de keuzelijst en op de Kaart-tab: daar
@@ -1260,8 +1384,12 @@ server <- function(input, output, session) {
   regio_plot_data <- reactive({
     d <- copy(regio_data())  # copy: `:=` would otherwise mutate regio_data()'s cached value
     lv  <- unique(d$split_level)  # regio_data() is already ordered by split_level, year
-    lab <- unname(pretty_level(lv, r_split_key(), input$populatie))
-    d[, reeks := factor(lab[match(split_level, lv)], levels = lab)]
+    # Alleen de variabelen op "elk niveau apart" horen in het legendalabel: een
+    # variabele die op een vast niveau staat geldt voor de hele figuur en staat
+    # al in de titel, dus die waarde in elke reeksnaam herhalen zegt niets.
+    deel <- split_subset(r_split_key(), lv, r_split_sel()$reeks_vars)
+    lab <- unname(pretty_level(deel$levels, deel$key, input$populatie))
+    d[, reeks := factor(lab[match(split_level, lv)], levels = unique(lab))]
     d[]
   })
 
@@ -1705,7 +1833,7 @@ server <- function(input, output, session) {
     nav_id = "hoofdtab",
     subtab_by_tab = c("Iteratie 1" = "subtab"),
     dl_option_prefixes = c(
-      "r_downloads" = "^(populatie|r_niveau|r_regio|r_var|r_val|r_metric|r_split|r_weergave)$"
+      "r_downloads" = "^(populatie|r_niveau|r_regio|r_var|r_val|r_metric|r_split_[A-Za-z0-9_]+|r_weergave)$"
     )
   )
 

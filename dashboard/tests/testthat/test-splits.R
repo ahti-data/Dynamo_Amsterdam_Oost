@@ -71,3 +71,48 @@ test_that("een waarde met het scheidingsteken erin wordt tegengehouden", {
   expect_true(split_check_sep(c("man", "vrouw")))
   expect_true(split_check_sep(character(0)))
 })
+
+# Sinds "splits uit naar" een keuzelijst per variabele is, moet de app uit de
+# samengestelde sleutels ook de losse niveaus per variabele kunnen halen, en
+# moet "alle" voor een variabele hetzelfde betekenen als hem weglaten.
+
+test_that("split_levels_available haalt de niveaus uit de gekruiste sleutels", {
+  keys <- c(SPLIT_TOTAL_LABEL, "geslacht", "geslacht | herkomst7")
+  lev  <- c(SPLIT_TOTAL_LABEL, "man",      "vrouw | NL")
+  expect_equal(split_levels_available("geslacht", keys, lev), c("man", "vrouw"))
+  expect_equal(split_levels_available("herkomst7", keys, lev), "NL")
+  expect_equal(split_levels_available("leeftijd", keys, lev), character(0))
+})
+
+test_that("split_levels_matching filtert de geleverde kruisingen, niet het product", {
+  lev <- c("man | NL", "vrouw | NL", "man | TU")
+  # Een keuze per variabele: alleen de gepubliceerde kruisingen die erbij passen.
+  expect_equal(split_levels_matching("geslacht | herkomst7", lev, list(geslacht = "man")),
+               c("man | NL", "man | TU"))
+  # Een variabele die niet in de keuze staat telt als "elk niveau apart".
+  expect_equal(split_levels_matching("geslacht | herkomst7", lev, list()), sort(lev, method = "radix"))
+  # Een combinatie die niet geleverd is levert niets op -- en dus geen rijen,
+  # in plaats van stilzwijgend iets anders.
+  expect_equal(split_levels_matching("geslacht | herkomst7", lev,
+                                     list(geslacht = "vrouw", herkomst7 = "TU")),
+               character(0))
+})
+
+test_that("split_levels_matching geeft bij een lege sleutel de totaalrij", {
+  expect_equal(split_levels_matching(SPLIT_TOTAL_LABEL, SPLIT_TOTAL_LABEL), SPLIT_TOTAL_LABEL)
+})
+
+test_that("split_subset houdt alleen de variabelen over die de reeksen bepalen", {
+  uit <- split_subset("geslacht | herkomst7", c("man | NL", "vrouw | NL"), "herkomst7")
+  expect_equal(uit$key, "herkomst7")
+  expect_equal(uit$levels, c("NL", "NL"))
+  # Staat alles op een vaste waarde, dan is er een reeks en geen reeks per niveau.
+  leeg <- split_subset("geslacht", "man", character(0))
+  expect_equal(leeg$key, SPLIT_TOTAL_LABEL)
+  expect_equal(leeg$levels, SPLIT_TOTAL_LABEL)
+})
+
+test_that("de schildwachtwaarden mogen geen echt niveau zijn", {
+  expect_true(split_check_keuzes(c("man", "vrouw", SPLIT_TOTAL_LABEL)))
+  expect_error(split_check_keuzes(c("man", SPLIT_ALLE)), "schildwachtwaarde")
+})

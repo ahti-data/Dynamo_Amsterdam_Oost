@@ -115,3 +115,122 @@ split_check_sep <- function(x, wat = "waarde") {
   }
   invisible(TRUE)
 }
+
+# ---------------------------------------------------------------------------
+# Een keuzelijst per splitsvariabele
+# ---------------------------------------------------------------------------
+#
+# De app bood eerst een enkele meervoudige keuzelijst "splits uit naar" met de
+# variabelen erin, en daarnaast een tweede lijst met de niveaus van de gekozen
+# verzameling. Daarmee was "naar deze variabele niet uitsplitsen" alleen te
+# bereiken door de variabele uit de eerste lijst weg te klikken -- terwijl de
+# levering daar gewoon een waarde voor heeft. Sinds deze versie krijgt elke
+# variabele een eigen lijst met haar eigen niveaus, en staat dat "alle"
+# gewoon als keuze bovenaan.
+#
+# Drie schildwachtwaarden staan naast de echte niveaus: twee keuzes die geen
+# niveau zijn, en een lege selectie. Ze mogen nooit samenvallen met een echte
+# waarde uit de levering; split_check_keuzes() hieronder bewaakt dat bij het
+# opstarten.
+SPLIT_ALLE <- "__alle__"   # niet naar deze variabele uitsplitsen
+SPLIT_ELK  <- "__elk__"    # wel uitsplitsen, en elk niveau apart tonen
+
+# Staat in een filter waar de selectie leeg is: een niveau dat gegarandeerd
+# niet bestaat, zodat "niets gekozen" ook echt nul rijen oplevert.
+SPLIT_GEEN <- "__geen__"
+
+#' Welke niveaus een enkele splitsvariabele heeft.
+#'
+#' Kijkt door de samengestelde sleutels heen: staat `var` op positie i van een
+#' sleutel, dan hoort daar het i-de onderdeel van het bijbehorende niveau bij.
+#' Zo levert ook een variabele die alleen gekruist gepubliceerd is haar eigen
+#' niveaus op.
+#'
+#' @param var Naam van de splitsvariabele.
+#' @param keys,levels Even lange vectors met `split_var`/`split_level`-paren.
+#' @return De niveaus, radix-gesorteerd (zie split_key() voor het waarom).
+split_levels_available <- function(var, keys, levels) {
+  uit <- character(0)
+  for (i in seq_along(keys)) {
+    p <- split_parts(keys[[i]])
+    j <- match(var, p)
+    if (is.na(j)) next
+    d <- split_parts(levels[[i]])
+    if (length(d) >= j) uit <- c(uit, d[[j]])
+  }
+  sort(unique(uit), method = "radix")
+}
+
+#' De gepubliceerde niveaus van een sleutel die binnen de keuze per variabele
+#' vallen.
+#'
+#' Bewust niet het product van de losse keuzes: de levering publiceert lang niet
+#' elke kruising, en een niet-bestaande combinatie in de filter zou een lege
+#' grafiek geven waar "deze kruising bestaat niet" bedoeld is. Daarom worden de
+#' *gepubliceerde* niveaus van deze sleutel gefilterd.
+#'
+#' @param key De sleutel (uit split_key()).
+#' @param levels De gepubliceerde `split_level`-waarden bij die sleutel.
+#' @param keuze Named list: per variabelenaam de gekozen niveaus, of `NULL`
+#'   voor "elk niveau" (een variabele die niet in de lijst staat telt ook als
+#'   elk niveau).
+#' @return De passende niveaus, radix-gesorteerd. Bij een lege sleutel de
+#'   totaalwaarde zelf.
+split_levels_matching <- function(key, levels, keuze = list()) {
+  vars <- split_parts(key)
+  if (length(vars) == 0L) return(SPLIT_TOTAL_LABEL)
+  lv <- unique(levels[!is.na(levels)])
+  if (length(lv) == 0L) return(character(0))
+  houd <- vapply(lv, function(l) {
+    d <- split_parts(l)
+    if (length(d) != length(vars)) return(FALSE)
+    all(vapply(seq_along(vars), function(i) {
+      sel <- keuze[[vars[[i]]]]
+      is.null(sel) || d[[i]] %in% sel
+    }, logical(1)))
+  }, logical(1), USE.NAMES = FALSE)
+  sort(lv[houd], method = "radix")
+}
+
+#' Knipt sleutel en niveaus terug tot alleen de opgegeven variabelen.
+#'
+#' Waar een variabele op een vaste waarde staat, hoeft die waarde niet in elk
+#' reekslabel terug te komen -- hij geldt voor de hele figuur en staat in de
+#' titel. De onderdelen blijven in hun oorspronkelijke (gesorteerde) volgorde
+#' staan, dus het resultaat is weer een geldige sleutel met geldige niveaus en
+#' kan zo door de bestaande opmaakfuncties heen.
+#'
+#' @param key De volledige sleutel.
+#' @param levels De volledige niveaus.
+#' @param vars De variabelen die overblijven.
+#' @return list(key=, levels=). Blijft er niets over, dan de totaalwaarde --
+#'   dan is er immers een reeks, niet een reeks per niveau.
+split_subset <- function(key, levels, vars) {
+  delen <- split_parts(key)
+  idx <- which(delen %in% vars)
+  if (length(idx) == 0L) {
+    return(list(key = SPLIT_TOTAL_LABEL,
+                levels = rep(SPLIT_TOTAL_LABEL, length(levels))))
+  }
+  list(
+    key = paste(delen[idx], collapse = SPLIT_SEP),
+    levels = vapply(levels, function(l) {
+      d <- split_parts(l)
+      if (length(d) < max(idx)) return(NA_character_)
+      paste(d[idx], collapse = SPLIT_SEP)
+    }, character(1), USE.NAMES = FALSE))
+}
+
+#' Controleert dat de schildwachtwaarden geen echte niveaus zijn.
+#'
+#' Zou een levering ooit een `split_level` met de waarde `__alle__` dragen, dan
+#' zou "alle" als gewone waarde gelezen worden en zou het dashboard stil de
+#' verkeerde rijen tonen. Liever bij het opstarten hard stoppen.
+split_check_keuzes <- function(levels) {
+  fout <- intersect(unique(levels), c(SPLIT_ALLE, SPLIT_ELK, SPLIT_GEEN))
+  if (length(fout)) {
+    stop(sprintf("split_level bevat een schildwachtwaarde (%s). Kies een andere SPLIT_ALLE/SPLIT_ELK.",
+                 paste(fout, collapse = ", ")))
+  }
+  invisible(TRUE)
+}
