@@ -178,9 +178,9 @@ map_klem <- function(waarde, domein) {
 #' nooit een nul aan de onderkant van de schaal.
 #'
 #' Regio's waar een van de gevraagde groepen onderdrukt was (`compleet =
-#' FALSE`) krijgen een gestippelde donkere rand: hun getal is een ondergrens, en
-#' zonder dat merkteken zou de figuur dat verschil niet dragen -- de tooltip van
-#' de kaart bestaat hier immers niet.
+#' FALSE`) krijgen een gestippelde donkere rand: hun getal is niet op dezelfde
+#' cellen gebaseerd als de rest, en zonder dat merkteken zou de figuur dat
+#' verschil niet dragen -- de tooltip van de kaart bestaat hier immers niet.
 #'
 #' @param laag sf-object met ten minste `waarde` en `region_name`.
 #' @param domein Lengte-2 kleurbereik, of NULL als er niets te schalen valt.
@@ -229,12 +229,20 @@ choropleth_ggplot <- function(laag, domein, weergave = "rel",
   laag$compleet[is.na(laag$compleet)] <- TRUE
   onvolledig <- sum(!laag$compleet)
 
+  # Zelfde nuance als de waarschuwing boven de kaart in app.R: bij een aantal
+  # mist er alleen teller en is het getal een ondergrens, bij een aandeel valt
+  # met de onderdrukte cel ook die groep uit de noemer en kan het percentage
+  # juist te hoog uitvallen.
   onderschrift <- c(
     bron,
     "Grijs = onvoldoende waarnemingen (CBS-onderdrukking), niet nul.",
     if (onvolledig > 0) sprintf(
-      paste("Gestippelde rand (%d regio's): een van de opgetelde groepen is daar onderdrukt,",
-            "dus het getal is een ondergrens."), onvolledig))
+      if (map_is_aandeel(weergave))
+        paste("Gestippelde rand (%d regio's): een van de opgetelde groepen is daar onderdrukt.",
+              "Daar mist ook een deel van de noemer, dus het percentage kan te hoog uitvallen.")
+      else
+        paste("Gestippelde rand (%d regio's): een van de opgetelde groepen is daar onderdrukt,",
+              "dus het getal is een ondergrens."), onvolledig))
 
   ggplot2::ggplot(laag) +
     ggplot2::geom_sf(ggplot2::aes(fill = waarde, colour = compleet, linetype = compleet),

@@ -944,17 +944,25 @@ server <- function(input, output, session) {
 
   add_display <- function(d, weergave) {
     if (nrow(d) == 0) {
-      d[, waarde := numeric()]
+      d[, `:=`(waarde = numeric(), noemer = numeric())]
       return(d[])
     }
     # Welke noemer bij welke weergave hoort staat in map_noemer() -- daar staat
     # ook waarom het regiototaal niet n_totaal is. `regio_totaal` zit alleen op
     # de kaartselectie; de andere tabbladen kennen alleen "binnen de groep".
-    noemer <- map_noemer(weergave, d$denominator,
-                         if ("regio_totaal" %in% names(d)) d$regio_totaal else NULL)
+    nmr <- map_noemer(weergave, d$denominator,
+                      if ("regio_totaal" %in% names(d)) d$regio_totaal else NULL)
+    # De noemer waar het getoonde getal echt door gedeeld is, als kolom naast
+    # de waarde. De tooltip van de kaart zei "n = x van y" met y = n_totaal --
+    # het aantal huishoudens/ouderen in de hele regio -- ook bij "aandeel
+    # binnen groep", waar er door de groepsomvang gedeeld wordt. Die twee
+    # spraken elkaar dan tegen: 40 van 2.020 naast 5,3% op de kaart. Nu draagt
+    # elke rij de noemer die er werkelijk gebruikt is, en lezen tooltip, export
+    # en kaart hetzelfde getal.
+    d[, noemer := if (is.null(nmr)) NA_real_ else as.numeric(nmr)]
     d[, waarde := if (!map_is_aandeel(weergave)) {
         as.numeric(metric_value)
-      } else if (is.null(noemer)) {
+      } else if (is.null(nmr)) {
         # Een aandeel zonder noemer is geen aandeel. Liever leeg -- dat leest
         # als "onvoldoende waarnemingen" -- dan aantallen die met een
         # procentteken worden afgedrukt.
@@ -970,13 +978,13 @@ server <- function(input, output, session) {
         # aantallen. Een deel van een groep kan nooit meer dan de hele groep
         # zijn, dus 100% is hier het eerlijkste getal; het absolute aantal blijft
         # ongewijzigd zichtbaar onder "Aantal".
-        fifelse(!is.na(noemer) & noemer > 0,
-                pmin(metric_value / noemer * 100, 100), NA_real_)
+        fifelse(!is.na(nmr) & nmr > 0,
+                pmin(metric_value / nmr * 100, 100), NA_real_)
       }]
     # Een gemiddelde staat los van de gekozen weergave: het getal zelf is de
     # waarde. Dit vangt ook de slice waarin meerdere metrics door elkaar staan.
     gem <- metric_is_gemiddelde(d$metric_name)
-    if (any(gem)) d[gem, waarde := as.numeric(metric_value)]
+    if (any(gem)) d[gem, `:=`(waarde = as.numeric(metric_value), noemer = NA_real_)]
     d[]
   }
 
@@ -1180,12 +1188,27 @@ server <- function(input, output, session) {
     if (!"compleet" %in% names(d)) return(NULL)
     n <- sum(!d$compleet)
     if (n == 0) return(NULL)
+    # Bij een aantal is een onvolledige optelling een ondergrens: er mist alleen
+    # teller. Bij een aandeel klopt dat woord niet -- daar valt met de
+    # onderdrukte cel ook de hele noemer van die groep weg, en die is veel
+    # groter dan de onderdrukte cel zelf. Het percentage valt dan juist te hoog
+    # uit (20 van 180 in plaats van 20 van 460), en "ondergrens" zou de lezer
+    # precies de verkeerde kant op sturen.
+    aandeel <- map_is_aandeel(k_weergave())
     div(class = "kaart-let-op",
-        tags$b(sprintf("Let op: %d van de %d regio's tonen een ondergrens.", n, nrow(d))),
-        " Daar is een van de gekozen groepen onderdrukt (minder dan tien), dus telt",
-        " het cijfer alleen op wat wel gepubliceerd is. Die regio's hebben een",
-        " gestippelde rand; hover erover voor de bevestiging. In de xlsx staat het",
-        " als kolom ", tags$code("alle_groepen_aanwezig"), ".")
+        tags$b(sprintf("Let op: in %d van de %d regio's is een gekozen groep onderdrukt.",
+                       n, nrow(d))),
+        if (aandeel)
+          paste(" Daar telt niet alleen de teller maar ook de noemer alleen op wat",
+                " gepubliceerd is (minder dan tien blijft weg), en omdat er met een",
+                " onderdrukte cel een hele groep uit de noemer valt, kan het",
+                " percentage daar te hoog uitvallen.")
+        else
+          paste(" Daar telt het cijfer alleen op wat wel gepubliceerd is (minder dan",
+                " tien blijft weg), dus het is een ondergrens."),
+        " Die regio's hebben een gestippelde rand; hover erover voor de bevestiging,",
+        " daar staat ook hoeveel van de gekozen onderdelen er gepubliceerd zijn.",
+        " In de xlsx staat het als kolom ", tags$code("alle_groepen_aanwezig"), ".")
   })
 
   output$kaart <- renderLeaflet({
@@ -1207,7 +1230,7 @@ server <- function(input, output, session) {
     if (!identical(scope, SCOPE_ALLES)) g <- g[!is.na(g$stadsdeel) & g$stadsdeel == scope, ]
     d <- kaart_data()
     kolommen <- c("region_code", "waarde", "metric_value", "n_totaal",
-                  intersect(c("compleet", "n_gevonden"), names(d)))
+                  intersect(c("noemer", "compleet", "n_gevonden"), names(d)))
     merge(g, d[, ..kolommen], by = "region_code", all.x = TRUE)
   })
 
@@ -1252,7 +1275,7 @@ server <- function(input, output, session) {
       if (is.na(x)) return("onvoldoende waarnemingen")
       if (map_is_aandeel(k_weergave())) sprintf("%.1f%%", x)
       else if (map_is_gemiddelde(k_weergave())) sprintf("%.2f", x)
-      else format(round(x), big.mark = ".")
+      else format(round(x), big.mark = ".", decimal.mark = ",")
     }
 
     # Regio's waar een van de opgetelde groepen onderdrukt is: het cijfer telt
@@ -1267,21 +1290,51 @@ server <- function(input, output, session) {
     gevraagd <- kaart_n_cellen()
     gevonden <- if (is.null(m$n_gevonden)) rep(gevraagd, nrow(m)) else m$n_gevonden
 
-    labels <- mapply(function(nm, w, mv, nt, half, k) {
+    # De regel onder de waarde: de teller en, bij een aandeel, de noemer waar
+    # het percentage echt door gedeeld is. Dat was n_totaal -- het aantal
+    # huishoudens/ouderen in de hele regio -- ook bij "aandeel binnen groep",
+    # zodat de breuk in de tooltip iets anders zei dan het percentage erboven.
+    # Bij een absolute weergave staat er geen noemer meer: daar wordt nergens
+    # door gedeeld, en n_totaal erbij zetten nodigt uit tot een deling die voor
+    # de n_kinderen_*-metrics niet eens dezelfde eenheid heeft (die tellen
+    # kinderen tegen een huishoudnoemer). Een gemiddelde heeft al helemaal geen
+    # teller om te tonen.
+    noemer_woorden <- switch(k_weergave(),
+                             rel_regio = "in deze regio",
+                             rel_groep = "in deze groep",
+                             rel       = "in deze groep",
+                             "")
+    n_regel <- function(w, mv, nmr) {
+      if (is.na(w) || map_is_gemiddelde(k_weergave())) return("")
+      getal <- format(round(mv), big.mark = ".", decimal.mark = ",", scientific = FALSE)
+      if (!map_is_aandeel(k_weergave())) {
+        return(sprintf("<br/><span style='color:#666'>n = %s</span>", getal))
+      }
+      if (is.na(nmr)) return(sprintf("<br/><span style='color:#666'>n = %s</span>", getal))
+      sprintf("<br/><span style='color:#666'>n = %s van %s %s</span>",
+              getal, format(round(nmr), big.mark = ".", decimal.mark = ",", scientific = FALSE),
+              noemer_woorden)
+    }
+
+    labels <- mapply(function(nm, w, mv, nmr, half, k) {
       HTML(sprintf(
         "<b>%s</b><br/>%s: %s%s%s",
         nm, pretty_metric(input$k_metric), fmt(w),
-        if (is.na(w)) "" else sprintf("<br/><span style='color:#666'>n = %s van %s</span>",
-                                      format(mv, big.mark = "."),
-                                      format(nt, big.mark = ".")),
+        n_regel(w, mv, nmr),
+        # Niet "ondergrens": bij een aandeel valt met de onderdrukte cel ook
+        # een stuk noemer weg, en dan is het percentage geen ondergrens maar
+        # eerder te hoog. Het feit zelf -- hoeveel er gepubliceerd is -- zegt
+        # genoeg, en de melding boven de kaart legt het per weergave uit.
         if (isTRUE(half)) sprintf(
-          "<br/><span style='color:#b3541e'>ondergrens: %d van de %d gekozen onderdelen gepubliceerd</span>",
+          "<br/><span style='color:#b3541e'>%d van de %d gekozen onderdelen gepubliceerd</span>",
           k, gevraagd) else ""
       ))
     # USE.NAMES = FALSE matters: mapply() would otherwise key the result by
     # region_name, and leaflet serialises a *named* list as one JS object that
     # every polygon then shares -- which renders as an empty tooltip.
-    }, m$region_name, m$waarde, m$metric_value, m$n_totaal, onvolledig, gevonden,
+    }, m$region_name, m$waarde, m$metric_value,
+       if (is.null(m$noemer)) rep(NA_real_, nrow(m)) else m$noemer,
+       onvolledig, gevonden,
        SIMPLIFY = FALSE, USE.NAMES = FALSE)
 
     proxy |>
@@ -1746,7 +1799,8 @@ server <- function(input, output, session) {
                  regiocode = region_code, regionaam = region_name, stadsdeel,
                  jaar = year, indicator = variable_name, waarde_indicator = variable_value,
                  metric = metric_name, aantal = metric_value,
-                 n_totaal, noemer = denominator, weergegeven_waarde = waarde,
+                 n_totaal, noemer_binnen_groep = denominator,
+                 weergegeven_waarde = waarde,
                  splitsvariabele = split_var, splitsniveau = split_level)]
     # Alleen een opgetelde kaartselectie draagt deze markering; hij hoort mee de
     # export in, anders is aan een cijfer niet te zien dat het een ondergrens is.
@@ -1754,8 +1808,12 @@ server <- function(input, output, session) {
       uit[, `:=`(alle_groepen_aanwezig = d$compleet, onderdelen_gevonden = d$n_gevonden)]
     }
     # De twee noemers naast elkaar, zodat in de export na te rekenen is welk
-    # aandeel er getoond werd en wat het andere geweest zou zijn.
+    # aandeel er getoond werd en wat het andere geweest zou zijn -- plus, apart,
+    # degene die bij deze weergave echt gebruikt is. Dat is dezelfde kolom als
+    # de tooltip van de kaart toont, zodat het cijfer in het spreadsheet exact
+    # na te rekenen is.
     if ("regio_totaal" %in% names(d)) uit[, noemer_regiototaal := d$regio_totaal]
+    if ("noemer" %in% names(d)) uit[, gebruikte_noemer := d$noemer]
     # De gepubliceerde omvang van de regio x uitsplitsing waar deze rij bij
     # hoort: sinds output_1b een kolom in de levering, en de noemer van elk
     # aandeel waar de metric huishoudens/ouderen telt.
