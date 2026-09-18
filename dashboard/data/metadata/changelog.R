@@ -15,6 +15,39 @@
 
 CHANGELOG <- list(
   list(
+    datum = "2026-09-19",
+    titel = "Nieuwe levering: meer uitsplitsingen, exacte noemers, gemiddelde score",
+    punten = c(
+      paste("Het dashboard draait op de nieuwe CBS-levering. Die heeft flink meer",
+            "uitsplitsingen, en -- nieuw -- je kunt er naar meer dan een tegelijk",
+            "uitsplitsen. \"Splits uit naar\" en \"Splits de lijn uit naar\" zijn daarom",
+            "meerkeuzelijsten geworden: niets kiezen betekent niet uitsplitsen, en kies je er",
+            "twee, dan krijg je de gekruiste groepen (bijvoorbeeld ondersteuningscombinatie",
+            "x geslacht). Niet elke kruising zit in de levering; kies je er een die er niet",
+            "is, dan zegt het dashboard dat, in plaats van je een lege grafiek te laten zien."),
+      paste("De percentages kloppen nu preciezer. De levering geeft voortaan zelf hoeveel",
+            "huishoudens of ouderen er in een groep zitten; dat hoefde het dashboard eerst",
+            "terug te rekenen door de categorieen op te tellen, en dat viel te laag uit zodra",
+            "er een categorie onderdrukt was -- waardoor het percentage te hoog uitkwam. Die",
+            "noemer is nu het gepubliceerde aantal. Cijfers kunnen daardoor iets anders",
+            "uitvallen dan voorheen; dat is een correctie, geen nieuwe meting."),
+      paste("\"Aantal vormen ondersteuning\" is op veel meer wijken en buurten te zien. De",
+            "omvang van een groep hangt niet van de gekozen risicoscore af, dus er is nu aan",
+            "een enkele gepubliceerde rij genoeg waar er eerst een complete reeks nodig was.",
+            "Dat was precies wat die indicator onder gebiedsniveau vrijwel leeg liet."),
+      paste("Er is een nieuwe metric: gemiddelde score. Dat is een gemiddelde en geen aantal,",
+            "dus daar geldt de keuze bij \"Weergave\" niet -- er staat altijd het gemiddelde",
+            "zelf, met decimalen. Optellen kan er ook niet: kies je meerdere waarden of",
+            "niveaus tegelijk, dan blijft de kaart leeg met de reden erbij, in plaats van dat",
+            "er twee gemiddelden bij elkaar worden opgeteld."),
+      paste("Onder de venn is de kolom n nu de omvang van de hele groep, inclusief de",
+            "huishoudens of ouderen die in geen enkele kolom vallen. Een rij telt daar dus",
+            "niet naartoe op -- dat stond er eerder anders, en staat er nu bij."),
+      paste("In de legenda van de gedownloade kaart (png) ontbrak het procentteken als je een",
+            "aandeel toonde, en stond \"Aantal\" boven de schaal. Dat klopt nu.")
+    )
+  ),
+  list(
     datum = "2026-09-18",
     titel = "Think-cell-tabellen staan nu in Export history",
     punten = c(

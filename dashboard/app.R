@@ -19,6 +19,14 @@ suppressPackageStartupMessages({
   library(writexl)
 })
 
+# `%||%` zit pas sinds R 4.4 in base. De app gebruikt hem op tientallen plekken
+# (en utils/slide_download.R rekent op een app-niveau versie), dus hem hier
+# neerzetten waar hij ontbreekt scheelt een stille afhankelijkheid van de
+# R-versie op de server.
+if (!exists("%||%")) `%||%` <- function(x, y) if (is.null(x)) y else x
+
+source("utils/splits.R")
+source("utils/metrics.R")
 source("utils/venn_diagram.R")
 source("utils/map.R")
 source("utils/changelog_ui.R")
@@ -49,6 +57,15 @@ if (!dir.exists(DATA_DIR)) {
 ds  <- open_dataset(file.path(DATA_DIR, "indicators.parquet"))
 geo <- readRDS(file.path(DATA_DIR, "geo.rds"))
 
+# Levering output_1b draagt de exacte groepsomvang mee (`n_split`, uit
+# n_totaal_region_split). Daarop staat de noemer van elk aandeel en de n-kolom
+# onder de venn. Een parquet van voor die levering heeft de kolom niet; dan valt
+# de app terug op de oude, uit de categorieen teruggerekende noemer en zegt hij
+# dat met zoveel woorden -- liever een dashboard dat blijft werken met een
+# zichtbare kanttekening dan een dashboard dat niet opstart omdat de prep-stap
+# nog moet draaien.
+HEEFT_N_SPLIT <- "n_split" %in% names(ds)
+
 # Westpoort is haven- en bedrijventerrein: twee wijken, nauwelijks huishoudens.
 # Op de kaart kleurt het mee als een gewone wijk en trekt het door zijn kleine
 # aantallen de schaal scheef, terwijl er inhoudelijk niets te zien is. Het
@@ -61,15 +78,21 @@ geo <- lapply(geo, function(g) g[!(!is.na(g$stadsdeel) & g$stadsdeel == UITGESLO
 
 # Provenance stamped into every export (tc_build_datasheet_log() in
 # utils/slide_download.R): which RA delivery a chart's numbers came from, and
-# when this app's own prepped copy of that delivery was last rebuilt. The raw
-# delivery stays on the analyst's machine and is never deployed, so
-# data-prep/01_build_app_data.R's parquet output -- what the app actually reads
-# and what ships -- is the file whose date describes the numbers on screen.
-RA_OUTPUT_ID   <- "output_1a"
-RA_SOURCE_FILE <- c(
-  "huishoudens met kinderen" = "OT_HHKIND.csv",
-  "ouderen (65+)"            = "OT_OUD.xlsx"
-)
+# when this app's own prepped copy of that delivery was last rebuilt. De ruwe
+# levering blijft op de machine van de analist en wordt nooit gedeployd, dus de
+# parquet-uitvoer van data-prep/01_build_app_data.R -- wat de app echt leest en
+# wat meegaat -- is het bestand waarvan de datum de cijfers op het scherm
+# beschrijft.
+#
+# Welke levering dat is, staat naast die parquet (source_info.rds) en niet als
+# constante hier: zo hoeft bij een volgende levering alleen de prep-stap bij en
+# kan de app nooit een andere levering noemen dan hij inleest.
+RA_SOURCE_INFO <- local({
+  f <- file.path(DATA_DIR, "source_info.rds")
+  if (file.exists(f)) readRDS(f) else list()
+})
+RA_OUTPUT_ID   <- RA_SOURCE_INFO$output_id %||% "output_1b"
+RA_SOURCE_FILE <- RA_SOURCE_INFO$files     %||% character(0)
 APP_DATA_MTIME <- local({
   parts <- list.files(file.path(DATA_DIR, "indicators.parquet"),
                       pattern = "\\.parquet$", recursive = TRUE, full.names = TRUE)
@@ -141,7 +164,7 @@ RISICO_LABELS <- c(RISICO_LABELS_HHKIND, RISICO_LABELS_OUD)
 # De twee afgeleide ondersteuningsuitsplitsingen uit de prep-stap
 # (data-prep/derive_support_splits.R). Ze staan gewoon als rijen in de dataset,
 # dus de keuzelijsten vinden ze vanzelf; de app hoeft ze alleen te kunnen
-# benoemen, en te weten dat de indicatorvorm alleen op de totaalrij bestaat.
+# benoemen.
 #
 #   als splitsvariabele -> kruist met de risicoscore ("van de gezinnen met 2
 #     vormen ondersteuning heeft x% drie of meer risicofactoren")
@@ -190,16 +213,31 @@ pretty_var <- function(x) {
   unname(ifelse(is.na(known), fallback, known))
 }
 
+METRIC_LABELS <- c(average_score = "gemiddelde score")
+
 pretty_metric <- function(x) {
+  known <- METRIC_LABELS[x]
   out <- gsub("_", " ", sub("^n_", "aantal ", x))
-  sub("aantal ouderen with var value", "aantal ouderen", out)
+  out <- sub("aantal ouderen with var value", "aantal ouderen", out)
+  unname(ifelse(is.na(known), out, known))
 }
 
-pretty_split <- function(x) {
-  known <- ONDERSTEUNING_SPLIT_LABELS[x]
+# Een enkele splitsvariabele. pretty_split() hieronder zet er samengestelde
+# uitsplitsingen omheen.
+SPLIT_VAR_LABELS <- c(ONDERSTEUNING_SPLIT_LABELS,
+                      O_MPG_combination = "ondersteuningscombinatie",
+                      O_OUD_combination = "ondersteuningscombinatie")
+
+pretty_split_1 <- function(x) {
+  known <- SPLIT_VAR_LABELS[x]
   fallback <- ifelse(x == TOTAL_LABEL, TOTAL_LABEL, gsub("_", " ", sub("_hh$", "", x)))
   unname(ifelse(is.na(known), fallback, known))
 }
+
+# Een rij kan naar meer dan een variabele tegelijk uitgesplitst zijn
+# (utils/splits.R); dan draagt split_var ze allemaal en krijgt elk onderdeel
+# zijn eigen label.
+pretty_split <- function(x) split_pretty(x, function(deel, i) pretty_split_1(deel))
 
 # Categorielabel voor een afgeleide ondersteuningswaarde ("wel", "2"), in
 # beide vormen: als variable_value van de indicator en als split_level van de
@@ -251,6 +289,19 @@ pretty_combo_level <- function(x, groep_labels) {
 # optional so this still works for split_var-less callers (e.g. a plain
 # variable_value).
 pretty_level <- function(x, split_var = NULL, population = NULL) {
+  namen <- if (!is.null(split_var) && length(split_var) == 1L) split_parts(split_var) else character(0)
+  if (length(namen) <= 1L || length(x) == 0L) return(pretty_level_1(x, split_var, population))
+  # Samengesteld: elk onderdeel langs zijn eigen variabele. Per onderdeel de
+  # hele kolom ineens, niet waarde voor waarde -- pretty_level_1() kijkt naar de
+  # verzameling ("alleen 0 en 1" leest als nee/ja), en die context zou per
+  # losse waarde wegvallen.
+  delen <- strsplit(as.character(x), SPLIT_SEP, fixed = TRUE)
+  m <- do.call(rbind, lapply(delen, function(d) { length(d) <- length(namen); d }))
+  kol <- lapply(seq_along(namen), function(i) pretty_level_1(m[, i], namen[[i]], population))
+  do.call(paste, c(kol, list(sep = " \u00b7 ")))
+}
+
+pretty_level_1 <- function(x, split_var = NULL, population = NULL) {
   if (!is.null(split_var) && !is.null(population) &&
       isTRUE(split_var == COMBO_SPLIT_VAR[[population]])) {
     return(pretty_combo_level(x, COMBO_GROUP_LABELS[[population]]))
@@ -273,12 +324,18 @@ named <- function(values, labeller) setNames(values, labeller(values))
 
 # Keeps the user's current pick when it is still a valid choice, so changing an
 # unrelated selector does not silently reset the rest of the form.
-update_preserving <- function(session, id, choices, current) {
+update_preserving <- function(session, id, choices, current, allow_empty = FALSE) {
   # `current` kan meerdere waarden hebben (de kaartselectors staan op
   # multiple = TRUE): alles wat nog bestaat blijft staan, en als er niets van
   # overblijft valt hij terug op de eerste keuze in plaats van op leeg.
+  #
+  # `allow_empty` is voor de splitsselectors: daar *is* leeg een geldige keuze
+  # ("niet uitsplitsen"), en terugvallen op de eerste variabele zou de gebruiker
+  # ongevraagd een uitsplitsing opdringen.
   blijft <- current[!is.na(current) & current %in% choices]
-  sel <- if (length(blijft)) blijft else choices[1]
+  sel <- if (length(blijft)) blijft
+         else if (allow_empty || length(choices) == 0L) character(0)
+         else choices[1]
   updateSelectInput(session, id, choices = choices, selected = sel)
 }
 
@@ -338,6 +395,8 @@ ui <- fluidPage(
       "Iteratie 1",
       br(),
 
+      uiOutput("data_waarschuwing"),
+
       div(class = "popbar",
           fluidRow(
             column(5, selectInput("populatie", "Populatie", choices = POPULATIONS, width = "100%")),
@@ -368,9 +427,13 @@ ui <- fluidPage(
                 selectInput("k_metric", "Metric", choices = NULL)
               ),
               control_card(
-                selectInput("k_split", "Splits uit naar", choices = NULL),
+                selectInput("k_split", "Splits uit naar", choices = NULL,
+                            multiple = TRUE),
+                div(class = "note", style = "margin: -6px 0 10px;",
+                    "Leeg = niet uitsplitsen. Meerdere tegelijk kan, zolang de",
+                    " levering die kruising publiceert."),
                 conditionalPanel(
-                  "input.k_split != '(totaal)'",
+                  "input.k_split && input.k_split.length > 0",
                   selectInput("k_level", "Toon welk niveau", choices = NULL,
                               multiple = TRUE)
                 ),
@@ -382,6 +445,7 @@ ui <- fluidPage(
                                "Aandeel van regiototaal (%)" = "rel_regio",
                                "Aandeel binnen groep (%)" = "rel_groep"),
                              selected = "rel_regio"),
+                uiOutput("k_gem_note"),
                 div(class = "note", style = "margin: -6px 0 10px;",
                     tags$b("Van regiototaal:"),
                     " ten opzichte van alle huishoudens/ouderen in die buurt, wijk,",
@@ -433,12 +497,18 @@ ui <- fluidPage(
                 selectInput("r_metric", "Metric", choices = NULL)
               ),
               control_card(
-                selectInput("r_split", "Splits de lijn uit naar", choices = NULL)
+                selectInput("r_split", "Splits de lijn uit naar", choices = NULL,
+                            multiple = TRUE),
+                div(class = "note", style = "margin: -6px 0 0;",
+                    "Leeg = een lijn voor het geheel. Meerdere tegelijk geeft een",
+                    " lijn per kruising."),
+                uiOutput("r_split_note")
               ),
               control_card(
                 radioButtons("r_weergave", "Weergave",
                              c("Absoluut" = "abs", "Aandeel (%)" = "rel"),
-                             selected = "rel")
+                             selected = "rel"),
+                uiOutput("r_gem_note")
               ),
               # Raw xlsx, think-cell xlsx, slide (.pptx) and the favorite star
               # for the line chart, all from the shared module -- see
@@ -518,8 +588,9 @@ server <- function(input, output, session) {
   # handled separately below: both depend on which indicator is selected, not
   # just on the population -- the individual risk factors are binary (0/1) but
   # the totaalscore is a stapeling (0/1/2/3plus), and the derived
-  # ondersteunings-indicators only exist on the total row, so a fixed
-  # population-wide list would offer combinations that have no rows at all.
+  # ondersteunings-indicators carry only the splits the derivation could make,
+  # so a fixed population-wide list would offer combinations that have no rows
+  # at all.
   observeEvent(input$populatie, {
     v <- pop_vocab()
 
@@ -576,41 +647,58 @@ server <- function(input, output, session) {
                       setNames(vals, pretty_value(vals, input$r_var, input$populatie)), cur)
   })
 
-  # "Splits uit naar": which splits actually have rows for the CURRENTLY
-  # selected indicator. The risk scores carry every split variable; the two
-  # derived ondersteunings-indicators only exist on the total row, because the
-  # delivery never has two splits at once and the ondersteuning already sits in
-  # their variable_value. Offering them a split would produce an empty slice
-  # that reads as a bug rather than as an impossible combination.
+  # "Splits uit naar": welke splitsvariabelen rijen hebben bij de op dit moment
+  # gekozen indicator. De risicoscores dragen ze allemaal; de afgeleide
+  # ondersteuningsindicatoren dragen alleen wat de afleiding kon maken, want de
+  # ondersteuning zit daar al in hun variable_value. Een keuzelijst voor de hele
+  # populatie zou combinaties aanbieden die nergens rijen hebben, en dat leest
+  # als een bug in plaats van als een onmogelijke combinatie.
+  #
+  # Sinds levering output_1b kan een rij naar meer dan een variabele tegelijk
+  # zijn uitgesplitst, dus dit is een meervoudige keuze: de gekozen verzameling
+  # wordt via split_key() een sleutel, en leeg betekent "niet uitsplitsen".
+  splits_keuzes <- function(var_name) {
+    split_vars_available(pop_vocab()[variable_name == var_name]$split_var)
+  }
   observeEvent(list(input$populatie, input$k_var), {
     req(input$k_var)
     req(input$k_var %in% pop_vocab()$variable_name)
-    sp <- unique(pop_vocab()[variable_name == input$k_var]$split_var)
-    sp <- c(TOTAL_LABEL, sort(setdiff(sp, TOTAL_LABEL)))
     cur <- isolate(input$k_split)
     # k_level hangt aan k_split en moet dus mee bevriezen, net als hierboven.
     for (i in c("k_split", "k_level")) freezeReactiveValue(input, i)
-    update_preserving(session, "k_split", named(sp, pretty_split), cur)
+    update_preserving(session, "k_split", named(splits_keuzes(input$k_var), pretty_split_1),
+                      cur, allow_empty = TRUE)
   })
   observeEvent(list(input$populatie, input$r_var), {
     req(input$r_var)
     req(input$r_var %in% pop_vocab()$variable_name)
-    sp <- unique(pop_vocab()[variable_name == input$r_var]$split_var)
-    sp <- c(TOTAL_LABEL, sort(setdiff(sp, TOTAL_LABEL)))
     cur <- isolate(input$r_split)
     freezeReactiveValue(input, "r_split")
-    update_preserving(session, "r_split", named(sp, pretty_split), cur)
+    update_preserving(session, "r_split", named(splits_keuzes(input$r_var), pretty_split_1),
+                      cur, allow_empty = TRUE)
   })
 
-  # Levels of the chosen split variable (map tab only -- the line chart draws
-  # every level at once).
+  # De sleutel van de gekozen verzameling: "(totaal)" als er niets gekozen is,
+  # en anders de namen alfabetisch aan elkaar -- precies zoals de prep-stap ze
+  # in split_var heeft weggeschreven.
+  k_split_key <- reactive(split_key(input$k_split))
+  r_split_key <- reactive(split_key(input$r_split))
+
+  # Bestaat deze kruising in de levering? Niet elke combinatie wordt
+  # gepubliceerd, en een lege grafiek moet als "niet geleverd" leesbaar zijn.
+  k_split_bestaat <- reactive(split_key_bestaat(k_split_key(), pop_vocab()$split_var))
+  r_split_bestaat <- reactive(split_key_bestaat(r_split_key(), pop_vocab()$split_var))
+
+  # Levels of the chosen split (map tab only -- the line chart draws every level
+  # at once). Bij een samengestelde uitsplitsing zijn dat de gepubliceerde
+  # kruisingen zelf, niet het product van de losse niveaus.
   observeEvent(list(input$populatie, input$k_split), {
-    req(input$k_split)
-    if (input$k_split == TOTAL_LABEL) return()
+    sleutel <- k_split_key()
+    if (identical(sleutel, TOTAL_LABEL)) return()
     cur <- isolate(input$k_level)  # read before freezing (see above)
-    lv <- sort(unique(pop_vocab()[split_var == input$k_split]$split_level))
+    lv <- sort(unique(pop_vocab()[split_var == sleutel]$split_level))
     freezeReactiveValue(input, "k_level")
-    update_preserving(session, "k_level", named_levels(lv, input$k_split, input$populatie), cur)
+    update_preserving(session, "k_level", named_levels(lv, sleutel, input$populatie), cur)
   })
 
   # Vaste toelichting onder "Risicoscore". De R_-scores delen er een; de twee
@@ -629,13 +717,14 @@ server <- function(input, output, session) {
                  " toegewezen kon worden.")
       } else if (isTRUE(grepl("_aantal_vormen$", var_name))) {
         tags$div(class = "note", style = "margin: -6px 0 10px;",
-                 "Afgeleid uit de ondersteuningscombinaties. De levering telt die",
-                 " alleen gekruist met een risicoscore, dus lang niet elke categorie",
-                 " is overal af te leiden. Wat overblijft staat als",
-                 " \u201cNiet toe te wijzen\u201d in de waardelijst: de noemer is dus",
-                 " altijd de hele populatie en de getoonde categorie\u00ebn kloppen,",
-                 " ook waar die restcategorie groot is. Kijk er even naar voordat je",
-                 " buurten onderling vergelijkt.")
+                 "Afgeleid uit de ondersteuningscombinaties. Voor het aantal",
+                 " huishoudens/ouderen komt dat sinds levering output_1b uit de",
+                 " gepubliceerde groepsgroottes en is het dus exact. Telt de metric",
+                 " iets anders (de kindermetrics tellen kinderen), dan moet het nog",
+                 " uit de risicocategorie\u00ebn worden opgeteld en lukt dat lang niet",
+                 " overal; wat dan overblijft staat als",
+                 " \u201cNiet toe te wijzen\u201d in de waardelijst, zodat de noemer",
+                 " de hele populatie blijft.")
       } else {
         tags$div(class = "note", style = "margin: -6px 0 10px;",
                  "Afgeleid uit de ondersteuningscombinaties: heeft dit huishouden/",
@@ -652,27 +741,41 @@ server <- function(input, output, session) {
   output$k_var_note <- renderUI(var_note(input$k_var))
   output$r_var_note <- renderUI(var_note(input$r_var))
 
-  # Toelichting onder "Splits uit naar" op de Kaart-tab: de O_MPG1/2/3-legenda
-  # bij de combinatiesplitsing, en bij de twee afgeleide splitsingen wat de
-  # noemer daar betekent. Anders NULL (verborgen). Het vennpaneel op "Per
-  # regio" draagt diezelfde legenda permanent, want het toont altijd die split.
+  # Toelichting onder "Splits uit naar", op beide tabbladen: de O_MPG1/2/3-legenda bij de
+  # combinatiesplitsing, wat de noemer betekent bij de afgeleide splitsingen, en
+  # -- sinds er meerdere tegelijk kunnen -- de melding dat een kruising niet
+  # geleverd is.
+  split_note <- function(gekozen, bestaat) {
+    delen <- gekozen %||% character(0)
+    if (length(delen) == 0L) return(NULL)
+    tagList(
+      if (!isTRUE(bestaat))
+        tags$div(class = "kaart-let-op",
+                 tags$b("Deze kruising zit niet in de levering."),
+                 " De CBS-output publiceert lang niet elke combinatie van",
+                 " uitsplitsingen. Kies er een weg, of een andere combinatie."),
+      if (any(delen %in% COMBO_SPLIT_VAR)) {
+        gl <- COMBO_GROUP_UITLEG[[input$populatie]]
+        tags$div(class = "note", style = "margin-top: -4px;",
+                 HTML(paste(sprintf("<b>%s</b> %s", names(gl), gl), collapse = "<br/>")))
+      },
+      if (any(delen %in% ONDERSTEUNING_SPLITS))
+        tags$div(class = "note", style = "margin-top: -4px;",
+                 "Afgeleid uit de ondersteuningscombinaties. Bij",
+                 " \u201cAandeel (%)\u201d is de noemer de gekozen groep zelf,",
+                 " dus dat leest als: van de groep met dit ondersteuningsbeeld",
+                 " heeft x% deze risicoscore. Kies de indicator",
+                 " \u201cOndersteuningssignaal (wel/geen)\u201d voor het",
+                 " omgekeerde: het aandeel van de hele populatie.")
+    )
+  }
   output$k_split_note <- renderUI({
-    req(input$populatie, input$k_split)
-    if (isTRUE(input$k_split == COMBO_SPLIT_VAR[[input$populatie]])) {
-      gl <- COMBO_GROUP_UITLEG[[input$populatie]]
-      return(tags$div(class = "note", style = "margin-top: -4px;",
-                      HTML(paste(sprintf("<b>%s</b> %s", names(gl), gl), collapse = "<br/>"))))
-    }
-    if (isTRUE(input$k_split %in% ONDERSTEUNING_SPLITS)) {
-      return(tags$div(class = "note", style = "margin-top: -4px;",
-                      "Afgeleid uit de ondersteuningscombinaties. Bij",
-                      " \u201cAandeel (%)\u201d is de noemer de gekozen groep zelf,",
-                      " dus dat leest als: van de groep met dit ondersteuningsbeeld",
-                      " heeft x% deze risicoscore. Kies de indicator",
-                      " \u201cOndersteuningssignaal (wel/geen)\u201d voor het",
-                      " omgekeerde: het aandeel van de hele populatie."))
-    }
-    NULL
+    req(input$populatie)
+    split_note(input$k_split, k_split_bestaat())
+  })
+  output$r_split_note <- renderUI({
+    req(input$populatie)
+    split_note(input$r_split, r_split_bestaat())
   })
 
   # Region picker follows the region level.
@@ -695,6 +798,30 @@ server <- function(input, output, session) {
   # Always adds `waarde`, including on an empty slice -- a selection that has no
   # rows must still produce a table the map and chart can render as "geen data",
   # not one that errors on a missing column.
+  # De weergave zoals hij echt gebruikt wordt. `average_score` is een
+  # gemiddelde: daar bestaat geen aandeel van, want er is geen noemer om tegen
+  # af te zetten (utils/metrics.R). De keuzeknop blijft staan -- hij geldt weer
+  # zodra er een tellende metric gekozen wordt -- maar de app rekent en schrijft
+  # dan "gemiddelde", en zegt dat onder de knop.
+  k_weergave <- reactive({
+    if (isTRUE(metric_is_gemiddelde(input$k_metric))) "gem" else input$k_weergave
+  })
+  r_weergave <- reactive({
+    if (isTRUE(metric_is_gemiddelde(input$r_metric))) "gem" else input$r_weergave
+  })
+
+  gemiddelde_note <- function(metric) {
+    if (!isTRUE(metric_is_gemiddelde(metric))) return(NULL)
+    tags$div(class = "note", style = "margin: -6px 0 10px;",
+             tags$b("Dit is een gemiddelde."),
+             " Een aandeel van een gemiddelde bestaat niet, dus de keuze",
+             " hierboven geldt hier niet: er staat het gemiddelde zelf. Om",
+             " dezelfde reden kan een gemiddelde niet over meerdere waarden of",
+             " niveaus opgeteld worden \u2014 kies er \u00e9\u00e9n van elk.")
+  }
+  output$k_gem_note <- renderUI(gemiddelde_note(input$k_metric))
+  output$r_gem_note <- renderUI(gemiddelde_note(input$r_metric))
+
   add_display <- function(d, weergave) {
     if (nrow(d) == 0) {
       d[, waarde := numeric()]
@@ -715,6 +842,10 @@ server <- function(input, output, session) {
       } else {
         fifelse(!is.na(noemer) & noemer > 0, metric_value / noemer * 100, NA_real_)
       }]
+    # Een gemiddelde staat los van de gekozen weergave: het getal zelf is de
+    # waarde. Dit vangt ook de slice waarin meerdere metrics door elkaar staan.
+    gem <- metric_is_gemiddelde(d$metric_name)
+    if (any(gem)) d[gem, waarde := as.numeric(metric_value)]
     d[]
   }
 
@@ -726,6 +857,7 @@ server <- function(input, output, session) {
            rel_regio = "% van regiototaal",
            rel_groep = "% binnen groep",
            rel       = "%",
+           gem       = "gemiddelde",
            "aantal")
   }
 
@@ -736,9 +868,10 @@ server <- function(input, output, session) {
   # bijvoorbeeld "O1, O2 en O1+O2 samen" te bekijken is.
   kaart_rijen <- reactive({
     req(input$populatie, input$k_jaar, input$k_niveau,
-        input$k_var, input$k_val, input$k_metric, input$k_split)
+        input$k_var, input$k_val, input$k_metric)
 
-    lvl <- if (input$k_split == TOTAL_LABEL) TOTAL_LABEL else req(input$k_level)
+    sleutel <- k_split_key()
+    lvl <- if (identical(sleutel, TOTAL_LABEL)) TOTAL_LABEL else req(input$k_level)
 
     ds |>
       filter(population   == !!input$populatie,
@@ -747,7 +880,7 @@ server <- function(input, output, session) {
              variable_name == !!input$k_var,
              variable_value %in% !!input$k_val,
              metric_name   == !!input$k_metric,
-             split_var     == !!input$k_split,
+             split_var     == !!sleutel,
              split_level %in% !!lvl) |>
       collect() |>
       as.data.table()
@@ -757,7 +890,8 @@ server <- function(input, output, session) {
   # voor, dan zou de optelling stilzwijgend te laag uitvallen, en valt de regio
   # af -- zie map_aggregate().
   kaart_n_cellen <- reactive({
-    lvl <- if (input$k_split == TOTAL_LABEL) TOTAL_LABEL else (input$k_level %||% character(0))
+    lvl <- if (identical(k_split_key(), TOTAL_LABEL)) TOTAL_LABEL
+           else (input$k_level %||% character(0))
     length(lvl) * length(input$k_val %||% character(0))
   })
 
@@ -793,9 +927,10 @@ server <- function(input, output, session) {
           by = "region_code", all.x = TRUE)
   }
 
-  kaart_data <- reactive(add_display(met_regio_totaal(map_aggregate(kaart_rijen(),
-                                                                   kaart_n_cellen())),
-                                     input$k_weergave))
+  kaart_data <- reactive(add_display(
+    met_regio_totaal(map_aggregate(kaart_rijen(), kaart_n_cellen(),
+                                   optelbaar = !isTRUE(metric_is_gemiddelde(input$k_metric)))),
+    k_weergave()))
 
   # Het bereik van de kleurschaal: standaard de uiterste waarden van de
   # selectie, of een handmatig bereik als de gebruiker dat aanzet.
@@ -824,14 +959,15 @@ server <- function(input, output, session) {
 
   kaart_titel <- reactive({
     req(input$k_var, input$k_metric, input$k_jaar, input$k_val)
-    sp <- if (input$k_split == TOTAL_LABEL) "" else
-      sprintf(" | %s: %s", pretty_split(input$k_split),
+    sleutel <- k_split_key()
+    sp <- if (identical(sleutel, TOTAL_LABEL)) "" else
+      sprintf(" | %s: %s", pretty_split(sleutel),
               som_label(pretty_level(input$k_level %||% character(0),
-                                     input$k_split, input$populatie)))
+                                     sleutel, input$populatie)))
     sprintf("%s = %s | %s (%s) | %s %s%s",
             pretty_var(input$k_var),
             som_label(pretty_value(input$k_val, input$k_var, input$populatie)),
-            pretty_metric(input$k_metric), eenheid(input$k_weergave),
+            pretty_metric(input$k_metric), eenheid(k_weergave()),
             input$k_jaar, input$k_niveau, sp)
   })
 
@@ -841,9 +977,36 @@ server <- function(input, output, session) {
   # onderdrukt is alleen op wat gepubliceerd is. Dat cijfer is dan een
   # ondergrens, en dat hoort er hardop bij te staan -- niet alleen in de
   # tooltip, want je ziet de kaart eerder dan dat je erover hovert.
+  # De dataset is nog van voor levering output_1b: de exacte groepsomvang
+  # ontbreekt, dus de noemers komen nog uit de oude terugrekening. Het dashboard
+  # werkt, maar wie een aandeel afleest hoort te weten dat het de oude berekening
+  # is -- die telde onderdrukte categorieen niet mee en viel dus te hoog uit.
+  output$data_waarschuwing <- renderUI({
+    if (HEEFT_N_SPLIT) return(NULL)
+    div(class = "kaart-let-op",
+        tags$b("Deze dataset is nog van voor levering output_1b."),
+        " De exacte groepsomvang (", tags$code("n_totaal_region_split"),
+        ") zit er nog niet in, dus elke noemer is teruggerekend uit de",
+        " gepubliceerde categorie\u00ebn en kan te klein zijn waar een categorie",
+        " onderdrukt is. Draai ", tags$code("data-prep/01_build_app_data.R"),
+        " op de nieuwe levering en commit de parquet.")
+  })
+
   output$k_waarschuwing <- renderUI({
     d <- kaart_data()
-    if (!"compleet" %in% names(d) || nrow(d) == 0) return(NULL)
+    if (nrow(d) == 0) return(NULL)
+    # Een gemiddelde laat zich niet optellen; dan is er bij meer dan een cel per
+    # regio geen getal te tonen en hoort dat er hardop bij te staan.
+    if (isTRUE(metric_is_gemiddelde(input$k_metric)) && any(d$n_gevonden > 1)) {
+      return(div(class = "kaart-let-op",
+                 tags$b("Een gemiddelde kan niet opgeteld worden."),
+                 " Er zijn meerdere waarden of niveaus geselecteerd, en het",
+                 " gemiddelde daarvan is niet uit deze cijfers te bepalen: daar",
+                 " zouden de aantallen per cel voor nodig zijn, en die staan niet",
+                 " in dezelfde slice. Kies \u00e9\u00e9n waarde en \u00e9\u00e9n",
+                 " niveau."))
+    }
+    if (!"compleet" %in% names(d)) return(NULL)
     n <- sum(!d$compleet)
     if (n == 0) return(NULL)
     div(class = "kaart-let-op",
@@ -916,7 +1079,9 @@ server <- function(input, output, session) {
 
     fmt <- function(x) {
       if (is.na(x)) return("onvoldoende waarnemingen")
-      if (map_is_aandeel(input$k_weergave)) sprintf("%.1f%%", x) else format(round(x), big.mark = ".")
+      if (map_is_aandeel(k_weergave())) sprintf("%.1f%%", x)
+      else if (map_is_gemiddelde(k_weergave())) sprintf("%.2f", x)
+      else format(round(x), big.mark = ".")
     }
 
     # Regio's waar een van de opgetelde groepen onderdrukt is: het cijfer telt
@@ -961,8 +1126,8 @@ server <- function(input, output, session) {
                                             fillOpacity = 0.9, bringToFront = TRUE)
       ) |>
       addLegend(position = "bottomright", pal = pal, values = domein,
-                title = eenheid(input$k_weergave), opacity = 0.9,
-                labFormat = labelFormat(suffix = if (map_is_aandeel(input$k_weergave)) "%" else ""),
+                title = eenheid(k_weergave()), opacity = 0.9,
+                labFormat = labelFormat(suffix = if (map_is_aandeel(k_weergave())) "%" else ""),
                 na.label = "onvoldoende")
   })
 
@@ -970,7 +1135,7 @@ server <- function(input, output, session) {
 
   regio_data <- reactive({
     req(input$populatie, input$r_niveau, input$r_regio,
-        input$r_var, input$r_val, input$r_metric, input$r_split)
+        input$r_var, input$r_val, input$r_metric)
 
     d <- ds |>
       filter(population    == !!input$populatie,
@@ -979,11 +1144,11 @@ server <- function(input, output, session) {
              variable_name == !!input$r_var,
              variable_value== !!input$r_val,
              metric_name   == !!input$r_metric,
-             split_var     == !!input$r_split) |>
+             split_var     == !!r_split_key()) |>
       collect() |>
       as.data.table()
 
-    d <- add_display(d, input$r_weergave)
+    d <- add_display(d, r_weergave())
     if (nrow(d) == 0) return(d)
     setorder(d, split_level, year)
     d[]
@@ -993,11 +1158,11 @@ server <- function(input, output, session) {
     req(input$r_var, input$r_metric, input$r_regio)
     nm <- names(region_choices[[input$r_niveau]])[
       match(input$r_regio, region_choices[[input$r_niveau]])]
-    sp <- if (input$r_split == TOTAL_LABEL) "" else
-      sprintf(" | uitgesplitst naar %s", pretty_split(input$r_split))
+    sp <- if (identical(r_split_key(), TOTAL_LABEL)) "" else
+      sprintf(" | uitgesplitst naar %s", pretty_split(r_split_key()))
     sprintf("%s = %s | %s (%s) | %s%s",
             pretty_var(input$r_var), input$r_val,
-            pretty_metric(input$r_metric), eenheid(input$r_weergave),
+            pretty_metric(input$r_metric), eenheid(r_weergave()),
             nm %||% input$r_regio, sp)
   })
 
@@ -1030,7 +1195,7 @@ server <- function(input, output, session) {
   regio_plot_data <- reactive({
     d <- copy(regio_data())  # copy: `:=` would otherwise mutate regio_data()'s cached value
     lv  <- unique(d$split_level)  # regio_data() is already ordered by split_level, year
-    lab <- unname(pretty_level(lv, input$r_split, input$populatie))
+    lab <- unname(pretty_level(lv, r_split_key(), input$populatie))
     d[, reeks := factor(lab[match(split_level, lv)], levels = lab)]
     d[]
   })
@@ -1052,7 +1217,8 @@ server <- function(input, output, session) {
         marker = list(color = pal[i], size = 7),
         hovertemplate = paste0(
           "<b>", lv_lab[i], "</b><br>%{x}<br>",
-          if (input$r_weergave == "rel") "%{y:.1f}%" else "%{y:,.0f}",
+          if (r_weergave() == "rel") "%{y:.1f}%"
+          else if (r_weergave() == "gem") "%{y:.2f}" else "%{y:,.0f}",
           "<extra></extra>")
       )
     }
@@ -1061,9 +1227,9 @@ server <- function(input, output, session) {
       layout(
         title = list(text = ""),
         xaxis = list(title = "", dtick = 1, tickmode = "linear"),
-        yaxis = list(title = eenheid(input$r_weergave),
+        yaxis = list(title = eenheid(r_weergave()),
                      rangemode = "tozero",
-                     ticksuffix = if (input$r_weergave == "rel") "%" else ""),
+                     ticksuffix = if (r_weergave() == "rel") "%" else ""),
         hovermode = "x unified",
         legend = list(orientation = "h", y = -0.12),
         showlegend = length(lv_lab) > 1,
@@ -1139,7 +1305,7 @@ server <- function(input, output, session) {
     } else {
       d[, niveau := character()]
     }
-    add_display(d, input$r_weergave)
+    add_display(d, r_weergave())
   })
 
   # The 8 region values in the order venn_svg() wants them. Shared by the
@@ -1172,8 +1338,20 @@ server <- function(input, output, session) {
       collect() |>
       as.data.table()
 
-    add_display(d, input$r_weergave)
+    add_display(d, r_weergave())
   })
+
+  # De omvang van een deelgebied: sinds levering output_1b staat die als
+  # gepubliceerd getal in de data (`n_split`, uit n_totaal_region_split), dus
+  # hoeft hij niet meer uit de noemer van een cel te komen. Dat verschil is
+  # zichtbaar: de noemer telde alleen de gepubliceerde categorieen mee, terwijl
+  # n_split de hele groep telt -- ook de huishoudens zonder enkele risicofactor
+  # en de cellen die onderdrukt zijn. Een parquet van voor die levering heeft de
+  # kolom niet; dan blijft het de oude noemer.
+  groeps_n <- function(rows) {
+    if (HEEFT_N_SPLIT && !all(is.na(rows$n_split))) return(rows$n_split[which(!is.na(rows$n_split))[1]])
+    rows$denominator[1]
+  }
 
   # De matrix achter de tabel: 8 deelgebieden x de waarden van de risicoscore,
   # plus per deelgebied zijn eigen noemer (n). Een ontbrekende rij blijft NA en
@@ -1194,7 +1372,7 @@ server <- function(input, output, session) {
       rows <- d[split_level == lev[[k]] & variable_value %in% waarden]
       if (nrow(rows) == 0) next
       m[k, rows$variable_value] <- rows$waarde
-      n[[k]] <- rows$denominator[1]
+      n[[k]] <- groeps_n(rows)
     }
     list(m = m, n = n, waarden = waarden)
   })
@@ -1219,7 +1397,7 @@ server <- function(input, output, session) {
       collect() |>
       as.data.table()
 
-    add_display(d, input$r_weergave)
+    add_display(d, r_weergave())
   })
 
   risico_matrix <- reactive({
@@ -1234,9 +1412,7 @@ server <- function(input, output, session) {
       rows <- d[split_level == lev[[k]] & variable_name %in% factoren]
       if (nrow(rows) == 0) next
       m[k, rows$variable_name] <- rows$waarde
-      # De noemer van elke cel is het deelgebied zelf, en die is voor elke
-      # risicofactor dezelfde -- dus dat is meteen de omvang van de groep.
-      n[[k]] <- rows$denominator[1]
+      n[[k]] <- groeps_n(rows)
     }
     list(m = m, n = n)
   })
@@ -1251,7 +1427,7 @@ server <- function(input, output, session) {
     kleuring <- if (venn_zonder_score()) "verdeling over de ondersteuningscombinaties"
                 else sprintf("%s = %s", pretty_var(input$r_venn_var), input$r_venn_val %||% "")
     sprintf("Ondersteuning naar combinatie | %s | %s (%s) | %s | %s",
-            kleuring, pretty_metric(input$r_metric), eenheid(input$r_weergave),
+            kleuring, pretty_metric(input$r_metric), eenheid(r_weergave()),
             nm %||% input$r_regio, input$r_venn_jaar)
   })
 
@@ -1271,7 +1447,7 @@ server <- function(input, output, session) {
 
   output$venn <- renderUI({
     # No title: the heading above the figure already carries it on screen.
-    HTML(venn_svg(venn_vals(), input$r_weergave,
+    HTML(venn_svg(venn_vals(), r_weergave(),
                   names(COMBO_GROUP_LABELS[[input$populatie]]),
                   COMBO_GROUP_LABELS[[input$populatie]],
                   # Cosmetic input: fall back rather than block the figure on it.
@@ -1294,13 +1470,16 @@ server <- function(input, output, session) {
       div(class = "chart-title", style = "margin-top: 18px;",
           "Dezelfde acht groepen per waarde van de risicoscore"),
       div(class = "note", style = "margin-bottom: 8px;",
-          if (input$r_weergave == "rel")
+          if (r_weergave() == "rel")
             paste("Per rij verdeeld over de waarden van de risicoscore; elke rij telt op tot",
-                  "100%. n is de omvang van die groep.")
+                  "100%.")
           else
-            "Aantallen per groep en risicowaarde. n is de omvang van die groep.",
+            "Aantallen per groep en risicowaarde.",
+          " n is de gepubliceerde omvang van die groep (het aantal huishoudens/",
+          "ouderen erin), niet de som van de rij: een onderdrukte cel zit wel in n",
+          " maar niet in de rij.",
           " Een streepje betekent onvoldoende waarnemingen, geen nul."),
-      HTML(venn_matrix_html(mm$m, mm$n, input$r_weergave,
+      HTML(venn_matrix_html(mm$m, mm$n, r_weergave(),
                             names(COMBO_GROUP_LABELS[[input$populatie]]),
                             COMBO_GROUP_LABELS[[input$populatie]],
                             var_label = pretty_var(input$r_venn_var))))
@@ -1325,13 +1504,16 @@ server <- function(input, output, session) {
       div(class = "chart-title", style = "margin-top: 22px;",
           "Risicofactoren per ondersteuningsgroep"),
       div(class = "note", style = "margin-bottom: 8px;",
-          if (input$r_weergave == "rel")
+          if (r_weergave() == "rel")
             "Per cel: het aandeel van die ondersteuningsgroep waarbij deze risicofactor speelt."
           else
             "Per cel: het aantal binnen die ondersteuningsgroep waarbij deze risicofactor speelt.",
-          " Rijen tellen hier niet op tot 100%: een huishouden/oudere kan meerdere",
-          " risicofactoren tegelijk hebben. Een streepje betekent onvoldoende waarnemingen."),
-      HTML(venn_matrix_html(rm$m, rm$n, input$r_weergave,
+          " Rijen tellen hier niet op tot n, om twee redenen: een huishouden/oudere",
+          " kan meerdere risicofactoren tegelijk hebben (en telt dan in meer dan",
+          " \u00e9\u00e9n kolom mee), en n is de hele groep \u2014 inclusief wie",
+          " geen enkele risicofactor heeft. Een streepje betekent onvoldoende",
+          " waarnemingen."),
+      HTML(venn_matrix_html(rm$m, rm$n, r_weergave(),
                             names(COMBO_GROUP_LABELS[[input$populatie]]),
                             COMBO_GROUP_LABELS[[input$populatie]],
                             var_label = "Risicofactor",
@@ -1381,6 +1563,10 @@ server <- function(input, output, session) {
     # De twee noemers naast elkaar, zodat in de export na te rekenen is welk
     # aandeel er getoond werd en wat het andere geweest zou zijn.
     if ("regio_totaal" %in% names(d)) uit[, noemer_regiototaal := d$regio_totaal]
+    # De gepubliceerde omvang van de regio x uitsplitsing waar deze rij bij
+    # hoort: sinds output_1b een kolom in de levering, en de noemer van elk
+    # aandeel waar de metric huishoudens/ouderen telt.
+    if ("n_split" %in% names(d)) uit[, n_groep := d$n_split]
     uit[]
   }
 
@@ -1391,7 +1577,7 @@ server <- function(input, output, session) {
     content  = function(file) write_xlsx(
       list(kaart = export_cols(kaart_data()),
            onderliggend = export_cols(add_display(met_regio_totaal(copy(kaart_rijen())),
-                                                  input$k_weergave))), file)
+                                                  k_weergave()))), file)
   )
 
   # De kaart als plaatje. Leaflet tekent in de browser en laat zich hier niet
@@ -1405,10 +1591,10 @@ server <- function(input, output, session) {
       laag <- kaart_geo()
       scope <- input$k_scope %||% SCOPE_ALLES
       p <- choropleth_ggplot(
-        laag, kaart_domein(), input$k_weergave,
+        laag, kaart_domein(), k_weergave(),
         titel = sprintf("%s = %s", pretty_var(input$k_var), input$k_val),
         ondertitel = sprintf("%s (%s) | %s | %s%s",
-                             pretty_metric(input$k_metric), eenheid(input$k_weergave),
+                             pretty_metric(input$k_metric), eenheid(k_weergave()),
                              input$k_jaar, input$k_niveau,
                              if (identical(scope, SCOPE_ALLES)) ", heel Amsterdam"
                              else sprintf(", stadsdeel %s", scope)),
@@ -1511,7 +1697,7 @@ server <- function(input, output, session) {
     filename    = function() sprintf("dynamo_venn_%s_%s.svg", input$r_venn_jaar, Sys.Date()),
     contentType = "image/svg+xml",
     content = function(file) {
-      svg <- venn_svg(venn_vals(), input$r_weergave,
+      svg <- venn_svg(venn_vals(), r_weergave(),
                       names(COMBO_GROUP_LABELS[[input$populatie]]),
                       COMBO_GROUP_LABELS[[input$populatie]],
                       palette = input$r_venn_pal %||% names(VENN_PALETTES)[1],

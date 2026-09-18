@@ -26,6 +26,8 @@ ROOT <- if (length(script_arg)) {
   normalizePath(".")
 }
 
+source(file.path(ROOT, "utils", "splits.R"))
+source(file.path(ROOT, "utils", "metrics.R"))
 source(file.path(ROOT, "data-prep", "derive_support_splits.R"))
 
 PQ_DIR <- file.path(ROOT, "data", "app_data", "indicators.parquet")
@@ -35,7 +37,12 @@ if (!dir.exists(PQ_DIR)) {
 
 message("Reading ", PQ_DIR, " ...")
 dt <- as.data.table(collect(open_dataset(PQ_DIR)))
-message(sprintf("  %s rows", format(nrow(dt), big.mark = ".")))
+message(sprintf("  %s rows", format(nrow(dt), big.mark = ".", decimal.mark = ",")))
+
+if (!"n_split" %in% names(dt)) {
+  stop("Deze parquet is nog van voor levering output_1b (geen n_split-kolom).\n",
+       "  Draai eerst data-prep/01_build_app_data.R op data/output_data/output_1b/.")
+}
 
 # open_dataset() geeft de partitiekolommen als factor terug; de afleiding
 # vergelijkt ze met karakterwaarden (SUPPORT_COMBO_VAR[population]), en een
@@ -47,19 +54,25 @@ for (cl in c("population", "region_level")) {
 n_voor <- nrow(dt)
 dt <- add_support_derivations(dt)
 message(sprintf("Derived support splits: %s -> %s rows (+%s)",
-                format(n_voor, big.mark = "."), format(nrow(dt), big.mark = "."),
-                format(nrow(dt) - n_voor, big.mark = ".")))
+                format(n_voor, big.mark = ".", decimal.mark = ","), format(nrow(dt), big.mark = ".", decimal.mark = ","),
+                format(nrow(dt) - n_voor, big.mark = ".", decimal.mark = ",")))
 
-# Zelfde noemer als in 01_build_app_data.R: de som over de
-# variable_value-categorieen binnen dezelfde slice.
+# Zelfde noemer als in 01_build_app_data.R: exact uit n_split waar de metric de
+# populatie-eenheid telt, anders de som over de variable_value-categorieen
+# binnen dezelfde slice, en geen noemer voor een gemiddelde.
 message("Recomputing share denominators ...")
-dt[, denominator := sum(metric_value, na.rm = TRUE),
+dt[, denominator_som := sum(metric_value, na.rm = TRUE),
    by = .(population, region_level, region_code, year,
           variable_name, metric_name, split_var, split_level)]
+dt[, denominator := fifelse(metric_telt_populatie(metric_name) & !is.na(n_split),
+                            n_split, denominator_som)]
+dt[metric_is_gemiddelde(metric_name), denominator := NA_real_]
+dt[, denominator_som := NULL]
 
 setcolorder(dt, c("population", "region_level", "region_code", "region_name", "stadsdeel",
                   "year", "variable_name", "variable_value", "metric_name",
-                  "metric_value", "n_totaal", "denominator", "split_var", "split_level"))
+                  "metric_value", "n_totaal", "n_split", "denominator",
+                  "split_var", "split_level", "afgeleid"))
 
 message("Writing ...")
 unlink(PQ_DIR, recursive = TRUE)
@@ -72,7 +85,7 @@ write_dataset(
 )
 
 sz <- sum(file.info(list.files(PQ_DIR, recursive = TRUE, full.names = TRUE))$size)
-message(sprintf("Done. %s rows, %.1f MB on disk.", format(nrow(dt), big.mark = "."), sz / 1024^2))
+message(sprintf("Done. %s rows, %.1f MB on disk.", format(nrow(dt), big.mark = ".", decimal.mark = ","), sz / 1024^2))
 
 message("\nSanity check -- Amsterdam 2024, aandeel met een ondersteuningssignaal:")
 print(dt[population == "huishoudens met kinderen" & region_level == "gemeente" &

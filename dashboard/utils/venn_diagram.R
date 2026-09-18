@@ -91,7 +91,8 @@ venn_luminance <- function(hex) {
 #'   C, AB, AC, BC, ABC. NA renders as "onvoldoende waarnemingen" (same
 #'   suppression convention as the map), shortened to VENN_SUPPRESSED_MARK in
 #'   the region itself.
-#' @param weergave "rel" (percentage) or "abs" (count) -- affects number
+#' @param weergave "rel" (percentage), "abs" (count) or "gem" (the average of
+#'   an average-metric, shown with decimals) -- affects number
 #'   formatting and the legend's unit caption.
 #' @param group_codes Character vector of length 3, e.g.
 #'   c("O_MPG1","O_MPG2","O_MPG3") -- the raw codes shown on the circles.
@@ -123,6 +124,7 @@ venn_svg <- function(vals, weergave, group_codes, group_labels,
   fmt <- function(v) {
     if (is.na(v)) "onvoldoende waarnemingen"
     else if (weergave == "rel") sprintf("%.1f%%", v)
+    else if (weergave == "gem") sprintf("%.2f", v)
     else format(round(v), big.mark = ".", decimal.mark = ",")
   }
   # Short form for the inline SVG label: some regions (the triple overlap
@@ -135,6 +137,7 @@ venn_svg <- function(vals, weergave, group_codes, group_labels,
   # need none of fmt()'s one-decimal treatment.
   fmt_break <- function(v) {
     if (weergave == "rel") sprintf("%g%%", v)
+    else if (weergave == "gem") sprintf("%.2f", v)
     else format(round(v), big.mark = ".", decimal.mark = ",", trim = TRUE, scientific = FALSE)
   }
 
@@ -354,7 +357,8 @@ venn_svg <- function(vals, weergave, group_codes, group_labels,
     paste0(
       sprintf('<text x="%g" y="%g" font-size="10" font-weight="600" fill="%s" font-family="%s" letter-spacing="0.2">%s</text>',
               BAR_X, unit_y, muted, VENN_FONT,
-              venn_esc(if (weergave == "rel") "Aandeel (%)" else "Aantal")),
+              venn_esc(if (weergave == "rel") "Aandeel (%)"
+                       else if (weergave == "gem") "Gemiddelde" else "Aantal")),
       swatches,
       sprintf('<rect x="%g" y="%g" width="%g" height="%g" rx="2" fill="none" stroke="%s" stroke-opacity="0.35" stroke-width="1"/>',
               BAR_X, bar_y, BAR_W, BAR_H, muted),
@@ -457,10 +461,12 @@ venn_region_labels <- function(group_codes, group_labels) {
 #' @param m Numerieke matrix met 8 rijen (namen = de sleutels van
 #'   venn_levels(), in die volgorde) en een kolom per risicowaarde
 #'   (kolomnamen = de waarden zelf). NA = onderdrukt.
-#' @param n Numerieke vector van 8, het totaal per deelgebied over de
-#'   risicowaarden (de noemer achter een percentage). NA waar onbekend.
-#' @param weergave "rel" of "abs" -- bepaalt of de cellen percentages of
-#'   aantallen zijn, net als in de figuur.
+#' @param n Numerieke vector van 8, de omvang van elk deelgebied -- sinds
+#'   levering output_1b de gepubliceerde groepsgrootte (`n_split`), en dus
+#'   inclusief wie in geen van de kolommen valt. Een rij telt daarom niet op tot
+#'   n. NA waar onbekend.
+#' @param weergave "rel", "abs" of "gem" -- bepaalt of de cellen percentages,
+#'   aantallen of gemiddelden zijn, net als in de figuur.
 #' @param group_codes,group_labels Zoals bij venn_svg().
 #' @param var_label Omschrijving boven de waardekolommen.
 #' @param kolomlabels Korte koppen boven de kolommen; standaard de kolomnamen
@@ -488,6 +494,7 @@ venn_matrix_html <- function(m, n, weergave, group_codes, group_labels,
                      VENN_SUPPRESSED_MARK))
     }
     if (rel) sprintf("%.1f%%", v)
+    else if (identical(weergave, "gem")) sprintf("%.2f", v)
     else venn_esc(format(round(v), big.mark = ".", decimal.mark = ","))
   }
   rel <- weergave == "rel"

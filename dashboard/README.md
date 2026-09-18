@@ -30,7 +30,8 @@ shiny::runApp("app.R")
   (Engels, net als de panelen zelf — die komen ongewijzigd uit `shiny_dashboard_template`).
 - `data-prep/` — eenmalige scripts die een RA-levering omzetten naar `data/app_data/`,
   inclusief de afgeleide ondersteuningsvariabelen (zie hieronder).
-- `data/output_data/` — ruwe RA-leveringen (niet in git).
+- `data/output_data/output_1b/` — de ruwe RA-levering (niet in git). `output_1b` is de
+  huidige; er wordt nergens meer uit `output_1a` gelezen.
 - `data/geo/` — Amsterdamse geometrie (buurten, wijken, gebieden).
 - `utils/` — gedeelde helpers uit `shiny_dashboard_template`, inclusief de think-cell
   exportlaag. Die is aangesloten op het lijndiagram op **Per regio** (ruwe xlsx,
@@ -50,14 +51,12 @@ ondersteuningsvariabelen, berekend uit `O_MPG_combination`/`O_OUD_combination` (
   (0-3)`. Daar is de noemer de hele populatie: *x% van de gezinnen gebruikt een vorm van
   ondersteuning* (Amsterdam 2024: 42,9%).
 
-Een afgeleide cel verschijnt alleen als alle onderliggende combinaties gepubliceerd zijn —
-anders staat er "onvoldoende waarnemingen", nooit een te laag getal. `Ondersteuningssignaal`
-is daardoor op elk regioniveau gevuld (99% van de buurten en wijken). `Aantal vormen
-ondersteuning` vraagt alle acht combinaties tegelijk en haalt dat op gemeente-, stadsdeel- en
-gebiedsniveau (100/83/65%), op ongeveer een kwart van de wijken en nauwelijks op buurtniveau.
-Dat is de vorm van de levering, niet de berekening: de combinaties staan er alleen gekruist
-met een risicoscore. Een ongekruiste combinatietelling in de volgende RA-levering lost het op
-— zie PLAN.md §7.
+Een afgeleide *celwaarde* verschijnt alleen als alle onderliggende combinaties gepubliceerd
+zijn — anders staat er "onvoldoende waarnemingen", nooit een te laag getal. De *omvang* van
+elke groep komt sinds levering `output_1b` rechtstreeks uit de kolom `n_totaal_region_split` en
+is dus exact; die hangt niet van de risicowaarde af, dus één gepubliceerde rij van een
+combinatieniveau is genoeg. Dat is precies waar `Aantal vormen ondersteuning` op wijk- en
+buurtniveau eerder op stukliep (zie PLAN.md §7 en §9).
 
 De venn op **Per regio** heeft een eigen indicatorkeuze. Standaard staat die op **(alle)**:
 dan kleurt hij naar de verdeling zelf — welk deel van de populatie in welk deelgebied zit —
@@ -66,6 +65,21 @@ aandeel daarvan binnen elk deelgebied. Eronder staan twee tabellen: de acht deel
 de categorieën van de gekozen score, en de acht deelgebieden × de losse risicofactoren
 (R1…R9). Let op: `R1` (armoede) loopt tot 2023 en `R9` (betalingsachterstand zorgverzekering)
 tot 2022 — een lege kolom is daar geen onderdrukking maar een bronregister dat niet doorloopt.
+
+## Uitsplitsen naar meerdere variabelen
+
+Een rij in `output_1b` kan naar meer dan één variabele tegelijk uitgesplitst zijn, dus "Splits
+uit naar" (Kaart) en "Splits de lijn uit naar" (Per regio) zijn meerkeuze: leeg betekent niet
+uitsplitsen, en meerdere tegelijk geeft de gekruiste cellen. De levering publiceert niet elke
+denkbare kruising; kies je er een die er niet is, dan zegt het dashboard dat in plaats van een
+lege grafiek te tonen. Zie PLAN.md §9.
+
+## Gemiddelden
+
+`average_score` is een gemiddelde, geen telling. Daar geldt de keuze bij "Weergave" niet — er
+staat altijd het gemiddelde zelf — en optellen kan niet: kies je meerdere waarden of niveaus
+tegelijk, dan valt de kaart leeg met de reden erbij, in plaats van dat er twee gemiddelden bij
+elkaar worden opgeteld.
 
 ## Kaart
 

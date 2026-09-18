@@ -12,8 +12,11 @@ Source data is CBS microdata output from the **CBS Remote Access environment**. 
 aggregated, non-identifiable output ever leaves that environment and lands here — never
 person-level records.
 
-- `data/output_data/output_1a/` — raw RA deliveries, **never committed** (330 MB CSV + 19 MB
-  xlsx). Treat as read-only inputs.
+- `data/output_data/output_1b/` — raw RA deliveries, **never committed** (hundreds of MB).
+  Treat as read-only inputs. `output_1b` is the current one; `output_1a` is superseded and
+  nothing reads it any more. Which delivery a built parquet came from is written next to it
+  (`data/app_data/source_info.rds`) rather than hard-coded in `app.R`, so a new delivery only
+  needs `DELIVERY_ID` in `data-prep/01_build_app_data.R` changed.
 - `data/geo/` — Amsterdam geometry (buurten / wijken / gebieden), copied from
   `dashboard_client/data-prep/geo/`.
 - `data/app_data/` — the prep step's parquet + geo output; this is what the app reads, and what
@@ -42,11 +45,37 @@ waarnemingen", never as 0** — the distinction matters and collapsing it misrea
 These are verified against the actual delivery, not assumed from the output form — check
 `PLAN.md` §2 before changing any aggregation logic.
 
-- **Split variables are marginal: never two at once.** Every row is either a total row (all
-  split columns `all`) or a single-variable marginal. This is why the prep step can reshape
-  the wide split columns into one `split_var`/`split_level` pair, and why the UI offers one
-  "split by" at a time.
+One caveat on the `output_1b` items: the raw delivery is gitignored and stays on the analyst's
+machine, so they were **not** re-measured the way the `output_1a` figures in PLAN.md §2 were.
+They follow from what that delivery adds, and the prep step checks them itself rather than
+trusting them — a missing column, a split column without an `all` value, an `n_split` that
+disagrees with `n_totaal` on a total row, or a separator inside a value all stop the build with
+a message naming the problem. If one of those fires, the assumption is what is wrong, not the
+data.
+
+- **A row can be split by more than one variable at once** (since `output_1b`; `output_1a`
+  never crossed two). `split_var` is therefore a *set* of names and `split_level` the matching
+  set of values, encoded as one string by `utils/splits.R`: names in a fixed order joined with
+  ` | `, values in that same order. A single split is the length-one case, so the long schema
+  and every existing filter (`split_var == "O_MPG_combination"`) still mean exactly what they
+  meant. **Build the key with `split_key()`, never by pasting**: it sorts with
+  `method = "radix"`, and that is load-bearing — plain `sort()` follows the locale's collation,
+  the prep step and the Shiny server need not share one, and a key built under the other
+  collation silently matches no rows at all. Not every crossing is published, so a selection
+  that has no rows is reported as such (`split_key_bestaat()`), never left as an empty chart.
+- Which columns are split variables is read from the delivery's header, not listed in code:
+  everything outside `DELIVERY_FIXED_COLS` is a split variable, and a candidate column with no
+  `all` value anywhere stops the build (that is a new fixed column, not a split).
 - `n_totaal_population_in_region` is constant per region × year.
+- **`n_totaal_region_split` (in the parquet: `n_split`) is the published size of each
+  region × split cell**, new in `output_1b`. It is the exact denominator for metrics that count
+  the population unit (`n_households`, `n_ouderen_with_var_value`) and it replaced a pile of
+  back-calculation — see `utils/metrics.R` for which metric may be summed, divided, or neither.
+  It does **not** apply to the `n_kinderen_*` metrics: those count children against a household
+  denominator, so their denominator stays the sum over the `variable_value` categories.
+- **`average_score` is a mean, not a count.** It cannot be summed and has no denominator, so
+  `denominator` is `NA` for those rows, the "Weergave" choice does not apply, and the map
+  refuses to aggregate it (it blanks out and says why) instead of adding averages together.
 - Category values sum to `n_totaal` only for `metric_name = n_households`. The `n_kinderen_*`
   metrics count children against a household denominator — don't divide them by `n_totaal`.
 - Region boundaries are back-assigned to one vintage across all years (Weesp appears in
@@ -62,20 +91,30 @@ These are verified against the actual delivery, not assumed from the output form
 - The 8 `O_MPG_combination`/`O_OUD_combination` levels **partition the population** — their sum
   matches the total row up to rounding. That is what makes the derived
   `ondersteuningssignaal` / `aantal_ondersteuningsvormen` splits and the
-  `O_*_ondersteuning` / `O_*_aantal_vormen` indicators valid (PLAN.md §7). Suppression is a
-  **missing row**, not an `NA` — the lowest `metric_value` anywhere in the delivery is 10 — so
-  any sum over combination levels silently counts a suppressed cell as zero. Every derived cell
-  is therefore written only when all of its building blocks are published, and the "wel" level
-  comes from *total − none* rather than summing the other seven. Don't relax that without
-  documenting the resulting error margin.
+  `O_*_ondersteuning` / `O_*_aantal_vormen` / `O_*_combinatie` indicators valid (PLAN.md §7, §9).
+  Suppression is a **missing row**, not an `NA` — the lowest `metric_value` anywhere in the
+  delivery is 10 — so any sum over combination levels silently counts a suppressed cell as zero.
+  A derived *cell value* is therefore written only when all of its building blocks are
+  published, and the "wel" level comes from *reference row − none* rather than summing the other
+  seven. Don't relax that without documenting the resulting error margin.
+- **Group sizes, unlike cell values, are now published.** `n_split` does not depend on the risk
+  value, so one surviving row of a combination level gives its exact size — where the old route
+  needed a complete series of risk categories. That is what lifts `*_aantal_vormen` below
+  gebied level. The median-over-usable-sources reconstruction survives only for metrics that
+  do not count the population unit (`support_indicator_reconstructed()`); that is also the only
+  place `SUPPORT_ROUND_TOL` still matters.
 - **A risk score can have fewer categories in one region than nationally, with nothing
   suppressed** — in Geuzenveld 2024 `R_MPG1_armoede_hh` has only value `0`, counting the whole
   wijk. Such a source is the *best* one available (no cross-tabulation, so no suppression in
   its level rows). Judging completeness against the national category count throws exactly
   those away; judge it against the source's own total rows instead, with a one-rounding-step
-  tolerance (`SUPPORT_ROUND_TOL`) because everything is rounded to tens and sources therefore
-  land a ten apart. Getting this wrong left `*_aantal_vormen` all but empty below gebied level
-  (PLAN.md §7).
+  tolerance because everything is rounded to tens and sources therefore land a ten apart.
+  Getting this wrong left `*_aantal_vormen` all but empty below gebied level (PLAN.md §7).
+- **Derived rows are flagged** with `afgeleid = TRUE`, because otherwise they cannot be told
+  apart from rows the delivery publishes itself: the refresh in `02_add_derived_splits.R` would
+  delete real rows, and a delivery that starts publishing `aantal_ondersteuningsvormen` would
+  be double-counted. When the delivery publishes one of these splits itself, nothing is derived
+  — the real figure wins.
 
 ## Structure
 
@@ -88,6 +127,13 @@ These are verified against the actual delivery, not assumed from the output form
   the shared derivation of the support splits/indicators (PLAN.md §7), called by both `01_`
   and `02_` so the two routes cannot drift apart; it is the one `data-prep/` file the test
   suite covers.
+- `utils/splits.R` — Dynamo-specific: the encoding of a composite `split_var`/`split_level`,
+  shared by `app.R`, `data-prep/` and the tests, so the key the app builds is byte-for-byte the
+  key the prep step wrote.
+- `utils/metrics.R` — Dynamo-specific: what a metric counts, and therefore whether it may be
+  summed (`metric_is_optelbaar()`) and what its denominator is (`metric_telt_populatie()`).
+  A new counting metric needs adding to `METRIC_POPULATIE_EENHEID` only if it counts the
+  population unit itself; a new average is recognised by its name.
 - `utils/map.R` — Dynamo-specific, like `venn_diagram.R`: everything the map shares between
   the screen and the download.
   - `map_aggregate()` sums the selected combination levels and/or indicator values. **The
@@ -96,6 +142,11 @@ These are verified against the actual delivery, not assumed from the output form
     so adding it up would double-count and halve the percentage; across `split_level` each
     level has its *own* denominator and those do add up. Hence: sum over the *unique* split
     levels.
+    An average (`average_score`) is the exception: it cannot be summed and cannot be weighted
+    from this slice, so `optelbaar = FALSE` blanks the whole map as soon as more than one cell
+    is requested — deliberately including the regions that happen to have only one published,
+    because otherwise one region would show an average over two groups and its neighbour one
+    over a single group, side by side on the same map.
     A region missing one of the requested cells **keeps its number** and is marked
     `compleet = FALSE`; the map dashes its border, names the count above the map, and the
     tooltip says how many of the requested parts were published ("1 of 3" means something very
@@ -106,7 +157,10 @@ These are verified against the actual delivery, not assumed from the output form
     `data-prep/derive_support_splits.R`: there the sum *is* the denominator of a percentage, so
     half a partition would make that percentage too high. Here the denominator is summed along
     with the numerator, so a missing cell lowers both and shifts the ratio far less.
-  - `map_noemer()` — which denominator a chosen "weergave" uses. The map offers two shares:
+  - `map_noemer()` — which denominator a chosen "weergave" uses. Alongside `"abs"` there is
+    `"gem"`, the average of an `average_score` metric: neither a share nor a count, so it gets
+    decimals and no `%`, and `map_is_aandeel()`/`map_is_gemiddelde()` are what every formatter
+    keys off. The map offers two shares:
     *van regiototaal* (everyone in that buurt/wijk/gebied/stadsdeel) and *binnen groep* (the
     sum over the indicator's categories within the selection, the PLAN.md §6 convention and
     the only one the app had before). The gap is large enough that it must never be implicit —
@@ -221,19 +275,22 @@ testthat::test_dir("tests")
 
 Run the suite after changing anything in `utils/`.
 
-`tests/testthat.R` sources `data/metadata/brand_colors.R` and `utils/venn_diagram.R` and loads
-`leaflet` — `venn_svg()` needs `ahti_branding` and `colorNumeric()`, which the app itself gets
+`tests/testthat.R` sources every `utils/` file the tests touch — including `chart_downloads.R`,
+without which `test-chart_downloads.R` cannot find the module it tests. It also sources
+`data/metadata/brand_colors.R` and `utils/venn_diagram.R` and loads `leaflet` — `venn_svg()` needs `ahti_branding` and `colorNumeric()`, which the app itself gets
 from `app.R`. It also sources `data-prep/derive_support_splits.R` and loads `data.table`: the
 derivation runs in the prep step rather than in `utils/`, but the CBS rule it enforces (a
 suppressed cell is never summed as zero) is worth a test.
 
-The suite is **green**: measured **PASS 724 | FAIL 0 | SKIP 11** on a Linux box with `zip` on
+The suite is **green**: measured **PASS 811 | FAIL 0 | SKIP 12** on a Linux box with `zip` on
 PATH and a UTF-8 locale. Treat any failure as real.
 
 Two environment traps, both of which produce failures that have nothing to do with the code:
 
 - **`zip` must be on PATH**, or every slide/favorites ZIP path fails (that was the old "FAIL 36"
   baseline). The template's `.claude/launch.json` works around it with a `zip-shim` directory.
+- **`filelock` is optional but noisy**: without it every favorites/templates write warns about
+  running unlocked. Those warnings are environmental, not failures.
 - **Run under a UTF-8 locale.** Under `C`, three `test-favorites.R` checks fail on the middot
   and ellipsis in their expected strings — a multibyte character is no longer one character as
   far as R is concerned. `LANG=C.UTF-8` is enough. This is the same trap `VENN_SUPPRESSED_MARK`

@@ -57,6 +57,13 @@ CBS-output ontbreken (die bevat alleen codes).
 
 ## 2. De data, geverifieerd
 
+> **Deze paragraaf beschrijft levering `output_1a` (09-09-2026).** De getallen hieronder zijn
+> op die levering gemeten. `output_1b` heeft dezelfde opzet, maar drie dingen zijn anders en
+> die raken de aannames hier: er zijn meer splitvariabelen, een rij mag naar **meer dan één
+> variabele tegelijk** uitgesplitst zijn, en er is een kolom `n_totaal_region_split` plus een
+> metric `average_score` bij gekomen. Zie **§9**. Wat daar botst met een aanname hieronder is
+> per punt aangetekend.
+
 ### `OT_HHKIND.csv` — 3.032.924 rijen, 330 MB, ASCII
 | kolom | waarden |
 |---|---|
@@ -83,7 +90,8 @@ CBS-output ontbreken (die bevat alleen codes).
 
 ### Drie structurele eigenschappen die het ontwerp bepalen
 
-**(a) Splitvariabelen zijn marginaal — nooit twee tegelijk.**
+**(a) Splitvariabelen zijn marginaal — nooit twee tegelijk.** ⚠️ *Geldt niet meer vanaf
+`output_1b`; zie §9.*
 Van de 3.032.924 HHKIND-rijen hebben er 2.672.741 precies één splitvariabele ≠ `all` en
 360.183 er geen. Nul rijen hebben er twee. Idem voor OUD (379.472 / 47.616 / 0).
 Een rij is dus óf een **totaalrij** (alles `all`) óf een **marginale uitsplitsing** over één
@@ -94,6 +102,9 @@ Geverifieerd: 0 van de 3.945 regio-jaarcombinaties heeft meer dan één waarde. 
 stabiele noemer.
 
 **(c) De categorieën tellen alleen op tot `n_totaal` bij `metric_name = n_households`.**
+*Sinds `output_1b` hoeft dat niet meer teruggerekend te worden: `n_totaal_region_split` geeft
+de omvang van elke regio × uitsplitsing rechtstreeks. Het verschil tussen teller- en
+noemer-eenheid blijft wel bestaan, zie §9.*
 Voor die metric is `sum(variable_value ∈ {0,1,2,3plus}) ≈ n_totaal` (ratio ≈ 1,0 bij 33.940
 van ~39.000 groepen; afwijkingen door afronding op 10 en onderdrukking). Voor de
 `n_kinderen_*`-metrics telt de teller **kinderen** en de noemer **huishoudens** — dan is
@@ -568,3 +579,103 @@ Andersom zou de melding stilletjes kunnen wegvallen.
 
 **Dit bestand hoort bij elke push mee** (zie CLAUDE.md, Conventions). Blijft het achter, dan
 concludeert iedereen dat er niets gebeurd is.
+
+---
+
+## 9. Levering `output_1b`
+
+De tweede RA-levering heeft dezelfde opzet als `output_1a` — zelfde lange schema, zelfde
+regioniveaus, zelfde uitvoerregels — maar drie dingen zijn anders, en die drie raken elk een
+aanname uit §2.
+
+### (a) Een rij mag naar meer dan één variabele tegelijk uitgesplitst zijn
+
+§2(a) gold voor `output_1a`: elke rij was óf een totaalrij óf een marginaal van één variabele.
+Dat is vervallen, en er zijn bovendien meer splitvariabelen bij gekomen.
+
+`split_var` is daarmee geen enkele naam meer maar een **verzameling** namen, en `split_level`
+de bijbehorende verzameling waarden. De codering staat in `utils/splits.R`: de namen in een
+vaste volgorde aan elkaar geplakt met ` | `, de waarden in precies diezelfde volgorde. Een
+enkelvoudige uitsplitsing is daar het geval van lengte één van, dus het lange schema blijft
+zoals het was en elke bestaande filter (`split_var == "O_MPG_combination"`) selecteert nog
+steeds precies wat hij selecteerde: de rijen die *alleen* naar de combinatie zijn uitgesplitst.
+
+Twee dingen die daarbij makkelijk misgaan:
+
+- **De volgorde moet locale-onafhankelijk zijn.** `sort()` volgt de collatie van de locale, en
+  de prep-stap draait niet op dezelfde machine als de Shiny-server (die onder `C` kan staan).
+  Onder `C` komt `O_MPG_combination` vóór `geslacht`, onder een Nederlandse locale andersom —
+  en dan bouwt de app een sleutel die niet in de parquet staat en blijft de selectie zonder
+  enige melding leeg. Overal waar de sleutel gebouwd wordt staat daarom `method = "radix"`.
+- **Niet elke kruising bestaat.** De levering publiceert een deel van de combinaties. Kiest
+  iemand er een die er niet is, dan zegt het dashboard dat met zoveel woorden in plaats van
+  een lege grafiek te tonen (`split_key_bestaat()`).
+
+In de UI zijn "Splits uit naar" (Kaart) en "Splits de lijn uit naar" (Per regio) daarom
+meerkeuze geworden; leeg betekent niet uitsplitsen. Welke splitvariabelen er zijn komt uit de
+data zelf, dus een levering met méér uitsplitsingen vraagt geen codewijziging: de prep-stap
+leest de kop van het bestand en behandelt elke kolom die niet in `DELIVERY_FIXED_COLS` staat
+als splitvariabele (en valt hard om als zo'n kolom nergens `all` bevat — dat is dan geen
+uitsplitsing maar een nieuwe vaste kolom).
+
+### (b) `n_totaal_region_split`: de groepsomvang staat er nu in
+
+De kolom geeft het aantal huishoudens/ouderen in die regio × uitsplitsing, en heet in de
+parquet `n_split` (net zoals `n_totaal_population_in_region` er `n_totaal` heet). Daarmee
+vervalt een flink stuk terugrekenwerk:
+
+- **De noemer van een aandeel.** Voor metrics die de populatie-eenheid tellen
+  (`n_households`, `n_ouderen_with_var_value`) is `denominator` nu gewoon `n_split`. De oude
+  regel — de som over de `variable_value`-categorieën binnen de slice, §6 — viel te laag uit
+  zodra één categorie onderdrukt was, en maakte elk percentage dus te hoog. Voor de
+  `n_kinderen_*`-metrics blijft die som de enige kloppende noemer: `n_split` telt huishoudens
+  en die metrics tellen kinderen (§2c).
+- **De afgeleide ondersteuningsvariabelen (§7).** De omvang van elk combinatieniveau is nu een
+  gepubliceerd getal in plaats van een mediaan over "bruikbare bronnen" met een
+  afrondingsmarge. Die hele constructie is weg voor de populatiemetrics. Belangrijker nog voor
+  de dekking: de oude route had een *complete reeks* risicocategorieën nodig om een
+  niveautotaal te kunnen optellen, terwijl `n_split` niet van de risicowaarde afhangt — één
+  gepubliceerde rij van dat niveau volstaat. Dat is precies waar `*_aantal_vormen` op
+  buurt- en wijkniveau op stukliep (§7, "De harde grens").
+- **De n-kolom onder de venn.** Die was de noemer van een cel en telde dus alleen de
+  gepubliceerde categorieën mee; nu is het de omvang van de groep zelf, inclusief wie in geen
+  enkele kolom valt. Een rij telt daarom niet op tot n — dat staat er nu ook onder.
+
+Wat níét verandert: de onderdrukkingsregel. `n_split` maakt de *noemers* exact, maar de
+celwaarden blijven gekruist met de risicowaarde en dus onderdrukt onder de 10. Een afgeleide
+celwaarde wordt nog steeds alleen weggeschreven als elke bouwsteen eronder gepubliceerd is, en
+"wel" komt nog steeds uit *referentierij − none-rij* in plaats van uit de som van de zeven.
+
+De prep-stap controleert zijn eigen aanname: op een totaalrij hoort `n_split` gelijk te zijn
+aan `n_totaal`, en wijkt dat af dan zegt hij dat hardop.
+
+### (c) `average_score`: een metric die geen telling is
+
+Nieuw in `metric_name`. Een gemiddelde is niet optelbaar (de som van twee gemiddelden is geen
+gemiddelde) en niet deelbaar (een aandeel van een gemiddelde bestaat niet). `utils/metrics.R`
+maakt dat expliciet, en het dashboard doet er drie dingen mee:
+
+1. De keuze bij "Weergave" geldt niet; er staat altijd het gemiddelde zelf, met decimalen, en
+   dat staat onder de knop.
+2. `denominator` is `NA` voor deze rijen — er is niets om tegen af te zetten.
+3. De kaart telt hem niet op. Worden er meerdere waarden of niveaus geselecteerd, dan valt de
+   kaart leeg met de reden erbij, in plaats van een opgeteld getal te tonen. Bewust ook geen
+   waarde voor de regio's waar toevallig maar één cel gepubliceerd is: dan zou de ene regio
+   een gemiddelde over twee groepen tonen en de volgende over één, naast elkaar op dezelfde
+   kaart.
+
+Een volgend gemiddelde (`average_*`, `mean_*`, `gemiddelde_*`) wordt aan zijn naam herkend, zodat
+het niet stilzwijgend als telling behandeld wordt.
+
+### Wat er na de levering nog moet gebeuren
+
+De ruwe levering staat lokaal (`data/output_data/output_1b/`, gitignored) en gaat nooit mee in
+git, dus de parquet moet handmatig opnieuw gebouwd worden:
+
+```r
+Rscript data-prep/01_build_app_data.R
+```
+
+en het resultaat (`data/app_data/`) wordt gecommit. Tot dat gebeurd is draait het dashboard
+door op de oude parquet: dan ontbreekt `n_split`, vallen de noemers terug op de oude
+terugrekening, en zegt een balk bovenaan dat met zoveel woorden.

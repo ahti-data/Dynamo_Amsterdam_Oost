@@ -141,3 +141,74 @@ test_that("alleen 'abs' is geen aandeel", {
   expect_false(map_is_aandeel("abs"))
   for (w in c("rel", "rel_groep", "rel_regio")) expect_true(map_is_aandeel(w))
 })
+
+# -- Levering output_1b: de gepubliceerde groepsomvang en de average-metric ----
+
+cel_n <- function(region_code, split_level, variable_value, metric_value,
+                  denominator, n_split, metric_name = "n_households") {
+  d <- cel(region_code, split_level, variable_value, metric_value, denominator)
+  d[, `:=`(n_split = n_split, metric_name = metric_name)]
+  d[]
+}
+
+rijen_n <- function(...) {
+  d <- data.table::rbindlist(list(...))
+  d[, `:=`(population = "huishoudens met kinderen", region_level = "wijk",
+           region_name = paste0("wijk ", region_code), stadsdeel = "Oost",
+           year = 2024L, variable_name = "R_MPG_totaal")]
+  d[]
+}
+
+test_that("de groepsomvang telt op per uniek splitsniveau, net als de noemer", {
+  d <- rijen_n(cel_n("A", "O_MPG1", "1", 30, 100, 100),
+               cel_n("A", "O_MPG1", "2", 20, 100, 100),
+               cel_n("A", "O_MPG2", "1", 20, 200, 200))
+  uit <- map_aggregate(d, 3)
+  expect_equal(uit$n_split, 300)      # niet 400: O_MPG1 telt een keer
+})
+
+test_that("zonder n_split-kolom blijft de kaart werken", {
+  d <- rijen(cel("A", "O_MPG1", "1", 30, 100))
+  uit <- map_aggregate(d, 1)
+  expect_true(is.na(uit$n_split))
+  expect_equal(uit$metric_value, 30)
+})
+
+test_that("een gemiddelde wordt niet opgeteld", {
+  # De som van twee gemiddelden is geen gemiddelde, en wegen kan hier niet: de
+  # gewichten zouden de celaantallen per risicowaarde zijn en die staan niet in
+  # deze slice.
+  d <- rijen_n(cel_n("A", "O_MPG1", "1", 2.4, NA, 100, "average_score"),
+               cel_n("A", "O_MPG2", "1", 3.6, NA, 200, "average_score"))
+  uit <- map_aggregate(d, 2, optelbaar = FALSE)
+  expect_true(is.na(uit$metric_value))
+  expect_equal(uit$n_gevonden, 2)
+})
+
+test_that("een gemiddelde van een enkele cel komt er gewoon uit", {
+  d <- rijen_n(cel_n("A", "O_MPG1", "1", 2.4, NA, 100, "average_score"))
+  uit <- map_aggregate(d, 1, optelbaar = FALSE)
+  expect_equal(uit$metric_value, 2.4)
+})
+
+test_that("een regio die toevallig een cel mist levert geen half gemiddelde", {
+  # A heeft beide gevraagde cellen, B alleen de ene. Zou B zijn ene gemiddelde
+  # tonen, dan stonden er twee verschillende dingen naast elkaar op de kaart.
+  d <- rijen_n(cel_n("A", "O_MPG1", "1", 2.4, NA, 100, "average_score"),
+               cel_n("A", "O_MPG2", "1", 3.6, NA, 200, "average_score"),
+               cel_n("B", "O_MPG1", "1", 2.0, NA, 100, "average_score"))
+  uit <- map_aggregate(d, 2, optelbaar = FALSE)[order(region_code)]
+  expect_true(all(is.na(uit$metric_value)))
+  expect_equal(uit$compleet, c(TRUE, FALSE))
+})
+
+test_that("de weergave 'gem' is geen aandeel en geen aantal", {
+  expect_false(map_is_aandeel("gem"))
+  expect_true(map_is_gemiddelde("gem"))
+  expect_false(map_is_aandeel("abs"))
+  expect_true(map_is_aandeel("rel_regio"))
+  expect_true(map_is_aandeel("rel_groep"))
+  expect_true(map_is_aandeel("rel"))
+  # Een gemiddelde heeft geen noemer om tegen af te zetten.
+  expect_null(map_noemer("gem", 100, 200))
+})

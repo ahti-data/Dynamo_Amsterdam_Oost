@@ -40,15 +40,27 @@ MAP_NA_FILL <- "#e0e0e0"
 #' teller, dus een ontbrekende cel maakt beide te laag en verschuift de
 #' verhouding veel minder.
 #'
+#' Een gemiddelde telt niet op. `average_score` is geen aantal, dus de som van
+#' twee cellen is geen getal dat ergens op slaat, en een gewogen gemiddelde kan
+#' hier niet: de gewichten zouden de celaantallen per risicowaarde zijn, en die
+#' zitten niet in deze slice. Met `optelbaar = FALSE` levert een regio daarom
+#' alleen een waarde als er precies een cel *gevraagd* is; bij meer valt de hele
+#' kaart leeg, en de aanroeper zegt erbij waarom (zie `gemiddelde_note()` in
+#' app.R). Bewust niet "een waarde zodra er toevallig maar een cel gepubliceerd
+#' is": dan zou de ene regio een gemiddelde over twee groepen tonen en de
+#' volgende over een, en die twee staan naast elkaar op dezelfde kaart.
+#'
 #' @param d data.table met de opgehaalde slice (een rij per regio x
 #'   splitsniveau x indicatorwaarde).
 #' @param n_cellen Hoeveel rijen een regio moet hebben om compleet te zijn:
 #'   het aantal gekozen splitsniveaus maal het aantal gekozen waarden.
+#' @param optelbaar Mag de metric over cellen opgeteld worden? Zie
+#'   `metric_is_optelbaar()` in utils/metrics.R.
 #' @return data.table met een rij per regio, plus `compleet` (waren alle
 #'   gevraagde cellen gepubliceerd) en `n_gevonden`. `variable_value`/
 #'   `split_level` dragen de gekozen verzameling als tekst, zodat de export zelf
 #'   vertelt wat er opgeteld is.
-map_aggregate <- function(d, n_cellen) {
+map_aggregate <- function(d, n_cellen, optelbaar = TRUE) {
   stopifnot(is.data.table(d))
   if (nrow(d) == 0L) return(d)
 
@@ -56,12 +68,18 @@ map_aggregate <- function(d, n_cellen) {
   # ("O_MPG1 + O_MPG2"), dus daarmee samenvoegen levert onleesbare tekst op.
   samen <- function(x) paste(sort(unique(x)), collapse = ", ")
 
+  heeft_n_split <- "n_split" %in% names(d)
+
   uit <- d[, .(variable_name  = variable_name[1],
                variable_value = samen(variable_value),
                split_var      = split_var[1],
                split_level    = samen(split_level),
-               metric_value   = sum(metric_value),
+               metric_value   = if (optelbaar) sum(metric_value)
+                                else if (n_cellen == 1L && .N == 1L) metric_value[1]
+                                else NA_real_,
                n_totaal       = n_totaal[1],
+               n_split        = if (heeft_n_split)
+                                  sum(n_split[!duplicated(split_level)]) else NA_real_,
                denominator    = sum(denominator[!duplicated(split_level)]),
                n_gevonden     = .N),
            by = .(population, region_level, region_code, region_name, stadsdeel,
@@ -100,8 +118,13 @@ map_noemer <- function(weergave, binnen_groep, regio_totaal = NULL) {
 }
 
 #' Is deze weergave een aandeel? Bepaalt de opmaak (procentteken) op elke plek
-#' waar een getal getoond wordt.
-map_is_aandeel <- function(weergave) !identical(weergave, "abs")
+#' waar een getal getoond wordt. `"gem"` is het gemiddelde van een
+#' average-metric: geen aandeel, maar ook geen aantal -- het krijgt decimalen
+#' waar een telling er geen heeft.
+map_is_aandeel <- function(weergave) !weergave %in% c("abs", "gem")
+
+#' Is deze weergave een gemiddelde?
+map_is_gemiddelde <- function(weergave) identical(weergave, "gem")
 
 #' Het bereik waarover de kleurschaal loopt.
 #'
@@ -169,7 +192,8 @@ choropleth_ggplot <- function(laag, domein, weergave = "rel",
   stopifnot(inherits(laag, "sf"), "waarde" %in% names(laag))
 
   fmt <- function(v) {
-    if (weergave == "rel") sprintf("%g%%", v)
+    if (map_is_aandeel(weergave)) sprintf("%g%%", v)
+    else if (map_is_gemiddelde(weergave)) sprintf("%.2f", v)
     else format(round(v), big.mark = ".", decimal.mark = ",", trim = TRUE, scientific = FALSE)
   }
 
@@ -190,7 +214,8 @@ choropleth_ggplot <- function(laag, domein, weergave = "rel",
       # "onvoldoende waarnemingen".
       oob = scales::squish,
       labels = function(x) vapply(x, fmt, character(1)),
-      name = if (weergave == "rel") "Aandeel (%)" else "Aantal",
+      name = if (map_is_aandeel(weergave)) "Aandeel (%)"
+             else if (map_is_gemiddelde(weergave)) "Gemiddelde" else "Aantal",
       guide = ggplot2::guide_colourbar(barheight = grid::unit(38, "mm"),
                                        barwidth = grid::unit(4, "mm"),
                                        frame.colour = "#b9b9b9",

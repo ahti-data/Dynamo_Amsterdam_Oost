@@ -6,11 +6,13 @@
 #
 #   Rscript data-prep/01_build_app_data.R
 #
-# Reads  : data/output_data/output_1a/{OT_HHKIND.csv,OT_OUD.xlsx}
+# Reads  : data/output_data/output_1b/{OT_HHKIND*,OT_OUD*}  (.csv of .xlsx)
 #          data/geo/GM0363_{buurten,wijken,gebieden}.geojson
 #          data-prep/derive_support_splits.R  (afgeleide ondersteuningsvormen)
+#          utils/splits.R, utils/metrics.R    (gedeeld met de app)
 # Writes : data/app_data/indicators.parquet  (partitioned by population/region_level)
 #          data/app_data/geo.rds
+#          data/app_data/source_info.rds     (welke levering hier in zit)
 
 suppressPackageStartupMessages({
   library(data.table)
@@ -28,7 +30,17 @@ ROOT <- if (length(script_arg)) {
   normalizePath(".")  # sourced interactively from the dashboard folder
 }
 
-RAW_DIR  <- file.path(ROOT, "data", "output_data", "output_1a")
+# De codering van een samengestelde uitsplitsing en de soorten metrics staan in
+# utils/, want de app leest ze terug en moet er exact hetzelfde over denken.
+source(file.path(ROOT, "utils", "splits.R"))
+source(file.path(ROOT, "utils", "metrics.R"))
+
+# Welke levering hier in gaat. Staat ook in de uitvoer (source_info.rds), zodat
+# de app en elke export kunnen zeggen waar hun cijfers vandaan komen zonder dat
+# iemand die naam op twee plekken moet bijwerken.
+DELIVERY_ID <- "output_1b"
+
+RAW_DIR  <- file.path(ROOT, "data", "output_data", DELIVERY_ID)
 GEO_DIR  <- file.path(ROOT, "data", "geo")
 OUT_DIR  <- file.path(ROOT, "data", "app_data")
 
@@ -55,7 +67,25 @@ STADSDEEL_BY_LETTER <- c(
   M = "Oost",    N = "Noord",     S = "Weesp",  T = "Zuidoost"
 )
 
-TOTAL_LABEL <- "(totaal)"
+TOTAL_LABEL <- SPLIT_TOTAL_LABEL
+
+# De vaste kolommen van de levering: alles wat *geen* splitsvariabele is. Elke
+# andere kolom wordt als splitsvariabele behandeld, zodat een levering met meer
+# uitsplitsingen (output_1b heeft er flink wat bij) geen codewijziging vraagt.
+# Komt er een nieuwe vaste kolom bij, dan valt dat hieronder hard om -- die
+# hoort dan hier in de lijst, niet in de keuzelijst van het dashboard.
+#
+# Ze zijn tegelijk de verplichte kolommen: zonder een ervan valt er niets te
+# bouwen, en dat hoort meteen om te vallen in plaats van pas in het dashboard.
+DELIVERY_FIXED_COLS <- c(
+  "region_code", "region_agg_level", "year",
+  "variable_name", "variable_value",
+  "n_totaal_population_in_region", "n_totaal_region_split",
+  "metric_name", "metric_value"
+)
+
+# De waarde waarmee de levering "niet naar deze variabele uitgesplitst" codeert.
+SPLIT_ALL <- "all"
 
 # ---------------------------------------------------------------------------
 # Geometry
@@ -122,48 +152,133 @@ name_lookup <- rbindlist(lapply(names(geo), function(lvl) {
 # Reshape one delivery table into the shared long schema
 # ---------------------------------------------------------------------------
 
-# Every row in the delivery is either a total (all split columns "all") or a
-# single-variable marginal -- never two splits at once. That is what lets the
-# wide split columns collapse into one split_var/split_level pair, and it is
-# what the app's single "splits uit naar" control relies on. Verified on the
-# 09-09-2026 delivery: 0 rows with more than one non-"all" split.
-reshape_delivery <- function(dt, split_cols, population_label) {
+#' Zoekt het bestand van een populatie in de levering.
+#'
+#' Op naam, niet op een vast pad: de bestandsnaam en de extensie zijn per
+#' levering anders geweest (csv voor huishoudens, xlsx voor ouderen), en dat is
+#' geen reden om de prep-stap te moeten aanpassen.
+vind_levering <- function(prefix) {
+  f <- list.files(RAW_DIR, pattern = sprintf("^%s.*\\.(csv|xlsx)$", prefix),
+                  ignore.case = TRUE, full.names = TRUE)
+  if (length(f) == 0L) {
+    stop(sprintf("Geen bestand dat begint met \"%s\" in %s.\n  Aanwezig: %s",
+                 prefix, RAW_DIR, paste(list.files(RAW_DIR), collapse = ", ")))
+  }
+  if (length(f) > 1L) {
+    stop(sprintf("Meerdere bestanden beginnen met \"%s\" in %s: %s.\n  Laat er een staan.",
+                 prefix, RAW_DIR, paste(basename(f), collapse = ", ")))
+  }
+  f
+}
+
+lees_levering <- function(pad) {
+  message(sprintf("Reading %s (%.0f MB) ...", basename(pad), file.size(pad) / 1024^2))
+  d <- if (grepl("\\.csv$", pad, ignore.case = TRUE)) {
+    fread(pad, showProgress = FALSE)
+  } else {
+    as.data.table(read_xlsx(pad, sheet = 1, guess_max = 100000))
+  }
+  message(sprintf("  %s rows, %d columns", format(nrow(d), big.mark = ".", decimal.mark = ","), ncol(d)))
+  d
+}
+
+#' Zet een leveringstabel om naar het lange schema.
+#'
+#' **Wat er veranderde met output_1b.** De vorige levering kruiste nooit twee
+#' splitsvariabelen: elke rij was of een totaalrij (alle splitskolommen "all")
+#' of een marginaal van een enkele variabele, en daarom kon `split_var` een
+#' enkele naam zijn. Dat geldt niet meer. Een rij draagt nu de *verzameling*
+#' variabelen waarnaar hij is uitgesplitst, gecodeerd zoals utils/splits.R
+#' beschrijft: de namen alfabetisch aan elkaar geplakt, de waarden in dezelfde
+#' volgorde. Een enkelvoudige uitsplitsing is daar het bijzondere geval van, dus
+#' elke bestaande filter op `split_var == "O_MPG_combination"` blijft precies
+#' doen wat hij deed.
+#'
+#' Welke kolommen splitsvariabelen zijn, komt uit de kop van het bestand en niet
+#' uit een lijst hier: zo hoeft een levering met meer uitsplitsingen geen
+#' codewijziging. Een kolom telt als splitsvariabele als hij ergens de waarde
+#' "all" heeft -- dat is het merkteken van "op deze rij niet uitgesplitst".
+reshape_delivery <- function(dt, population_label) {
   setDT(dt)
 
-  keep <- c("region_code", "year", "variable_name", "variable_value",
-            "n_totaal_population_in_region", "metric_name", "metric_value",
-            "region_agg_level")
-  stopifnot(all(c(keep, split_cols) %in% names(dt)))
-
-  for (cl in split_cols) set(dt, j = cl, value = as.character(dt[[cl]]))
-
-  n_nonall <- Reduce(`+`, lapply(split_cols, function(cl) as.integer(dt[[cl]] != "all")))
-  if (max(n_nonall) > 1L) {
-    stop("Delivery has rows with more than one non-'all' split variable; the ",
-         "single-split assumption behind the app's data model no longer holds.")
+  ontbreekt <- setdiff(DELIVERY_FIXED_COLS, names(dt))
+  if (length(ontbreekt)) {
+    stop(sprintf("De levering mist kolommen: %s.\n  Aanwezig: %s",
+                 paste(ontbreekt, collapse = ", "), paste(names(dt), collapse = ", ")))
   }
+
+  # Radix, niet de locale-collatie: de volgorde hier bepaalt de sleutel in de
+  # parquet, en die moet dezelfde zijn als die split_key() in de app bouwt.
+  split_cols <- sort(setdiff(names(dt), DELIVERY_FIXED_COLS), method = "radix")
+  if (length(split_cols) == 0L) {
+    stop("Geen enkele splitskolom gevonden; dan klopt DELIVERY_FIXED_COLS niet meer.")
+  }
+
+  # Lege cellen als "all" lezen: sommige exports schrijven een niet-uitgesplitste
+  # cel leeg weg in plaats van met het woord.
+  for (cl in split_cols) {
+    v <- as.character(dt[[cl]])
+    set(dt, j = cl, value = fifelse(is.na(v) | !nzchar(v), SPLIT_ALL, v))
+  }
+
+  # Een kolom zonder enkele "all" is geen splitsvariabele maar een vaste kolom
+  # die hier nog niet bekend is. Die zou anders als uitsplitsing in het
+  # dashboard belanden, dus liever hier stoppen.
+  geen_all <- split_cols[vapply(split_cols, function(cl) !any(dt[[cl]] == SPLIT_ALL), logical(1))]
+  if (length(geen_all)) {
+    stop(sprintf(paste("Kolom(men) zonder de waarde \"%s\": %s.",
+                       "Dat lijken vaste kolommen, geen uitsplitsingen --",
+                       "zet ze in DELIVERY_FIXED_COLS."),
+                 SPLIT_ALL, paste(geen_all, collapse = ", ")))
+  }
+
+  # De hele codering staat of valt ermee dat geen naam of waarde het
+  # scheidingsteken bevat.
+  split_check_sep(split_cols, "Een splitskolomnaam")
+  for (cl in split_cols) {
+    split_check_sep(unique(dt[[cl]]), sprintf("Een waarde van %s", cl))
+  }
+
+  message(sprintf("  %d splitsvariabelen: %s", length(split_cols),
+                  paste(split_cols, collapse = ", ")))
+
+  keep <- DELIVERY_FIXED_COLS
+  n_nonall <- Reduce(`+`, lapply(split_cols, function(cl) as.integer(dt[[cl]] != SPLIT_ALL)))
+  message(sprintf("  uitsplitsingsdiepte: %s",
+                  paste(sprintf("%d var -> %s rijen", as.integer(names(table(n_nonall))),
+                                format(as.integer(table(n_nonall)), big.mark = ".", decimal.mark = ",")),
+                        collapse = " | ")))
 
   totals <- dt[n_nonall == 0L, ..keep]
   totals[, `:=`(split_var = TOTAL_LABEL, split_level = TOTAL_LABEL)]
 
-  marg <- melt(
-    dt[n_nonall == 1L, c(keep, split_cols), with = FALSE],
-    id.vars       = keep,
-    measure.vars  = split_cols,
-    variable.name = "split_var",
-    value.name    = "split_level",
-    variable.factor = FALSE
-  )[split_level != "all"]
+  marg <- dt[n_nonall > 0L, c(keep, split_cols), with = FALSE]
+  marg[, .rid := .I]
 
-  out <- rbind(totals, marg)
+  lang <- melt(marg[, c(".rid", split_cols), with = FALSE], id.vars = ".rid",
+               variable.name = "svar", value.name = "slevel", variable.factor = FALSE)
+  lang <- lang[slevel != SPLIT_ALL]
+  # Sorteren op (rij, variabelenaam) maakt de sleutel alfabetisch -- de volgorde
+  # waarop split_key() in utils/splits.R hem ook bouwt, zodat de app dezelfde
+  # rijen vindt hoe de gebruiker zijn keuzes ook aanklikt.
+  setorder(lang, .rid, svar)
+  sleutels <- lang[, .(split_var   = paste(svar,   collapse = SPLIT_SEP),
+                       split_level = paste(slevel, collapse = SPLIT_SEP)), by = .rid]
+
+  marg <- merge(marg[, c(".rid", keep), with = FALSE], sleutels, by = ".rid")
+  marg[, .rid := NULL]
+
+  out <- rbind(totals, marg, use.names = TRUE)
 
   setnames(out, "n_totaal_population_in_region", "n_totaal")
+  setnames(out, "n_totaal_region_split", "n_split")
   out[, `:=`(
     population   = population_label,
     region_level = unname(LEVEL_LABELS[region_agg_level]),
     year         = as.integer(year),
     metric_value = as.numeric(metric_value),
-    n_totaal     = as.numeric(n_totaal)
+    n_totaal     = as.numeric(n_totaal),
+    n_split      = as.numeric(n_split)
   )]
   out[, region_agg_level := NULL]
   out[]
@@ -173,29 +288,15 @@ reshape_delivery <- function(dt, split_cols, population_label) {
 # Read the two deliveries
 # ---------------------------------------------------------------------------
 
-message("Reading OT_HHKIND.csv (330 MB) ...")
-hh <- fread(file.path(RAW_DIR, "OT_HHKIND.csv"), showProgress = FALSE)
-message(sprintf("  %s rows", format(nrow(hh), big.mark = ".")))
+bestand_hh  <- vind_levering("OT_HHKIND")
+bestand_oud <- vind_levering("OT_OUD")
 
-hh_long <- reshape_delivery(
-  hh,
-  split_cols = c("kinderopvangtoeslag_hh", "migratieachtergrond_hh",
-                 "langwonende_hh", "O_MPG_combination"),
-  population_label = "huishoudens met kinderen"
-)
+hh <- lees_levering(bestand_hh)
+hh_long <- reshape_delivery(hh, population_label = "huishoudens met kinderen")
 rm(hh); invisible(gc())
 
-message("Reading OT_OUD.xlsx (268 MB unpacked) -- slow, single pass ...")
-oud <- as.data.table(read_xlsx(file.path(RAW_DIR, "OT_OUD.xlsx"), sheet = 1, guess_max = 100000))
-message(sprintf("  %s rows", format(nrow(oud), big.mark = ".")))
-
-# The output form lists a langwonende_hh column for OT_OUD; it is not in the
-# file. Take the split columns from what is actually present.
-oud_long <- reshape_delivery(
-  oud,
-  split_cols = intersect(c("herkomst7", "geslacht", "O_OUD_combination"), names(oud)),
-  population_label = "ouderen (65+)"
-)
+oud <- lees_levering(bestand_oud)
+oud_long <- reshape_delivery(oud, population_label = "ouderen (65+)")
 rm(oud); invisible(gc())
 
 dt <- rbind(hh_long, oud_long)
@@ -219,39 +320,83 @@ if (missing_name > 0L) {
   print(unique(dt[is.na(region_name), .(region_level, region_code)])[1:20])
 }
 
+# De levering levert n_totaal_region_split nu zelf; op een totaalrij hoort dat
+# hetzelfde te zijn als n_totaal. Dat is de goedkoopste controle dat de kolom
+# betekent wat we denken dat hij betekent -- en de aanname waarop de hele
+# afleiding hieronder staat.
+controle <- dt[split_var == TOTAL_LABEL & !is.na(n_split) & !is.na(n_totaal)]
+if (nrow(controle) > 0L) {
+  afwijkend <- controle[abs(n_split - n_totaal) > 0]
+  message(sprintf("n_split-controle op de totaalrijen: %s van %s rijen wijken af van n_totaal.",
+                  format(nrow(afwijkend), big.mark = ".", decimal.mark = ","),
+                  format(nrow(controle), big.mark = ".", decimal.mark = ",")))
+  if (nrow(afwijkend) > 0L) {
+    warning("n_totaal_region_split wijkt op totaalrijen af van n_totaal_population_in_region; ",
+            "controleer of de kolom betekent wat de afleiding aanneemt.")
+    print(head(afwijkend[, .(population, region_level, region_code, year,
+                             variable_name, metric_name, n_totaal, n_split)], 10))
+  }
+}
+
 # ---------------------------------------------------------------------------
 # Afgeleide ondersteuningsuitsplitsingen
 # ---------------------------------------------------------------------------
 
 # "Wel/geen ondersteuningssignaal" en "hoeveel vormen tegelijk" zitten niet als
-# kolom in de levering, maar zijn exact af te leiden uit de combinatierijen --
-# zie data-prep/derive_support_splits.R voor de afleiding en de
-# onderdrukkingsregel. Draait voor de noemerberekening hieronder, zodat die in
-# een keer ook over de nieuwe rijen gaat.
+# kolom in de levering, maar zijn er exact uit af te leiden -- zie
+# data-prep/derive_support_splits.R. Draait voor de noemerberekening hieronder,
+# zodat die in een keer ook over de nieuwe rijen gaat.
 source(file.path(ROOT, "data-prep", "derive_support_splits.R"))
 
 message("Deriving support splits ...")
 n_voor <- nrow(dt)
 dt <- add_support_derivations(dt)
-message(sprintf("  +%s rows", format(nrow(dt) - n_voor, big.mark = ".")))
+message(sprintf("  +%s rows", format(nrow(dt) - n_voor, big.mark = ".", decimal.mark = ",")))
 
-# Share denominator: the total across the variable_value categories within the
-# same slice. Unlike n_totaal (households) this stays a valid percentage for
-# every metric, including the n_kinderen_* ones that count children.
+# ---------------------------------------------------------------------------
+# Noemer
+# ---------------------------------------------------------------------------
+
+# Twee soorten noemer, en de levering geeft de belangrijkste nu zelf:
+#
+#  - Telt de metric de populatie-eenheid (huishoudens, ouderen), dan is de
+#    noemer het aantal eenheden in deze regio x uitsplitsing -- en dat is
+#    exact `n_split`. Tot output_1a moest dat teruggerekend worden door de
+#    categorieen van de indicator op te tellen, wat te laag uitviel zodra er een
+#    categorie onderdrukt was. Die terugrekening is hier weg.
+#  - Telt de metric iets anders (de `n_kinderen_*`-metrics tellen kinderen tegen
+#    een huishoudnoemer), dan is `n_split` de verkeerde eenheid en blijft de som
+#    over de variable_value-categorieen binnen dezelfde slice de enige noemer
+#    die klopt (PLAN.md 6).
+#  - Een gemiddelde heeft geen noemer: optellen van gemiddelden geeft geen
+#    totaal, dus elk "aandeel" ervan zou verzonnen zijn.
 message("Computing share denominators ...")
-dt[, denominator := sum(metric_value, na.rm = TRUE),
+dt[, denominator_som := sum(metric_value, na.rm = TRUE),
    by = .(population, region_level, region_code, year,
           variable_name, metric_name, split_var, split_level)]
+dt[, denominator := fifelse(metric_telt_populatie(metric_name) & !is.na(n_split),
+                            n_split, denominator_som)]
+dt[metric_is_gemiddelde(metric_name), denominator := NA_real_]
+
+# Hoeveel de oude terugrekening scheelde, zodat het effect van deze levering in
+# de logregels staat in plaats van alleen in de commit.
+verschil <- dt[metric_telt_populatie(metric_name) & !is.na(n_split) &
+               abs(denominator_som - n_split) > 0]
+message(sprintf("  exacte noemer i.p.v. categoriesom: %s van %s rijen kregen een ander getal",
+                format(nrow(verschil), big.mark = ".", decimal.mark = ","),
+                format(dt[metric_telt_populatie(metric_name), .N], big.mark = ".", decimal.mark = ",")))
+dt[, denominator_som := NULL]
 
 setcolorder(dt, c("population", "region_level", "region_code", "region_name", "stadsdeel",
                   "year", "variable_name", "variable_value", "metric_name",
-                  "metric_value", "n_totaal", "denominator", "split_var", "split_level"))
+                  "metric_value", "n_totaal", "n_split", "denominator",
+                  "split_var", "split_level", "afgeleid"))
 
 # ---------------------------------------------------------------------------
 # Write
 # ---------------------------------------------------------------------------
 
-message(sprintf("Writing %s rows to parquet ...", format(nrow(dt), big.mark = ".")))
+message(sprintf("Writing %s rows to parquet ...", format(nrow(dt), big.mark = ".", decimal.mark = ",")))
 
 pq_dir <- file.path(OUT_DIR, "indicators.parquet")
 unlink(pq_dir, recursive = TRUE)
@@ -263,11 +408,25 @@ write_dataset(
   compression  = "zstd"
 )
 
+# Welke levering hier in zit, naast de data in plaats van als constante in
+# app.R: de app stempelt dit in elke export, en zo hoeft niemand bij een
+# volgende levering twee plekken bij te werken.
+saveRDS(
+  list(output_id = DELIVERY_ID,
+       files     = c("huishoudens met kinderen" = basename(bestand_hh),
+                     "ouderen (65+)"            = basename(bestand_oud)),
+       built     = Sys.time()),
+  file.path(OUT_DIR, "source_info.rds")
+)
+
 sz <- sum(file.info(list.files(pq_dir, recursive = TRUE, full.names = TRUE))$size)
-message(sprintf("Done. %s rows, %.1f MB on disk.", format(nrow(dt), big.mark = "."), sz / 1024^2))
+message(sprintf("Done. %s rows, %.1f MB on disk.", format(nrow(dt), big.mark = ".", decimal.mark = ","), sz / 1024^2))
 
 message("\nSanity check -- Amsterdam totals, n_households, R_MPG_totaal, 2024:")
 print(dt[population == "huishoudens met kinderen" & region_level == "gemeente" &
          year == 2024 & variable_name == "R_MPG_totaal" & metric_name == "n_households" &
          split_var == TOTAL_LABEL,
-         .(variable_value, metric_value, n_totaal, denominator)])
+         .(variable_value, metric_value, n_totaal, n_split, denominator)])
+
+message("\nSanity check -- welke uitsplitsingen zitten er in de parquet:")
+print(dt[, .N, by = .(population, split_var)][order(population, -N)][, head(.SD, 12), by = population])
