@@ -459,7 +459,8 @@ ui <- fluidPage(
                 radioButtons("k_weergave", "Weergave",
                              c("Absoluut" = "abs",
                                "Aandeel van regiototaal (%)" = "rel_regio",
-                               "Aandeel binnen groep (%)" = "rel_groep"),
+                               "Aandeel binnen groep (%)" = "rel_groep",
+                               "Aandeel binnen indicatorwaarde (%)" = "rel_indicator"),
                              selected = "rel_regio"),
                 uiOutput("k_gem_note"),
                 div(class = "note", style = "margin: -6px 0 10px;",
@@ -468,7 +469,12 @@ ui <- fluidPage(
                     " dat gebied of dat stadsdeel \u2014 \"x% van alle gezinnen hier\". ",
                     tags$b("Binnen groep:"),
                     " ten opzichte van de gekozen groep zelf \u2014 \"van de gezinnen met",
-                    " dit ondersteuningsbeeld heeft x% deze risicoscore\"."),
+                    " dit ondersteuningsbeeld heeft x% deze risicoscore\". ",
+                    tags$b("Binnen indicatorwaarde:"),
+                    " precies andersom \u2014 ten opzichte van iedereen met de gekozen",
+                    " waarde van de indicator, zonder uitsplitsing: \"van de gezinnen",
+                    " met 3+ risicofactoren hier gebruikt x% alle drie de",
+                    " ondersteuningsvormen\"."),
                 checkboxInput("k_schaal_auto", "Kleurschaal volgt de data", TRUE),
                 conditionalPanel(
                   "!input.k_schaal_auto",
@@ -951,7 +957,8 @@ server <- function(input, output, session) {
     # ook waarom het regiototaal niet n_totaal is. `regio_totaal` zit alleen op
     # de kaartselectie; de andere tabbladen kennen alleen "binnen de groep".
     nmr <- map_noemer(weergave, d$denominator,
-                      if ("regio_totaal" %in% names(d)) d$regio_totaal else NULL)
+                      if ("regio_totaal" %in% names(d)) d$regio_totaal else NULL,
+                      if ("indicator_totaal" %in% names(d)) d$indicator_totaal else NULL)
     # De noemer waar het getoonde getal echt door gedeeld is, als kolom naast
     # de waarde. De tooltip van de kaart zei "n = x van y" met y = n_totaal --
     # het aantal huishoudens/ouderen in de hele regio -- ook bij "aandeel
@@ -993,8 +1000,9 @@ server <- function(input, output, session) {
   # regio is afgezet, en dat hoort zichtbaar te zijn.
   eenheid <- function(weergave) {
     switch(weergave,
-           rel_regio = "% van regiototaal",
-           rel_groep = "% binnen groep",
+           rel_regio     = "% van regiototaal",
+           rel_groep     = "% binnen groep",
+           rel_indicator = "% binnen indicatorwaarde",
            rel       = "%",
            gem       = "gemiddelde",
            "aantal")
@@ -1056,16 +1064,52 @@ server <- function(input, output, session) {
       as.data.table()
   })
 
+  # Dezelfde indicatorwaarde(n), maar zonder uitsplitsing: de totaalrij. Dat is
+  # de noemer van "Aandeel binnen indicatorwaarde" -- van de gezinnen met 3+
+  # risicofactoren in deze wijk gebruikt x% alle drie de ondersteuningsvormen.
+  #
+  # Anders dan bij het regiototaal is dit `metric_value` en niet `denominator`:
+  # we willen niet de hele populatie maar juist alleen de gekozen
+  # indicatorwaarden, en daarover wordt opgeteld net als in de teller.
+  #
+  # `gevonden` telt hoeveel van de gevraagde waarden er op de totaalrij stonden.
+  # Zijn dat er minder, dan is de noemer te klein en zou elk percentage te hoog
+  # uitvallen; die regio krijgt hieronder NA in plaats van een verkeerd getal.
+  kaart_indicator_totaal <- reactive({
+    req(input$populatie, input$k_jaar, input$k_niveau, input$k_var,
+        input$k_metric, input$k_val)
+    ds |>
+      filter(population    == !!input$populatie,
+             region_level  == !!input$k_niveau,
+             year          == !!as.integer(input$k_jaar),
+             variable_name == !!input$k_var,
+             metric_name   == !!input$k_metric,
+             variable_value %in% !!input$k_val,
+             split_var     == !!TOTAL_LABEL) |>
+      select(region_code, variable_value, metric_value) |>
+      distinct() |>
+      collect() |>
+      as.data.table() |>
+      (\(d) d[, .(indicator_totaal = sum(metric_value), gevonden = .N), by = region_code])()
+  })
+
   # Het regiototaal aanhaken. Ook de ruwe rijen krijgen hem, zodat het tweede
   # tabblad van de export hetzelfde aandeel toont als de kaart en niet stilletjes
   # op aantallen terugvalt.
   met_regio_totaal <- function(d) {
     if (nrow(d) == 0) {
-      d[, regio_totaal := numeric()]
+      d[, `:=`(regio_totaal = numeric(), indicator_totaal = numeric())]
       return(d[])
     }
-    merge(d, kaart_regio_totaal()[, .(region_code, regio_totaal = denominator)],
-          by = "region_code", all.x = TRUE)
+    d <- merge(d, kaart_regio_totaal()[, .(region_code, regio_totaal = denominator)],
+               by = "region_code", all.x = TRUE)
+    it <- kaart_indicator_totaal()
+    gevraagd <- length(input$k_val %||% character(0))
+    # Onvolledige noemer = geen noemer. Een aandeel tegen een te kleine noemer
+    # is erger dan geen aandeel: het valt te hoog uit en niets verraadt dat.
+    it <- it[, .(region_code,
+                 indicator_totaal = fifelse(gevonden >= gevraagd, indicator_totaal, NA_real_))]
+    merge(d, it, by = "region_code", all.x = TRUE)
   }
 
   kaart_data <- reactive(add_display(
@@ -1813,6 +1857,7 @@ server <- function(input, output, session) {
     # de tooltip van de kaart toont, zodat het cijfer in het spreadsheet exact
     # na te rekenen is.
     if ("regio_totaal" %in% names(d)) uit[, noemer_regiototaal := d$regio_totaal]
+    if ("indicator_totaal" %in% names(d)) uit[, noemer_indicatorwaarde := d$indicator_totaal]
     if ("noemer" %in% names(d)) uit[, gebruikte_noemer := d$noemer]
     # De gepubliceerde omvang van de regio x uitsplitsing waar deze rij bij
     # hoort: sinds output_1b een kolom in de levering, en de noemer van elk

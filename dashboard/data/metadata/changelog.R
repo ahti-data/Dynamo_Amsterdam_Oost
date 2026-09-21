@@ -15,6 +15,29 @@
 
 CHANGELOG <- list(
   list(
+    datum = "2026-09-21",
+    titel = "Kaart: aandeel binnen de gekozen indicatorwaarde",
+    punten = c(
+      paste("Bij \"Weergave\" op de Kaart staat een derde soort aandeel:",
+            "\"Aandeel binnen indicatorwaarde (%)\". Die zet de gekozen groep af tegen",
+            "iedereen met diezelfde waarde van de indicator in die regio, zonder",
+            "uitsplitsing. Zitten er in een wijk 30 huishoudens met 3+ risicofactoren die",
+            "alle drie de ondersteuningsvormen gebruiken, en zijn er in die wijk 60",
+            "huishoudens met 3+ risicofactoren, dan staat er 50%."),
+      paste("Dat is precies de omkering van \"Aandeel binnen groep\". Die leest als \"van de",
+            "gezinnen met dit ondersteuningsbeeld heeft x% deze risicoscore\"; de nieuwe",
+            "leest als \"van de gezinnen met deze risicoscore heeft x% dit",
+            "ondersteuningsbeeld\". Welke van de drie je ziet staat in de titel, in de",
+            "legenda en in de export."),
+      paste("Is een van de gekozen indicatorwaarden in een regio onderdrukt, dan is de",
+            "noemer onvolledig en zou het percentage te hoog uitvallen. Die regio blijft",
+            "dan leeg in plaats van een verkeerd getal te tonen."),
+      paste("In de xlsx-export staat de gebruikte noemer als aparte kolom",
+            "(noemer_indicatorwaarde), naast die van het regiototaal, zodat na te rekenen",
+            "is wat er getoond werd.")
+    )
+  ),
+  list(
     datum = "2026-09-19",
     titel = "Nieuwe levering: meer uitsplitsingen, exacte noemers, gemiddelde score",
     punten = c(

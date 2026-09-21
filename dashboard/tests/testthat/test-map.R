@@ -120,9 +120,30 @@ test_that("waarden buiten het bereik worden geklemd, niet weggegooid", {
 test_that("elke weergave pakt zijn eigen noemer", {
   groep <- c(670, 940)
   regio <- c(5160, 9240)
-  expect_equal(map_noemer("rel_groep", groep, regio), groep)
-  expect_equal(map_noemer("rel_regio", groep, regio), regio)
-  expect_null(map_noemer("abs", groep, regio))
+  ind   <- c(1340, 1880)
+  expect_equal(map_noemer("rel_groep", groep, regio, ind), groep)
+  expect_equal(map_noemer("rel_regio", groep, regio, ind), regio)
+  expect_equal(map_noemer("rel_indicator", groep, regio, ind), ind)
+  expect_null(map_noemer("abs", groep, regio, ind))
+})
+
+test_that("het aandeel binnen de indicatorwaarde rekent zoals bedoeld", {
+  # Het voorbeeld waarvoor deze noemer gemaakt is: in wijk x zitten 30
+  # huishoudens met 3+ risicofactoren die alle drie de ondersteuningsvormen
+  # gebruiken, en er zijn in die wijk 60 huishoudens met 3+ risicofactoren.
+  # Dat is 50% -- niet het aandeel van de hele wijk en niet het aandeel binnen
+  # de ondersteuningsgroep.
+  noemer <- map_noemer("rel_indicator", binnen_groep = 200, regio_totaal = 4000,
+                       indicator_totaal = 60)
+  expect_equal(30 / noemer * 100, 50)
+})
+
+test_that("zonder indicatortotaal is er geen aandeel binnen de indicatorwaarde", {
+  # Zo komt een onvolledige noemer binnen: is een van de gevraagde
+  # indicatorwaarden onderdrukt op de totaalrij, dan geeft de aanroeper NA en
+  # hoort de regio leeg te blijven in plaats van een te hoog percentage te tonen.
+  expect_null(map_noemer("rel_indicator", c(670, 940), c(5160, 9240)))
+  expect_true(is.na(map_noemer("rel_indicator", 200, 4000, NA_real_)))
 })
 
 test_that("de oude naam blijft werken", {
@@ -139,7 +160,7 @@ test_that("zonder regiototaal is er geen regio-aandeel", {
 
 test_that("alleen 'abs' is geen aandeel", {
   expect_false(map_is_aandeel("abs"))
-  for (w in c("rel", "rel_groep", "rel_regio")) expect_true(map_is_aandeel(w))
+  for (w in c("rel", "rel_groep", "rel_regio", "rel_indicator")) expect_true(map_is_aandeel(w))
 })
 
 # -- Levering output_1b: de gepubliceerde groepsomvang en de average-metric ----

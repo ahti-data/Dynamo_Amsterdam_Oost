@@ -104,16 +104,33 @@ map_aggregate <- function(d, n_cellen, optelbaar = TRUE) {
 #'   percentage. Het regiototaal komt daarom uit de noemer van de totaalrijen,
 #'   die per metric klopt.
 #'
+#' - **binnen de indicatorwaarde** (`"rel_indicator"`): dezelfde
+#'   indicatorwaarde, maar zonder de uitsplitsing -- de totaalrij dus. Leest
+#'   andersom dan "binnen de groep": "van de gezinnen met 3+ risicofactoren in
+#'   deze wijk gebruikt x% alle drie de ondersteuningsvormen". Teller en noemer
+#'   zijn hier dezelfde metric en dezelfde indicatorwaarde, en alleen de
+#'   uitsplitsing verschilt; daarom is dit de enige van de drie waarbij de
+#'   uitkomst niet van de noemerconventie van de metric afhangt.
+#'
+#'   De noemer telt over *alle* gekozen indicatorwaarden, net als de teller. Is
+#'   er van een gekozen waarde geen totaalrij (onderdrukt), dan is de noemer
+#'   onvolledig en zou het aandeel te hoog uitvallen -- de aanroeper geeft dan
+#'   `NA`, en de regio leest als "onvoldoende waarnemingen" in plaats van als
+#'   een te hoog percentage.
+#'
 #' Alles wat geen aandeel is (`"abs"`) krijgt NULL: dan is er geen noemer.
 #'
-#' @param weergave "abs", "rel_groep"/"rel", of "rel_regio".
-#' @param binnen_groep,regio_totaal Numerieke vectoren van gelijke lengte.
+#' @param weergave "abs", "rel_groep"/"rel", "rel_regio" of "rel_indicator".
+#' @param binnen_groep,regio_totaal,indicator_totaal Numerieke vectoren van
+#'   gelijke lengte.
 #' @return De te gebruiken noemer, of NULL bij een absolute weergave.
-map_noemer <- function(weergave, binnen_groep, regio_totaal = NULL) {
+map_noemer <- function(weergave, binnen_groep, regio_totaal = NULL,
+                       indicator_totaal = NULL) {
   switch(weergave,
-         rel_groep = binnen_groep,
-         rel       = binnen_groep,
-         rel_regio = regio_totaal,
+         rel_groep     = binnen_groep,
+         rel           = binnen_groep,
+         rel_regio     = regio_totaal,
+         rel_indicator = indicator_totaal,
          NULL)
 }
 

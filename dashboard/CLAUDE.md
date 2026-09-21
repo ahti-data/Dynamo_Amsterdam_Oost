@@ -204,15 +204,28 @@ wrong, not the data.
   - `map_noemer()` — which denominator a chosen "weergave" uses. Alongside `"abs"` there is
     `"gem"`, the average of an `average_score` metric: neither a share nor a count, so it gets
     decimals and no `%`, and `map_is_aandeel()`/`map_is_gemiddelde()` are what every formatter
-    keys off. The map offers two shares:
-    *van regiototaal* (everyone in that buurt/wijk/gebied/stadsdeel) and *binnen groep* (the
+    keys off. The map offers three shares:
+    *van regiototaal* (everyone in that buurt/wijk/gebied/stadsdeel), *binnen groep* (the
     sum over the indicator's categories within the selection, the PLAN.md §6 convention and
-    the only one the app had before). The gap is large enough that it must never be implicit —
-    the same selection reads 16.0% within-group and 1.6% of the region total in Zuidoost — so
-    the chosen one is named in the title, the legend and the export. The region total is
+    the only one the app had at first) and *binnen indicatorwaarde*. The gap is large enough
+    that it must never be implicit — the same selection reads 16.0% within-group and 1.6% of
+    the region total in Zuidoost — so the chosen one is named in the title, the legend and the
+    export. The region total is
     **not** `n_totaal`: that counts households while the `n_kinderen_*` metrics count children,
     so it comes from the total rows' own denominator instead. Per regio and the venn still send
     the old `"rel"`, which keeps meaning within-group.
+    *Binnen indicatorwaarde* (`"rel_indicator"`) is the **transpose of within-group**: the same
+    indicator value with the split removed, i.e. the total row. Within-group reads "of the
+    families with this support profile, x% has this risk score"; this one reads "of the
+    families with this risk score, x% has this support profile" — 30 of the 60 households with
+    3+ risk factors in a wijk = 50%. It is the one denominator that does not depend on the
+    metric's denominator convention, because numerator and denominator are the same metric and
+    the same indicator value and only the split differs. It comes from `metric_value` on the
+    total row (not `denominator`, which would be the whole population), summed over the same
+    selected `variable_value`s as the numerator. **If one of those values is suppressed on the
+    total row the denominator is short and the share would come out too high**, so
+    `met_regio_totaal()` sets it to `NA` and the region reads as "onvoldoende waarnemingen"
+    rather than as a wrong percentage.
   - `map_domein()` / `map_klem()` — the colour range (data range, or the user's own) and
     clamping into it, so a region past the chosen maximum takes the end of the ramp instead of
     `colorNumeric()`'s NA colour, which would read as "onvoldoende waarnemingen".
