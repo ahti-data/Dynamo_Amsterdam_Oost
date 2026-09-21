@@ -210,6 +210,13 @@ RISICO_LABELS <- c(RISICO_LABELS_HHKIND, RISICO_LABELS_OUD)
 #   als indicator       -> de noemer is de hele populatie ("x% van de gezinnen
 #     gebruikt een vorm van ondersteuning")
 ONDERSTEUNING_SPLITS      <- names(ONDERSTEUNING_SPLIT_LABELS)
+
+# De afgeleide splitsing "hoeveel vormen tegelijk". Staat hier los benoemd omdat
+# de kruistabel op Per regio er rechtstreeks op filtert; de naam moet dezelfde
+# zijn als SUPPORT_SPLIT_COUNT in data-prep/derive_support_splits.R, die hem
+# schrijft. Valt hij om, dan blijft die tabel leeg.
+SUPPORT_SPLIT_VORMEN <- "aantal_ondersteuningsvormen"
+stopifnot(SUPPORT_SPLIT_VORMEN %in% ONDERSTEUNING_SPLITS)
 ONDERSTEUNING_INDICATOREN <- names(ONDERSTEUNING_INDICATOR_LABELS)
 
 # De combinatie als indicator: variable_value is dan het combinatieniveau zelf.
@@ -402,6 +409,7 @@ ui <- fluidPage(
     .venn-tab tr.venn-tab-none td { background: %5$s; }
     .venn-tab tbody tr:hover td { background: %4$s; }
     .venn-tab-na { color: %3$s; cursor: help; }
+    .venn-tab .venn-tab-aandeel { color: %3$s; font-size: 11px; }
     .kaart-let-op { background: #FDF3E7; border-left: 4px solid #E8871A; border-radius: 3px;
         padding: 8px 12px; margin-bottom: 10px; font-size: 12px; color: #6b4415;
         line-height: 1.45; }
@@ -590,6 +598,7 @@ ui <- fluidPage(
               uiOutput("venn"),
               uiOutput("venn_legenda"),
               uiOutput("venn_tabel"),
+              uiOutput("vormen_tabel"),
               uiOutput("risico_tabel"),
               uiOutput("venn_downloads")
             )
@@ -1686,6 +1695,108 @@ server <- function(input, output, session) {
       n[[k]] <- groeps_n(rows)
     }
     list(m = m, n = n, waarden = waarden)
+  })
+
+  # Hoeveel ondersteuningsvormen x de risicoscore -- de kruistabel waar in de
+  # praktijk naar gevraagd wordt ("300 gezinnen in Oost hebben 3+ kwetsbaarheden
+  # en geen enkel ondersteuningssignaal"). Zelfde slice als de venn-tabel, maar
+  # uitgesplitst naar de afgeleide `aantal_ondersteuningsvormen` in plaats van
+  # naar de acht combinatieniveaus: vier rijen die de populatie partitioneren,
+  # in plaats van acht die dat ook doen maar veel fijner.
+  vormen_matrix_data <- reactive({
+    req(input$populatie, input$r_niveau, input$r_regio, input$r_metric, input$r_venn_jaar)
+    req(!venn_zonder_score(), input$r_venn_var)
+
+    ds |>
+      filter(population    == !!input$populatie,
+             region_level  == !!input$r_niveau,
+             region_code   == !!input$r_regio,
+             variable_name == !!input$r_venn_var,
+             metric_name   == !!input$r_metric,
+             split_var     == !!SUPPORT_SPLIT_VORMEN,
+             year          == !!as.integer(input$r_venn_jaar)) |>
+      collect() |>
+      as.data.table()
+  })
+
+  # Het regiototaal voor deze tabel: de hele populatie van deze regio in dit
+  # jaar, uit de noemer van de totaalrij. Bewust niet n_totaal -- die telt
+  # huishoudens, terwijl de n_kinderen_*-metrics kinderen tellen, en dan is het
+  # percentage van een andere eenheid dan de teller (zie map_noemer()).
+  vormen_regio_totaal <- reactive({
+    req(input$populatie, input$r_niveau, input$r_regio, input$r_metric,
+        input$r_venn_var, input$r_venn_jaar)
+    d <- ds |>
+      filter(population    == !!input$populatie,
+             region_level  == !!input$r_niveau,
+             region_code   == !!input$r_regio,
+             variable_name == !!input$r_venn_var,
+             metric_name   == !!input$r_metric,
+             split_var     == !!TOTAL_LABEL,
+             year          == !!as.integer(input$r_venn_jaar)) |>
+      select(denominator) |> collect() |> as.data.table()
+    if (nrow(d) == 0L) NA_real_ else d$denominator[1]
+  })
+
+  # Rijen van boven naar beneden: de meeste ondersteuning eerst, "geen signaal"
+  # onderaan -- zoals de tabel met de hand getekend werd.
+  VORMEN_RIJEN <- c("3", "2", "1", "0")
+
+  vormen_matrix <- reactive({
+    d <- vormen_matrix_data()
+    # De waardenreeks uit de vocabulaire en niet uit de slice, zodat een
+    # risicowaarde die in deze regio helemaal onderdrukt is toch zijn kolom
+    # krijgt -- met een streepje erin in plaats van stilzwijgend te verdwijnen.
+    waarden <- sort(unique(pop_vocab()[variable_name == input$r_venn_var]$variable_value))
+    niveaus <- intersect(VORMEN_RIJEN,
+                         unique(pop_vocab()[split_var == SUPPORT_SPLIT_VORMEN]$split_level))
+
+    m <- matrix(NA_real_, nrow = length(niveaus), ncol = length(waarden),
+                dimnames = list(niveaus, waarden))
+    n <- setNames(rep(NA_real_, length(niveaus)), niveaus)
+    for (k in niveaus) {
+      rows <- d[split_level == k & variable_value %in% waarden]
+      if (nrow(rows) == 0) next
+      m[k, rows$variable_value] <- as.numeric(rows$metric_value)
+      n[[k]] <- groeps_n(rows)
+    }
+    regio <- vormen_regio_totaal()
+    # Het aandeel is van de hele regio, niet van de rij of de kolom: zo telt de
+    # hele tabel op tot 100% en is elke cel met elke andere te vergelijken.
+    aandeel <- if (is.na(regio) || regio <= 0) NULL else m / regio * 100
+    list(m = m, n = n, aandeel = aandeel, niveaus = niveaus, regio = regio)
+  })
+
+  output$vormen_tabel <- renderUI({
+    if (venn_zonder_score()) return(NULL)
+    vm <- vormen_matrix()
+    if (nrow(vm$m) == 0L || ncol(vm$m) == 0L) return(NULL)
+    gemiddelde <- isTRUE(metric_is_gemiddelde(input$r_metric))
+    tagList(
+      div(class = "chart-title", style = "margin-top: 18px;",
+          "Aantal vormen ondersteuning per waarde van de risicoscore"),
+      div(class = "note", style = "margin-bottom: 8px;",
+          if (gemiddelde)
+            paste("De cellen zijn gemiddelden; daar hoort geen aandeel bij, dus staat er",
+                  "alleen het gemiddelde zelf.")
+          else
+            paste0("Elke cel is het aantal, met tussen haakjes welk deel dat is van alle ",
+                   "huishoudens/ouderen in deze regio", 
+                   if (!is.na(vm$regio))
+                     sprintf(" (%s)", format(round(vm$regio), big.mark = ".",
+                                             decimal.mark = ",", trim = TRUE))
+                   else "",
+                   ". De hele tabel telt dus op tot 100%: de vier rijen verdelen de",
+                   " populatie, en de kolommen ook."),
+          " n is de gepubliceerde omvang van die rij, inclusief wie in geen enkele",
+          " kolom valt. Een streepje betekent onvoldoende waarnemingen, geen nul."),
+      HTML(kruistabel_html(
+        vm$m, vm$n, if (gemiddelde) "gem" else "abs",
+        rij_labels  = unname(pretty_ondersteuning(vm$niveaus)),
+        groep_label = "Aantal vormen ondersteuning",
+        var_label   = pretty_var(input$r_venn_var),
+        rij_klassen = ifelse(vm$niveaus == "0", "venn-tab-none", ""),
+        aandeel     = if (gemiddelde) NULL else vm$aandeel)))
   })
 
   # De tweede tabel: dezelfde acht deelgebieden, maar met de losse

@@ -242,11 +242,21 @@ wrong, not the data.
   scales the UI offers live in `VENN_PALETTES` in that same file. The **"none" region is
   deliberately off the colour scale** (`VENN_NONE_FILL`) — it is 60–90% of a selection, so on
   the shared scale it flattened all seven circle regions into one tint. Its value is still in
-  the label and the tooltip. The same file also renders **the venn as a table**
-  (`venn_matrix_html()`): the eight regions × the risk score's categories, which is the one
-  view the figure cannot give (it stands on a single chosen value). Figure and table share
-  `venn_levels()` — one key vector, so a combination level can never land in a different cell
-  in the two. The table's styling lives with the rest of the app's CSS in `app.R`, unlike
+  the label and the tooltip. The same file also renders **the cross-tabs
+  under the figure**. `kruistabel_html()` is the generic one — rows × an indicator's values,
+  with an optional `n` column and an optional `aandeel` matrix that makes a cell read
+  "300 (2,0%)" — and the three tables on Per regio are each a thin layer over it, so they
+  cannot drift apart. Extend that function with an argument rather than adding a fourth table.
+  `venn_matrix_html()` is the venn's layer: the eight regions × the risk score's categories,
+  the one view the figure cannot give (it stands on a single chosen value). Figure and table
+  share `venn_levels()` — one key vector, so a combination level can never land in a different
+  cell in the two. The third layer is the **ondersteuningsvormen × risk score** cross-tab
+  (`vormen_matrix()` in `app.R`): four rows that partition the population against the score's
+  categories, each cell a count plus its share **of the whole region**, so the table sums to
+  100% and every cell is comparable with every other. Its columns are the categories as
+  delivered (0/1/2/3plus) and deliberately **not** merged into "1-2" the way a hand-drawn
+  version of this table did: summing two categories goes wrong the moment one is suppressed.
+  The tables' styling lives with the rest of the app's CSS in `app.R`, unlike
   `venn_svg()`, which stays self-contained because it also ships as a standalone `.svg`.
 - `templates/` — built-in think-cell `.pptx` slide templates for the "Download slide" export.
   The line chart on **Per regio** is the one chart wired to the export layer

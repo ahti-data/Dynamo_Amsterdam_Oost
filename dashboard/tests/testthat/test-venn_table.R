@@ -128,3 +128,61 @@ test_that("zonder hover-titels komt er geen leeg title-attribuut", {
   html <- venn_matrix_html(m, rep(100, 8), "rel", CODES, LABELS)
   expect_false(grepl('title=""', html, fixed = TRUE))
 })
+
+# ------------------------------------------------------- generieke kruistabel --
+
+# venn_matrix_html() is sinds de ondersteuningsvormen-tabel een dunne laag over
+# kruistabel_html(): dezelfde opmaak, andere rijen. Deze tests bewaken het
+# generieke deel -- de venn-specifieke tests hierboven dekken de laag erover.
+
+test_that("kruistabel_html zet rijen, kolommen en de n-kolom neer", {
+  m <- matrix(c(40, 130, 370, 740), nrow = 2, byrow = TRUE,
+              dimnames = list(c("3", "2"), c("0", "3plus")))
+  h <- kruistabel_html(m, n = c(250, 1460), weergave = "abs",
+                       rij_labels = c("Alle 3 de vormen", "2 vormen"),
+                       groep_label = "Aantal vormen ondersteuning")
+  expect_true(grepl("Aantal vormen ondersteuning", h, fixed = TRUE))
+  expect_true(grepl("Alle 3 de vormen", h, fixed = TRUE))
+  expect_true(grepl(">130<", h, fixed = TRUE))
+  expect_true(grepl("1.460", h, fixed = TRUE))   # n, met duizendscheiding
+})
+
+test_that("zonder n-vector blijft de n-kolom weg", {
+  m <- matrix(10, nrow = 1, dimnames = list("0", "1"))
+  h <- kruistabel_html(m, n = NULL, weergave = "abs", rij_labels = "Geen",
+                       groep_label = "Groep")
+  # Let op de volledige klassenaam: "venn-tab-n" zit ook in "venn-tab-num",
+  # en dan slaagt de test terwijl de kolom er gewoon staat.
+  expect_false(grepl('class="venn-tab-n"', h, fixed = TRUE))
+})
+
+test_that("het aandeel komt achter het aantal te staan", {
+  # De vorm uit de tabel die hiervoor gevraagd werd: "300 (2,0%)".
+  m <- matrix(300, nrow = 1, dimnames = list("0", "3plus"))
+  h <- kruistabel_html(m, n = 300, weergave = "abs", rij_labels = "Geen signaal",
+                       groep_label = "Groep", aandeel = matrix(2.0, nrow = 1))
+  expect_true(grepl("300", h, fixed = TRUE))
+  expect_true(grepl("(2,0%)", h, fixed = TRUE))
+})
+
+test_that("een onderdrukte cel blijft een streepje, ook met een aandeel erbij", {
+  # Nooit een nul, en ook geen "0,0%" achter een cel die niet bestaat.
+  m <- matrix(NA_real_, nrow = 1, dimnames = list("0", "3plus"))
+  h <- kruistabel_html(m, n = 100, weergave = "abs", rij_labels = "Geen signaal",
+                       groep_label = "Groep", aandeel = matrix(NA_real_, nrow = 1))
+  expect_true(grepl("onvoldoende waarnemingen", h, fixed = TRUE))
+  expect_false(grepl("%)", h, fixed = TRUE))
+})
+
+test_that("de venn-tabel gedraagt zich nog als vanouds", {
+  # De acht deelgebieden in de volgorde van venn_levels(), en de none-rij met
+  # zijn eigen klasse -- dat mag door de generieke laag niet verschoven zijn.
+  codes <- c("O_MPG1", "O_MPG2", "O_MPG3")
+  keys  <- names(venn_levels(codes))
+  m <- matrix(10, nrow = 8, ncol = 1, dimnames = list(keys, "1"))
+  h <- venn_matrix_html(m, n = rep(100, 8), weergave = "abs",
+                        group_codes = codes,
+                        group_labels = setNames(c("A", "B", "C"), codes))
+  expect_true(grepl("venn-tab-none", h, fixed = TRUE))
+  expect_true(grepl("Ondersteuningscombinatie", h, fixed = TRUE))
+})

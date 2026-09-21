@@ -16,6 +16,27 @@
 CHANGELOG <- list(
   list(
     datum = "2026-09-21",
+    titel = "Per regio: kruistabel van ondersteuningsvormen tegen de risicoscore",
+    punten = c(
+      paste("Onder de venn staat een nieuwe tabel: de rijen zijn hoeveel vormen ondersteuning",
+            "een huishouden of oudere gebruikt (alle drie, twee, een, geen), de kolommen zijn",
+            "de waarden van de gekozen risicoscore. Dat is de tabel waar in de praktijk naar",
+            "gevraagd werd -- \"hoeveel gezinnen in Oost hebben 3+ risicofactoren en geen",
+            "enkel ondersteuningssignaal\" lees je er in een oogopslag uit."),
+      paste("Elke cel geeft het aantal met daarachter welk deel dat is van alle huishoudens of",
+            "ouderen in die regio, dus de hele tabel telt op tot 100%. Zo zijn de cellen",
+            "onderling te vergelijken: rijen en kolommen verdelen allebei dezelfde populatie."),
+      paste("De kolommen zijn de categorieen zoals ze geleverd worden (0, 1, 2 en 3 of meer),",
+            "niet samengevoegd tot \"1-2\". Twee categorieen optellen zou namelijk mis kunnen",
+            "gaan zodra er een onderdrukt is. Een onderdrukte cel blijft een streepje, nooit",
+            "een nul."),
+      paste("De tabel volgt de risicoscore, het jaar en de regio die je boven de venn kiest.",
+            "Kies je daar \"(alle)\", dan is er geen score om tegen af te zetten en is de",
+            "tabel er niet.")
+    )
+  ),
+  list(
+    datum = "2026-09-21",
     titel = "Kaart: aandeel binnen de gekozen indicatorwaarde, en Heel Amsterdam als niveau",
     punten = c(
       paste("Bij \"Regioniveau\" op de Kaart kun je nu ook Heel Amsterdam kiezen. Als kaart",

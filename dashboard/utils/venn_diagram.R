@@ -455,19 +455,23 @@ venn_region_labels <- function(group_codes, group_labels) {
     AB = lab(1, 2), AC = lab(1, 3), BC = lab(2, 3), ABC = lab(1, 2, 3))
 }
 
-#' De venn als HTML-tabel: rijen = de 8 deelgebieden, kolommen = de waarden
-#' van de risicoscore.
+#' Een kruistabel: rijen = groepen, kolommen = de waarden van een indicator.
 #'
-#' @param m Numerieke matrix met 8 rijen (namen = de sleutels van
-#'   venn_levels(), in die volgorde) en een kolom per risicowaarde
-#'   (kolomnamen = de waarden zelf). NA = onderdrukt.
-#' @param n Numerieke vector van 8, de omvang van elk deelgebied -- sinds
-#'   levering output_1b de gepubliceerde groepsgrootte (`n_split`), en dus
-#'   inclusief wie in geen van de kolommen valt. Een rij telt daarom niet op tot
-#'   n. NA waar onbekend.
-#' @param weergave "rel", "abs" of "gem" -- bepaalt of de cellen percentages,
-#'   aantallen of gemiddelden zijn, net als in de figuur.
-#' @param group_codes,group_labels Zoals bij venn_svg().
+#' De opmaak van deze tabel wordt door meer dan een weergave gebruikt (de venn
+#' als tabel, de risicofactoren, de ondersteuningsvormen), en die moeten er
+#' hetzelfde uitzien -- dus staat de markup hier een keer en leveren de
+#' aanroepers alleen hun eigen rijen aan. Wie een variant nodig heeft, breidt
+#' deze functie uit met een argument; niet met een tweede tabel.
+#'
+#' @param m Numerieke matrix: een rij per groep (rownames = de sleutels, in
+#'   weergavevolgorde) en een kolom per waarde. NA = onderdrukt.
+#' @param n Numerieke vector, een per rij: de omvang van die groep. NA waar
+#'   onbekend. NULL laat de n-kolom helemaal weg.
+#' @param weergave "rel", "abs" of "gem" -- percentages, aantallen of
+#'   gemiddelden, net als in de figuur.
+#' @param rij_labels Character vector van rijlabels, even lang als nrow(m) en
+#'   in dezelfde volgorde.
+#' @param groep_label Kop boven de eerste kolom.
 #' @param var_label Omschrijving boven de waardekolommen.
 #' @param kolomlabels Korte koppen boven de kolommen; standaard de kolomnamen
 #'   van `m` zelf. Voor de risicofactor-tabel zijn dat codes (R1, R2, ...) die
@@ -475,18 +479,25 @@ venn_region_labels <- function(group_codes, group_labels) {
 #' @param kolomtitels Volledige omschrijving per kolom, als hover-title. NULL
 #'   betekent geen title-attribuut.
 #' @param n_label Kop boven de laatste kolom.
+#' @param rij_klassen Optionele CSS-klasse per rij (even lang als nrow(m)), voor
+#'   een rij die zich anders gedraagt -- de "none"-rij van de venn staat buiten
+#'   de cirkels en krijgt daarom zijn eigen streep.
+#' @param aandeel Optionele matrix van dezelfde vorm als `m` met percentages.
+#'   Is hij er, dan leest een cel als "300 (2,0%)": het aantal met daarachter
+#'   welk deel van de regio dat is. Alleen zinvol bij `weergave = "abs"`.
 #' @return Een HTML-string voor HTML()/renderUI().
-venn_matrix_html <- function(m, n, weergave, group_codes, group_labels,
-                             var_label = "Risicoscore",
-                             kolomlabels = colnames(m), kolomtitels = NULL,
-                             n_label = "n") {
-  keys <- names(venn_levels(group_codes))
-  stopifnot(is.matrix(m), identical(rownames(m), keys), length(n) == length(keys))
-
-  labels <- venn_region_labels(group_codes, group_labels)
+kruistabel_html <- function(m, n, weergave, rij_labels, groep_label,
+                            var_label = "Risicoscore",
+                            kolomlabels = colnames(m), kolomtitels = NULL,
+                            n_label = "n", rij_klassen = NULL, aandeel = NULL) {
+  stopifnot(is.matrix(m), length(rij_labels) == nrow(m))
   waarden <- colnames(m)
   stopifnot(length(kolomlabels) == length(waarden),
-            is.null(kolomtitels) || length(kolomtitels) == length(waarden))
+            is.null(kolomtitels) || length(kolomtitels) == length(waarden),
+            is.null(n) || length(n) == nrow(m),
+            is.null(rij_klassen) || length(rij_klassen) == nrow(m),
+            is.null(aandeel) || identical(dim(aandeel), dim(m)))
+  toon_n <- !is.null(n)
 
   fmt <- function(v, rel) {
     if (is.na(v)) {
@@ -499,12 +510,22 @@ venn_matrix_html <- function(m, n, weergave, group_codes, group_labels,
   }
   rel <- weergave == "rel"
 
+  # Het aantal met het aandeel erachter. Een onderdrukte cel blijft een
+  # streepje: daar is ook geen aandeel van.
+  fmt_cel <- function(i, j) {
+    if (is.null(aandeel) || is.na(m[i, j])) return(fmt(m[i, j], rel))
+    if (is.na(aandeel[i, j])) return(fmt(m[i, j], rel))
+    sprintf("%s <span class=\"venn-tab-aandeel\">(%s%%)</span>",
+            fmt(m[i, j], rel),
+            venn_esc(format(round(aandeel[i, j], 1), nsmall = 1, decimal.mark = ",")))
+  }
+
   kop <- paste0(
     '<thead>',
     '<tr>',
-    '<th rowspan="2" class="venn-tab-groep">Ondersteuningscombinatie</th>',
+    sprintf('<th rowspan="2" class="venn-tab-groep">%s</th>', venn_esc(groep_label)),
     sprintf('<th colspan="%d" class="venn-tab-span">%s</th>', length(waarden), venn_esc(var_label)),
-    sprintf('<th rowspan="2" class="venn-tab-n">%s</th>', venn_esc(n_label)),
+    if (toon_n) sprintf('<th rowspan="2" class="venn-tab-n">%s</th>', venn_esc(n_label)) else "",
     '</tr><tr>',
     paste0(vapply(seq_along(waarden), function(i) {
       titel <- if (is.null(kolomtitels)) "" else sprintf(' title="%s"', venn_esc(kolomtitels[i]))
@@ -512,21 +533,55 @@ venn_matrix_html <- function(m, n, weergave, group_codes, group_labels,
     }, character(1)), collapse = ""),
     '</tr></thead>')
 
-  rijen <- vapply(seq_along(keys), function(i) {
-    k <- keys[i]
+  rijen <- vapply(seq_len(nrow(m)), function(i) {
+    klasse <- if (is.null(rij_klassen) || !nzchar(rij_klassen[i])) "" else
+      sprintf(' class="%s"', rij_klassen[i])
     paste0(
-      # De "none"-rij staat buiten de cirkels en krijgt, net als in de figuur,
-      # een eigen streepje mee zodat hij niet als vierde groep leest.
-      sprintf('<tr%s>', if (k == "none") ' class="venn-tab-none"' else ""),
-      sprintf('<td class="venn-tab-groep">%s</td>', venn_esc(labels[[k]])),
-      paste0(vapply(waarden, function(w) sprintf('<td class="venn-tab-num">%s</td>',
-                                                 fmt(m[k, w], rel)), character(1)),
+      sprintf('<tr%s>', klasse),
+      sprintf('<td class="venn-tab-groep">%s</td>', venn_esc(rij_labels[i])),
+      paste0(vapply(seq_along(waarden),
+                    function(j) sprintf('<td class="venn-tab-num">%s</td>', fmt_cel(i, j)),
+                    character(1)),
              collapse = ""),
-      sprintf('<td class="venn-tab-n">%s</td>', fmt(n[[i]], rel = FALSE)),
+      if (toon_n) sprintf('<td class="venn-tab-n">%s</td>', fmt(n[[i]], rel = FALSE)) else "",
       '</tr>')
   }, character(1))
 
   paste0(
     '<table class="venn-tab">', kop,
     '<tbody>', paste0(rijen, collapse = ""), '</tbody></table>')
+}
+
+#' De venn als HTML-tabel: rijen = de 8 deelgebieden, kolommen = de waarden
+#' van de risicoscore. Een dunne laag over kruistabel_html() die de acht
+#' deelgebieden in de vaste volgorde van venn_levels() aanlevert, zodat de
+#' figuur en de tabel nooit een ander vlak op dezelfde plek zetten.
+#'
+#' @param m Numerieke matrix met 8 rijen (namen = de sleutels van
+#'   venn_levels(), in die volgorde) en een kolom per risicowaarde
+#'   (kolomnamen = de waarden zelf). NA = onderdrukt.
+#' @param n Numerieke vector van 8, de omvang van elk deelgebied -- sinds
+#'   levering output_1b de gepubliceerde groepsgrootte (`n_split`), en dus
+#'   inclusief wie in geen van de kolommen valt. Een rij telt daarom niet op tot
+#'   n. NA waar onbekend.
+#' @inheritParams kruistabel_html
+#' @param group_codes,group_labels Zoals bij venn_svg().
+#' @return Een HTML-string voor HTML()/renderUI().
+venn_matrix_html <- function(m, n, weergave, group_codes, group_labels,
+                             var_label = "Risicoscore",
+                             kolomlabels = colnames(m), kolomtitels = NULL,
+                             n_label = "n") {
+  keys <- names(venn_levels(group_codes))
+  stopifnot(is.matrix(m), identical(rownames(m), keys), length(n) == length(keys))
+
+  labels <- venn_region_labels(group_codes, group_labels)
+  kruistabel_html(
+    m, n, weergave,
+    rij_labels  = vapply(keys, function(k) labels[[k]], character(1)),
+    groep_label = "Ondersteuningscombinatie",
+    var_label   = var_label,
+    kolomlabels = kolomlabels, kolomtitels = kolomtitels, n_label = n_label,
+    # De "none"-rij staat buiten de cirkels en krijgt, net als in de figuur,
+    # een eigen streepje mee zodat hij niet als vierde groep leest.
+    rij_klassen = ifelse(keys == "none", "venn-tab-none", ""))
 }
