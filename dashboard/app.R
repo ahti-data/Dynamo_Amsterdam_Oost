@@ -74,7 +74,23 @@ HEEFT_N_SPLIT <- "n_split" %in% names(ds)
 # correctie op de levering.
 UITGESLOTEN_STADSDEEL <- "Westpoort"
 
+GEMEENTE_CODE <- "Amsterdam"
+GEMEENTE_NAAM <- "Heel Amsterdam"
+
 geo <- lapply(geo, function(g) g[!(!is.na(g$stadsdeel) & g$stadsdeel == UITGESLOTEN_STADSDEEL), ])
+
+# Het gemeentevlak: de stadsdelen aan elkaar. Hier afgeleid en niet in de
+# prep-stap, omdat het geen nieuwe geometrie is maar de buitenrand van wat er al
+# staat -- en omdat het pas klopt nadat Westpoort eruit is (dat is een
+# weergavekeuze van deze app, niet van de levering). Een choropleth van een
+# enkel vlak zegt niets over de spreiding, maar laat wel het cijfer voor de hele
+# stad zien, en daar is het hier om te doen.
+geo$gemeente <- {
+  g <- sf::st_sf(region_code = GEMEENTE_CODE, region_name = GEMEENTE_NAAM,
+                 stadsdeel = NA_character_,
+                 geometry = sf::st_union(sf::st_geometry(geo$stadsdeel)))
+  sf::st_make_valid(g)
+}
 
 # Provenance stamped into every export (tc_build_datasheet_log() in
 # utils/slide_download.R): which RA delivery a chart's numbers came from, and
@@ -143,14 +159,12 @@ DEKKING <- merge(DEKKING,
 # Per niveau: welke stadsdelen erin zitten, en hoeveel er in de geometrie zijn.
 DEKKING_STADSDELEN <- DEKKING[, .(stadsdelen = list(sort(unique(stadsdeel)))), by = region_level]
 
-# De kaart kent geen gemeentevlak (dat is de buitenrand van alle stadsdelen
-# samen, en als choropleth van een regio zinloos); de tabbladen die een regio
-# uitkiezen kennen "Heel Amsterdam" wel -- dat is juist de vergelijkingsbasis.
-MAP_LEVELS   <- c("buurt", "wijk", "gebied", "stadsdeel")
-REGIO_LEVELS <- c(MAP_LEVELS, "gemeente")
-
-GEMEENTE_CODE <- "Amsterdam"
-GEMEENTE_NAAM <- "Heel Amsterdam"
+# Gemeente staat onderaan, na de fijnere niveaus: als choropleth is een enkel
+# vlak nutteloos -- er valt niets te vergelijken -- maar het is de snelste manier
+# om het cijfer voor de hele stad te zien zonder van tabblad te wisselen, en dat
+# is waarvoor het erin zit.
+MAP_LEVELS   <- c("buurt", "wijk", "gebied", "stadsdeel", "gemeente")
+REGIO_LEVELS <- MAP_LEVELS
 
 # Stadsdeel om op in te zoomen, of de hele stad. Zo is een kaart van alleen
 # Oost te maken, zonder de andere stadsdelen eromheen.
@@ -161,12 +175,11 @@ STADSDELEN  <- sort(unique(geo$stadsdeel$region_code))
 AMS_BBOX <- st_bbox(geo$stadsdeel)
 
 # Region code -> name, per level, from the geometry (the delivery carries codes
-# only). Gemeente heeft geen geometrie en komt uit de data zelf.
+# only). Gemeente zit er sinds het gemeentevlak hierboven gewoon bij.
 region_choices <- lapply(geo, function(g) {
   d <- st_drop_geometry(g)
   setNames(d$region_code, d$region_name)[order(d$region_name)]
 })
-region_choices$gemeente <- setNames(GEMEENTE_CODE, GEMEENTE_NAAM)
 
 # Which split_var holds the O_MPG*/O_OUD* support-combination for each
 # population, and the matching label vectors from variable_labels.R -- keyed
@@ -1185,6 +1198,10 @@ server <- function(input, output, session) {
     rij <- DEKKING_STADSDELEN[region_level == niveau]
     if (nrow(rij) == 0L) return(NULL)
     heeft <- setdiff(rij$stadsdelen[[1]], NA_character_)
+    # Gemeente is de hele stad in een vlak en valt niet in stadsdelen uiteen;
+    # daar valt over dekking niets te melden. Zonder deze regel zou "heeft" leeg
+    # zijn en de melding beweren dat er niets geleverd is.
+    if (length(heeft) == 0L) return(NULL)
     mist  <- setdiff(STADSDELEN, heeft)
     if (length(mist) == 0L) return(NULL)
     div(class = "kaart-let-op",
@@ -1271,7 +1288,11 @@ server <- function(input, output, session) {
     req(input$k_niveau)
     g <- geo[[input$k_niveau]]
     scope <- input$k_scope %||% SCOPE_ALLES
-    if (!identical(scope, SCOPE_ALLES)) g <- g[!is.na(g$stadsdeel) & g$stadsdeel == scope, ]
+    # "Toon" snijdt op stadsdeel; het gemeentevlak ligt in geen enkel stadsdeel,
+    # dus daar zou dat filter de kaart leegmaken in plaats van hem in te perken.
+    if (!identical(scope, SCOPE_ALLES) && !identical(input$k_niveau, "gemeente")) {
+      g <- g[!is.na(g$stadsdeel) & g$stadsdeel == scope, ]
+    }
     d <- kaart_data()
     kolommen <- c("region_code", "waarde", "metric_value", "n_totaal",
                   intersect(c("noemer", "compleet", "n_gevonden"), names(d)))
@@ -1885,7 +1906,10 @@ server <- function(input, output, session) {
     contentType = "image/png",
     content = function(file) {
       laag <- kaart_geo()
-      scope <- input$k_scope %||% SCOPE_ALLES
+      # Dezelfde uitzondering als in kaart_geo(): op gemeenteniveau doet "Toon"
+      # niets, dus het onderschrift moet er ook niet over opscheppen.
+      scope <- if (identical(input$k_niveau, "gemeente")) SCOPE_ALLES
+               else input$k_scope %||% SCOPE_ALLES
       p <- choropleth_ggplot(
         laag, kaart_domein(), k_weergave(),
         titel = sprintf("%s = %s", pretty_var(input$k_var), input$k_val),

@@ -281,10 +281,19 @@ change needed).
 - **Westpoort is excluded everywhere** (`UITGESLOTEN_STADSDEEL` in `app.R`) — harbour and
   industrial estate, two wijken, almost no households. On the map it colours in like any other
   wijk and its tiny counts skew the scale. The parquet keeps it; only the app hides it.
-- The map has no gemeente level (a choropleth of one polygon), but **"Heel Amsterdam" is a
-  region on the Per regio tab** and is its default — that is the comparison baseline.
+- **The map does have a gemeente level, and it is one polygon.** As a choropleth that says
+  nothing — there is nothing to compare — but it is the quickest way to read the city-wide
+  figure without switching tabs, which is what it is there for. "Heel Amsterdam" is also a
+  region on the Per regio tab and is its default; that one is the comparison baseline.
+  The gemeente outline is not in `geo.rds`: `app.R` unions the stadsdelen itself, because it
+  is the outer edge of geometry that is already there and because it is only correct *after*
+  Westpoort has been dropped, which is this app's display choice and not the prep step's.
 - The Kaart tab's "Toon" control limits the map to one stadsdeel and zooms to it, so a map of
-  Oost alone can be lifted out. It filters the geometry, not the data.
+  Oost alone can be lifted out. It filters the geometry, not the data — and it is **skipped at
+  gemeente level**, where the single polygon lies in no stadsdeel and the filter would blank
+  the map instead of narrowing it. The PNG's subtitle follows the same exception.
+  `dekking_note()` is likewise silent there: gemeente does not break down into stadsdelen, so
+  without that guard it would claim nothing had been delivered.
 
 ## Conventions
 

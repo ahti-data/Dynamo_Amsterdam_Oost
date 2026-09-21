@@ -16,8 +16,12 @@
 CHANGELOG <- list(
   list(
     datum = "2026-09-21",
-    titel = "Kaart: aandeel binnen de gekozen indicatorwaarde",
+    titel = "Kaart: aandeel binnen de gekozen indicatorwaarde, en Heel Amsterdam als niveau",
     punten = c(
+      paste("Bij \"Regioniveau\" op de Kaart kun je nu ook Heel Amsterdam kiezen. Als kaart",
+            "zegt dat niets -- het is een vlak, er valt niets te vergelijken -- maar het is de",
+            "snelste manier om het cijfer voor de hele stad af te lezen zonder naar Per regio",
+            "te wisselen. \"Toon\" doet daar niets, want er is maar een gebied."),
       paste("Bij \"Weergave\" op de Kaart staat een derde soort aandeel:",
             "\"Aandeel binnen indicatorwaarde (%)\". Die zet de gekozen groep af tegen",
             "iedereen met diezelfde waarde van de indicator in die regio, zonder",
