@@ -236,6 +236,59 @@ herstel_lege_categorie <- function(dt) {
   invisible(dt)
 }
 
+#' Herstelt de onderdrukking die de levering had moeten toepassen.
+#'
+#' `05_prepare_output_tables.R` in de RA-pipeline wil eerst de cellen onder de
+#' tien weggooien en dan pas op tientallen afronden. De eerste stap doet echter
+#' niets: de tak voor `metric_value` filtert wel, maar kent het resultaat niet
+#' toe (`dt[...]` in plaats van `dt <- dt[...]`), terwijl de twee andere
+#' kolommen in diezelfde lus het wel goed doen. Alleen het afronden gebeurt dus,
+#' en daarmee wordt een ruwe telling van 1 t/m 5 een `0` en 6 t/m 9 een `10`.
+#'
+#' Dat een gepubliceerde 0 geen echte nul kan zijn, volgt uit de aggregatie zelf
+#' en niet alleen uit die regel: `n_households` is een `uniqueN(...)` binnen een
+#' `by`-groep, en zo'n groep bestaat alleen als er minstens een huishouden in
+#' zit. Hetzelfde voor `n_ouderen_with_var_value` (`fndistinct(rinpersoon)`).
+#' Elke 0 daar is dus een onderdrukte cel. Bij de `n_kinderen_*`-metrics kan een
+#' 0 wel echt zijn -- de huishoudens bestaan, er zitten alleen geen kinderen in
+#' die leeftijdsband -- maar onderscheiden kan niet, en de filter die had moeten
+#' draaien zou ze allebei hebben weggegooid.
+#'
+#' Daarom: elke 0 wordt `NA`, dus "onvoldoende waarnemingen". Dat is wat er in
+#' de levering had moeten staan, en het is de kant waarop dit project hoort te
+#' vergissen -- een 0 op de kaart leest als "hier is niemand", en dat kunnen we
+#' niet waarmaken.
+#'
+#' De rij blijft wel staan, met zijn `n_totaal_region_splitvar`: die kolom is
+#' wel correct gefilterd (>= 10) en is de exacte groepsomvang, dus die is
+#' publiceerbaar en de afleiding heeft hem nodig. Alleen de celwaarde vervalt.
+#'
+#' Een gemiddelde blijft ongemoeid: `average_score` was expliciet van de
+#' onderdrukking uitgezonderd, en een gemiddelde van 0,0 is een echte waarde.
+#'
+#' Zodra RA de ontbrekende toekenning herstelt, vindt deze functie niets meer.
+herstel_onderdrukking <- function(dt) {
+  tel <- !metric_is_gemiddelde(dt$metric_name)
+  nul <- tel & !is.na(dt$metric_value) & dt$metric_value == 0
+  if (!any(nul)) return(invisible(dt))
+  if (!is.double(dt$metric_value)) {
+    set(dt, j = "metric_value", value = as.numeric(dt$metric_value))
+  }
+  message(sprintf(paste("  %s cellen met waarde 0 op NA gezet (%.1f%% van de tellende",
+                        "rijen): onderdrukking die de levering niet toepaste."),
+                  format(sum(nul), big.mark = ".", decimal.mark = ","),
+                  100 * sum(nul) / sum(tel)))
+  per_metric <- sort(tapply(nul, dt$metric_name, sum), decreasing = TRUE)
+  for (i in seq_along(per_metric)) {
+    if (per_metric[[i]] > 0) {
+      message(sprintf("      %-24s %s", names(per_metric)[i],
+                      format(per_metric[[i]], big.mark = ".", decimal.mark = ",")))
+    }
+  }
+  set(dt, i = which(nul), j = "metric_value", value = NA_real_)
+  invisible(dt)
+}
+
 #' Zet een leveringstabel om naar het lange schema.
 #'
 #' **Wat er veranderde met output_1b.** De vorige levering kruiste nooit twee
@@ -347,11 +400,13 @@ bestand_oud <- vind_levering("OT_OUD")
 
 hh <- lees_levering(bestand_hh)
 herstel_lege_categorie(hh)
+herstel_onderdrukking(hh)
 hh_long <- reshape_delivery(hh, population_label = "huishoudens met kinderen")
 rm(hh); invisible(gc())
 
 oud <- lees_levering(bestand_oud)
 herstel_lege_categorie(oud)
+herstel_onderdrukking(oud)
 oud_long <- reshape_delivery(oud, population_label = "ouderen (65+)")
 rm(oud); invisible(gc())
 

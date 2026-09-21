@@ -504,8 +504,10 @@ kruistabel_html <- function(m, n, weergave, rij_labels, groep_label,
       return(sprintf('<span class="venn-tab-na" title="onvoldoende waarnemingen">%s</span>',
                      VENN_SUPPRESSED_MARK))
     }
-    if (rel) sprintf("%.1f%%", v)
-    else if (identical(weergave, "gem")) sprintf("%.2f", v)
+    # Komma als decimaalteken, net als bij de aantallen ernaast: in dezelfde
+    # tabel stond eerst "11.5%" naast "1.460", en dat leest als twee talen.
+    if (rel) sprintf("%s%%", format(round(v, 1), nsmall = 1, decimal.mark = ",", trim = TRUE))
+    else if (identical(weergave, "gem")) format(round(v, 2), nsmall = 2, decimal.mark = ",", trim = TRUE)
     else venn_esc(format(round(v), big.mark = ".", decimal.mark = ","))
   }
   rel <- weergave == "rel"

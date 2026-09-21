@@ -37,6 +37,10 @@ person-level records.
 CBS output rules still apply to anything rendered: cells below 10 are suppressed and values
 are rounded to 10 in the delivery. **Render a suppressed region as explicitly "onvoldoende
 waarnemingen", never as 0** — the distinction matters and collapsing it misreads the data.
+**In `output_1b` the suppression step did not run**, so the prep step applies it —
+see `herstel_onderdrukking()` and the bullet below. **The committed parquet does not carry that
+repair yet**: the rebuild takes about an hour and lands in its own commit, so until then the
+app still shows those cells as `0`.
 `variable_value` is the exception to the rounding rule: it is a category label (`0`, `1`, `2`,
 `3plus`), not a count.
 
@@ -102,6 +106,21 @@ wrong, not the data.
   slice. It hits 4.945 of 6,4M derived rows (0,08%), always at the suppression floor — 20 out of
   a group of 10. `add_display()` caps the displayed share at 100%; the absolute count is left
   alone.
+- **`output_1b`'s suppression step never ran, and the prep step applies it instead.** In the RA
+  pipeline's `05_prepare_output_tables.R` the branch that should drop cells below 10 computes
+  the filtered table but never assigns it (`dt[...]` instead of `dt <- dt[...]`), while the two
+  other columns in the same loop do assign. Only the rounding happened, so a raw 1–5 became a
+  `0` and 6–9 became a `10`. That a published 0 cannot be a real zero follows from the
+  aggregation itself: `n_households` is a `uniqueN()` inside a `by` group, and such a group only
+  exists if it holds at least one household (same for `n_ouderen_with_var_value`'s
+  `fndistinct()`). `herstel_onderdrukking()` therefore turns **every** `metric_value == 0` into
+  `NA` — including the `n_kinderen_*` zeros, which *can* be genuine (households present, no
+  children in that age band) but are indistinguishable, and which the intended filter would have
+  dropped too. `average_score` is left alone: it was explicitly exempt from the suppression and a
+  mean of 0.0 is a real value. The row survives with its `n_split`, which *was* filtered
+  correctly and is the exact group size the derivation needs. It is ~3,9M of 10,7M HHKIND cells
+  and ~115k of OUD's. **Report this to RA**; once the missing assignment is fixed the function
+  finds nothing.
 - **The delivery carries a `population` column of its own**, constant within each file. It is a
   fixed column, not a split — `reshape_delivery()` overwrites it with the label the app uses
   (`huishoudens_met_kinderen` → `huishoudens met kinderen`). Leave it out of
@@ -136,8 +155,8 @@ wrong, not the data.
   matches the total row up to rounding. That is what makes the derived
   `ondersteuningssignaal` / `aantal_ondersteuningsvormen` splits and the
   `O_*_ondersteuning` / `O_*_aantal_vormen` / `O_*_combinatie` indicators valid (PLAN.md §7, §9).
-  Suppression is a **missing row**, not an `NA` — the lowest `metric_value` anywhere in the
-  delivery is 10 — so any sum over combination levels silently counts a suppressed cell as zero.
+  Suppression reaches the parquet as an `NA`, and in `output_1a` as a **missing row** — either
+  way never as a 0 — so any sum over combination levels must not silently count it as zero.
   A derived *cell value* is therefore written only when all of its building blocks are
   published, and the "wel" level comes from *reference row − none* rather than summing the other
   seven. Don't relax that without documenting the resulting error margin.
@@ -250,12 +269,22 @@ wrong, not the data.
   `venn_matrix_html()` is the venn's layer: the eight regions × the risk score's categories,
   the one view the figure cannot give (it stands on a single chosen value). Figure and table
   share `venn_levels()` — one key vector, so a combination level can never land in a different
-  cell in the two. The third layer is the **ondersteuningsvormen × risk score** cross-tab
-  (`vormen_matrix()` in `app.R`): four rows that partition the population against the score's
-  categories, each cell a count plus its share **of the whole region**, so the table sums to
-  100% and every cell is comparable with every other. Its columns are the categories as
-  delivered (0/1/2/3plus) and deliberately **not** merged into "1-2" the way a hand-drawn
-  version of this table did: summing two categories goes wrong the moment one is suppressed.
+  cell in the two. `venn_matrix_html()` itself now only serves the risk-factor table; the venn's
+  own table is gone, absorbed into the configurable cross-tab below.
+  **The cross-tab (`kruistabel_matrix()` in `app.R`) stands on its own**, with its own year, row
+  variable and column variable — it used to hang off the venn's "Kleur de venn naar", which
+  meant it simply was not there until you happened to pick a score. Rows are the levels of any
+  single split variable (the combination, how many forms, wel/geen, or a background variable),
+  columns the values of any indicator. Its columns are the categories as delivered (0/1/2/3plus)
+  and deliberately **not** merged into "1-2" the way a hand-drawn version of this table did:
+  summing two categories goes wrong the moment one is suppressed.
+  It offers three denominators, and **all three are published numbers, never a sum over the
+  cells** — summing would count a suppressed cell as zero and make the denominator too small.
+  *Van de regio* divides by the total row's `denominator` (so the whole table sums to 100% and
+  every cell is comparable with every other), *binnen de rij* by that row's own `n_split`, and
+  *binnen de kolom* by that indicator value's total row. Because the row denominator is the
+  published group size rather than the row's own sum, **a row does not add up to exactly 100%** —
+  a suppressed cell sits in `n` but not in the row, and that is the honest way round.
   The tables' styling lives with the rest of the app's CSS in `app.R`, unlike
   `venn_svg()`, which stays self-contained because it also ships as a standalone `.svg`.
 - `templates/` — built-in think-cell `.pptx` slide templates for the "Download slide" export.

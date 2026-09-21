@@ -722,6 +722,18 @@ de laatste twee iets over de levering zeggen dat RA kan willen weten.
   20 van een groep van 10, waar de echte waarden bijvoorbeeld 15 van 14 zijn. `add_display()`
   kapt het getoonde aandeel af op 100%; het absolute aantal blijft ongemoeid.
 
+- **De onderdrukking in de levering heeft nooit gedraaid.** In
+  `scripts/R/05_prepare_output_tables.R` staat de bedoeling er letterlijk ("first: remove rows
+  with value < 10"), maar de tak voor `metric_value` kent zijn resultaat niet toe -- `dt[...]`
+  in plaats van `dt <- dt[...]` -- terwijl de twee andere kolommen in dezelfde lus het wel doen.
+  Alleen het afronden gebeurde, en daarmee werd een ruwe telling van 1 t/m 5 een `0` en 6 t/m 9
+  een `10`. Dat een gepubliceerde 0 geen echte nul kán zijn volgt uit `03_aggregate.R`:
+  `n_households` is een `uniqueN()` binnen een `by`-groep, en die groep bestaat alleen als er
+  minstens een huishouden in zit. `herstel_onderdrukking()` in de prep-stap zet daarom elke 0 op
+  `NA`, dus op "onvoldoende waarnemingen" -- 3,9 miljoen cellen in OT_HHKIND en 115k in OT_OUD.
+  De rij blijft staan met zijn `n_split`: die kolom is wel correct gefilterd en is de exacte
+  groepsomvang. **Melden bij RA**; wordt de toekenning hersteld, dan doet die functie niets meer.
+
 Verder twee dingen die geen fout zijn maar wel opvielen:
 
 - **`n_split` en `n_totaal` zijn los van elkaar op tientallen afgerond**, dus op een totaalrij

@@ -16,6 +16,25 @@
 CHANGELOG <- list(
   list(
     datum = "2026-09-21",
+    titel = "De kruistabel staat nu los van de venn",
+    punten = c(
+      paste("De kruistabel op Per regio is losgekoppeld van de venn. Hij heeft nu eigen keuzes:",
+            "welke uitsplitsing in de rijen (ondersteuningscombinatie, aantal vormen, wel/geen",
+            "signaal, of een achtergrondkenmerk), welke indicator in de kolommen, en een eigen",
+            "jaar. Eerst verscheen hij alleen als je bij \"Kleur de venn naar\" toevallig een",
+            "risicoscore koos, en dat was niet te raden."),
+      paste("Nieuw daarbij: je kunt kiezen waartegen je aftelt. Tegen de hele regio (het aantal",
+            "met het aandeel erachter), binnen de rij, of binnen de kolom. Alle drie delen door",
+            "een gepubliceerd getal en niet door de som van de cellen, want een onderdrukte cel",
+            "zou die som te klein maken. Daardoor telt een rij niet precies op tot 100%: de",
+            "onderdrukte cel zit wel in n, maar niet in de rij."),
+      paste("De losse venn-tabel is vervallen -- diezelfde acht groepen kies je nu in de",
+            "kruistabel als rijen, met meer mogelijkheden dan daarvoor."),
+      "Percentages in de tabellen gebruiken nu een komma, net als de aantallen ernaast."
+    )
+  ),
+  list(
+    datum = "2026-09-21",
     titel = "Per regio: kruistabel van ondersteuningsvormen tegen de risicoscore",
     punten = c(
       paste("Onder de venn staat een nieuwe tabel: de rijen zijn hoeveel vormen ondersteuning",

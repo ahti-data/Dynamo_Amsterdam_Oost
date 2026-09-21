@@ -67,8 +67,10 @@ test_that("weergave bepaalt de opmaak, maar n blijft altijd een aantal", {
   m <- matrix(12.34, nrow = 8, ncol = 1, dimnames = list(KEYS, "1"))
   rel <- venn_matrix_html(m, rep(4321, 8), "rel", CODES, LABELS)
   abs <- venn_matrix_html(m, rep(4321, 8), "abs", CODES, LABELS)
-  expect_true(grepl("12.3%", rel, fixed = TRUE))
-  expect_false(grepl("12.3%", abs, fixed = TRUE))
+  # Komma, niet punt: het is een Nederlandse tabel en de aantallen ernaast
+  # gebruiken hem ook.
+  expect_true(grepl("12,3%", rel, fixed = TRUE))
+  expect_false(grepl("12,3%", abs, fixed = TRUE))
   # de noemer is een aantal, ook in de procentweergave
   for (html in list(rel, abs)) expect_true(grepl("4.321", html, fixed = TRUE))
 })
