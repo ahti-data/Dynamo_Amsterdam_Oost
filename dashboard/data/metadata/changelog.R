@@ -16,6 +16,28 @@
 CHANGELOG <- list(
   list(
     datum = "2026-09-21",
+    titel = "Nieuw tabblad: regio's naast elkaar in één lijnfiguur",
+    punten = c(
+      paste("Er is een derde tabblad bijgekomen: \"Regio's vergelijken\". Daar staat een lijn",
+            "per regio in plaats van een lijn per uitsplitsing, zodat je bijvoorbeeld alle",
+            "wijken van Oost in één figuur naast elkaar ziet lopen. Kies een",
+            "regioniveau, beperk het eventueel tot één stadsdeel, en de regio's die",
+            "daarbij horen staan meteen aangevinkt; met \"Alle regio's\" en \"Wis selectie\"",
+            "zet je ze in één klik aan of uit."),
+      paste("Het tabblad opent op de wijken van Oost. Verder werkt het als Per regio: dezelfde",
+            "indicatoren, dezelfde uitsplitsingen (hier alleen op een vaste groep — de",
+            "lijnen zijn immers al vergeven aan de regio's) en dezelfde keuze tussen een",
+            "aantal en een aandeel. De legenda loopt van hoog naar laag in het laatste jaar",
+            "met cijfers, zodat de volgorde eronder klopt met wat je rechts in beeld ziet."),
+      paste("De figuur heeft dezelfde downloadknoppen als het lijndiagram op Per regio: de",
+            "ruwe data als xlsx (een rij per regio per jaar, met het aantal, de gebruikte",
+            "noemer en het getoonde cijfer), een think-cell-versie, een slide, en de",
+            "favorietenster. Een jaar waarin een regio onderdrukt is, is een onderbreking in",
+            "de lijn en een leeg veld in het bestand — geen nul.")
+    )
+  ),
+  list(
+    datum = "2026-09-21",
     titel = "Nullen zijn onderdrukte cellen, en de kruistabel staat nu los",
     punten = c(
       paste("Waar eerst een 0 stond, staat nu \"onvoldoende waarnemingen\". In de levering is",

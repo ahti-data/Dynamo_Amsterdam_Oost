@@ -29,6 +29,7 @@ source("utils/splits.R")
 source("utils/metrics.R")
 source("utils/venn_diagram.R")
 source("utils/map.R")
+source("utils/vergelijk.R")
 source("utils/changelog_ui.R")
 
 # The shared think-cell export stack from shiny_dashboard_template, in the order
@@ -181,6 +182,31 @@ region_choices <- lapply(geo, function(g) {
   setNames(d$region_code, d$region_name)[order(d$region_name)]
 })
 
+# Hetzelfde, maar met het stadsdeel erbij: "Regio's vergelijken" perkt zijn
+# keuzelijst daarop in, net zoals "Toon" dat op de Kaart met de geometrie doet.
+#
+# Anders dan region_choices staat hier alleen wat de levering op dat niveau ook
+# echt heeft (DEKKING). Op de kaart is een niet-geleverde regio een grijs vlak
+# met een melding erboven; in een keuzelijst zou hij een naam zijn die je
+# aanvinkt waarna er geen lijn verschijnt -- en dat leest als onderdrukking of
+# als een bug. Oost heeft 76 buurten in de geometrie en 63 in output_1b.
+REGIO_META <- lapply(names(geo), function(lvl) {
+  d <- as.data.table(st_drop_geometry(geo[[lvl]]))[, .(region_code, region_name, stadsdeel)]
+  d <- d[region_code %in% DEKKING[region_level == lvl]$region_code]
+  setorder(d, region_name)
+  d[]
+})
+names(REGIO_META) <- names(geo)
+
+# Meervoud van een regioniveau, voor de titels op "Regio's vergelijken" ("15
+# wijken" leest beter dan "15 regio's op wijkniveau").
+NIVEAU_MEERVOUD <- c(buurt = "buurten", wijk = "wijken", gebied = "gebieden",
+                     stadsdeel = "stadsdelen", gemeente = "gemeenten")
+
+# Waar dat tabblad op opent: de wijken van Oost, de vraag waarvoor het gemaakt
+# is. Staat Oost niet in de geometrie, dan de hele stad.
+VERGELIJK_START_SCOPE <- if ("Oost" %in% STADSDELEN) "Oost" else SCOPE_ALLES
+
 # Which split_var holds the O_MPG*/O_OUD* support-combination for each
 # population, and the matching label vectors from variable_labels.R -- keyed
 # the same way throughout so a lookup by input$populatie always works.
@@ -260,6 +286,13 @@ pretty_var <- function(x) {
 }
 
 METRIC_LABELS <- c(average_score = "gemiddelde score")
+
+# Meervoud van een regioniveau, voor de titels op "Regio's vergelijken". Een
+# niveau dat hier niet in staat krijgt gewoon een -en erachter.
+niveau_meervoud <- function(x) {
+  m <- NIVEAU_MEERVOUD[x]
+  unname(ifelse(is.na(m), paste0(x, "en"), m))
+}
 
 pretty_metric <- function(x) {
   known <- METRIC_LABELS[x]
@@ -440,7 +473,7 @@ ui <- fluidPage(
           fluidRow(
             column(5, selectInput("populatie", "Populatie", choices = POPULATIONS, width = "100%")),
             column(7, div(class = "note", style = "padding-top: 26px;",
-                          "De populatiekeuze geldt voor beide tabbladen hieronder."))
+                          "De populatiekeuze geldt voor alle tabbladen hieronder."))
           )),
 
       tabsetPanel(
@@ -623,6 +656,85 @@ ui <- fluidPage(
               uiOutput("kruistabel")
             )
           )
+        ),
+
+        # -------------------------------------------------- Regio's vergelijken
+        # Per regio tekent een lijn per uitsplitsing binnen een regio; dit
+        # tabblad doet het andersom -- een lijn per regio, voor een vaste
+        # groep. Dat is een andere vraag ("welke wijken van Oost lopen uit de
+        # pas?") en past daarom niet als knop op de Kaart of op Per regio.
+        tabPanel(
+          "Regio's vergelijken",
+          br(),
+          sidebarLayout(
+            sidebarPanel(
+              width = 3,
+              control_card(
+                selectInput("v_niveau", "Regioniveau", choices = REGIO_LEVELS,
+                            selected = "wijk"),
+                selectInput("v_scope", "Beperk tot stadsdeel",
+                            choices = c(SCOPE_ALLES, STADSDELEN),
+                            selected = VERGELIJK_START_SCOPE),
+                selectizeInput("v_regios", "Regio's", choices = NULL, multiple = TRUE,
+                               width = "100%",
+                               options = list(plugins = list("remove_button"))),
+                div(style = "margin: -6px 0 6px;",
+                    actionLink("v_alles", "Alle regio's"), " · ",
+                    actionLink("v_geen", "Wis selectie")),
+                uiOutput("v_regio_note"),
+                uiOutput("v_dekking_note")
+              ),
+              control_card(
+                selectInput("v_var", "Indicator", choices = NULL),
+                uiOutput("v_var_note"),
+                selectInput("v_val", "Waarde van de indicator", choices = NULL),
+                selectInput("v_metric", "Metric", choices = NULL)
+              ),
+              control_card(
+                tags$label(class = "control-label", "Splits uit naar"),
+                div(class = "note", style = "margin: 2px 0 10px;",
+                    "Hier bepaalt de uitsplitsing over welke groep de lijnen",
+                    " gaan; de lijnen zelf zijn de regio's. Elke uitsplitsing",
+                    " staat op “alle”: dan telt hij niet mee in de",
+                    " selectie. Meerdere niveaus van dezelfde uitsplitsing",
+                    " worden bij elkaar opgeteld."),
+                uiOutput("v_split_ui"),
+                uiOutput("v_split_note")
+              ),
+              control_card(
+                radioButtons("v_weergave", "Weergave",
+                             c("Absoluut" = "abs", "Aandeel (%)" = "rel"),
+                             selected = "rel"),
+                uiOutput("v_gem_note"),
+                div(class = "note", style = "margin: -6px 0 0;",
+                    "Bij “Aandeel (%)” is de noemer de gekozen groep",
+                    " binnen die regio zelf, net als op Per regio. Regio's van",
+                    " heel verschillende omvang zijn zo naast elkaar te lezen;",
+                    " absolute aantallen zeggen vooral iets over hoe groot een",
+                    " regio is.")
+              ),
+              chart_data_downloads_ui(
+                "v_downloads",
+                chart_type      = "line",
+                raw_label       = "Download data (ruw, xlsx)",
+                thinkcell_label = "Download data (think-cell, xlsx)",
+                slide_label     = "Download slide (PowerPoint)",
+                favorite_label  = "☆ Bewaar als favoriet",
+                plot_output_id  = "vergelijk"
+              ),
+              div(class = "note", style = "margin-top: 10px;",
+                  "De xlsx bevat een rij per regio per jaar, met het aantal, de",
+                  " gebruikte noemer en het getoonde cijfer. Een onderbroken lijn",
+                  " betekent dat het cijfer in dat jaar onderdrukt is.")
+            ),
+            mainPanel(
+              width = 9,
+              div(textOutput("v_titel"), class = "chart-title"),
+              uiOutput("v_som_waarschuwing"),
+              uiOutput("v_waarschuwing"),
+              plotlyOutput("vergelijk", height = 620)
+            )
+          )
         )
       )
     ),
@@ -669,7 +781,7 @@ server <- function(input, output, session) {
 
     vars <- sort(unique(v$variable_name))
 
-    ids <- paste0(rep(c("k", "r"), each = 2), c("_var", "_metric"))
+    ids <- paste0(rep(c("k", "r", "v"), each = 2), c("_var", "_metric"))
 
     # Read the current picks BEFORE freezing: a frozen input throws a silent
     # error when read, which would abort this observer before it sends any
@@ -689,9 +801,9 @@ server <- function(input, output, session) {
     # splitsselectors staan er niet bij: die bestaan per variabele en worden
     # door renderUI opnieuw opgebouwd, en split_selectie() negeert een waarde
     # die bij deze populatie niet bestaat (zie daar).
-    for (i in c(ids, "k_val", "r_val")) freezeReactiveValue(input, i)
+    for (i in c(ids, "k_val", "r_val", "v_val")) freezeReactiveValue(input, i)
 
-    for (p in c("k", "r")) {
+    for (p in c("k", "r", "v")) {
       update_preserving(session, paste0(p, "_var"), named(vars, pretty_var),
                         current[[paste0(p, "_var")]])
     }
@@ -724,6 +836,7 @@ server <- function(input, output, session) {
 
   observeEvent(list(input$populatie, input$k_var), update_indicator_keuzes("k"))
   observeEvent(list(input$populatie, input$r_var), update_indicator_keuzes("r"))
+  observeEvent(list(input$populatie, input$v_var), update_indicator_keuzes("v"))
 
   # "Splits uit naar": welke splitsvariabelen rijen hebben bij de op dit moment
   # gekozen indicator, en per variabele welke niveaus. De risicoscores dragen ze
@@ -807,6 +920,10 @@ server <- function(input, output, session) {
   }
   output$k_split_ui <- renderUI(split_ui("k", elk = FALSE))
   output$r_split_ui <- renderUI(split_ui("r", elk = TRUE))
+  # "Regio's vergelijken" heeft zijn reeksen al vergeven aan de regio's, dus
+  # "elk niveau apart" bestaat daar niet: een uitsplitsing staat er op alle, of
+  # op een vaste groep (meerdere niveaus worden opgeteld, net als op de Kaart).
+  output$v_split_ui <- renderUI(split_ui("v", elk = FALSE))
 
   #' Wat er op dit moment gekozen staat, uitgesplitst naar wat het betekent:
   #'
@@ -841,17 +958,20 @@ server <- function(input, output, session) {
 
   k_split_sel <- reactive(split_selectie("k"))
   r_split_sel <- reactive(split_selectie("r"))
+  v_split_sel <- reactive(split_selectie("v"))
 
   # De sleutel van de gekozen verzameling: "(totaal)" als alles op "alle" staat,
   # en anders de namen alfabetisch aan elkaar -- precies zoals de prep-stap ze
   # in split_var heeft weggeschreven.
   k_split_key <- reactive(k_split_sel()$key)
   r_split_key <- reactive(r_split_sel()$key)
+  v_split_key <- reactive(v_split_sel()$key)
 
   # Bestaat deze kruising in de levering? Niet elke combinatie wordt
   # gepubliceerd, en een lege grafiek moet als "niet geleverd" leesbaar zijn.
   k_split_bestaat <- reactive(split_key_bestaat(k_split_key(), pop_vocab()$split_var))
   r_split_bestaat <- reactive(split_key_bestaat(r_split_key(), pop_vocab()$split_var))
+  v_split_bestaat <- reactive(split_key_bestaat(v_split_key(), pop_vocab()$split_var))
 
   # Welke gepubliceerde split_level-waarden bij de keuze horen. Bewust de
   # geleverde niveaus filteren en niet het product van de losse keuzes: de
@@ -868,6 +988,7 @@ server <- function(input, output, session) {
   }
   k_split_levels <- reactive(split_niveaus(k_split_sel()))
   r_split_levels <- reactive(split_niveaus(r_split_sel()))
+  v_split_levels <- reactive(split_niveaus(v_split_sel()))
 
   # Vaste toelichting onder "Risicoscore". De R_-scores delen er een; de twee
   # afgeleide ondersteuningsindicatoren zijn geen risico-indicator en hebben
@@ -908,6 +1029,7 @@ server <- function(input, output, session) {
   }
   output$k_var_note <- renderUI(var_note(input$k_var))
   output$r_var_note <- renderUI(var_note(input$r_var))
+  output$v_var_note <- renderUI(var_note(input$v_var))
 
   # Toelichting onder "Splits uit naar", op beide tabbladen: de O_MPG1/2/3-legenda bij de
   # combinatiesplitsing, wat de noemer betekent bij de afgeleide splitsingen, en
@@ -945,6 +1067,10 @@ server <- function(input, output, session) {
     req(input$populatie)
     split_note(r_split_sel()$vars, r_split_bestaat())
   })
+  output$v_split_note <- renderUI({
+    req(input$populatie)
+    split_note(v_split_sel()$vars, v_split_bestaat())
+  })
 
   # Region picker follows the region level.
   observeEvent(input$r_niveau, {
@@ -977,6 +1103,9 @@ server <- function(input, output, session) {
   r_weergave <- reactive({
     if (isTRUE(metric_is_gemiddelde(input$r_metric))) "gem" else input$r_weergave
   })
+  v_weergave <- reactive({
+    if (isTRUE(metric_is_gemiddelde(input$v_metric))) "gem" else input$v_weergave
+  })
 
   gemiddelde_note <- function(metric) {
     if (!isTRUE(metric_is_gemiddelde(metric))) return(NULL)
@@ -989,6 +1118,7 @@ server <- function(input, output, session) {
   }
   output$k_gem_note <- renderUI(gemiddelde_note(input$k_metric))
   output$r_gem_note <- renderUI(gemiddelde_note(input$r_metric))
+  output$v_gem_note <- renderUI(gemiddelde_note(input$v_metric))
 
   add_display <- function(d, weergave) {
     if (nrow(d) == 0) {
@@ -1260,6 +1390,7 @@ server <- function(input, output, session) {
 
   output$k_dekking_note <- renderUI(dekking_note(input$k_niveau))
   output$r_dekking_note <- renderUI(dekking_note(input$r_niveau))
+  output$v_dekking_note <- renderUI(dekking_note(input$v_niveau))
 
   output$k_waarschuwing <- renderUI({
     d <- kaart_data()
@@ -2023,12 +2154,259 @@ server <- function(input, output, session) {
         downloadButton("r_venn_dl_data", "Download data (xlsx)", class = "btn-default"))
   })
 
+  # --------------------------------------------- Regio's vergelijken -----
+  # Een lijn per regio, voor een vaste groep -- het spiegelbeeld van Per regio,
+  # dat een lijn per uitsplitsing binnen een regio tekent. De slice is dezelfde
+  # als die van de kaart (meerdere regio's, met de jaren erbij in plaats van
+  # een peiljaar), dus hij loopt ook door map_aggregate(): meerdere
+  # splitsniveaus worden daar opgeteld, met de noemerregel die daar staat.
+
+  # De keuzelijst met regio's: het gekozen niveau, eventueel ingeperkt tot een
+  # stadsdeel -- dezelfde inperking als "Toon" op de Kaart.
+  v_regio_keuzes <- reactive({
+    req(input$v_niveau)
+    vergelijk_regio_keuzes(REGIO_META[[input$v_niveau]],
+                           input$v_scope %||% SCOPE_ALLES, SCOPE_ALLES)
+  })
+
+  # Wisselt het niveau of het stadsdeel, dan wordt de selectie opnieuw gezet in
+  # plaats van bijgewerkt: "wijk" plus "Oost" leest als "geef me de wijken van
+  # Oost", en een half overgebleven selectie van het vorige niveau zit daarbij
+  # in de weg.
+  #
+  # Bewust *geen* `server = TRUE` zoals bij r_regio hiernaast: dat laadt de
+  # keuzes pas als de browser erom vraagt, en een lijst in een tabblad dat nog
+  # niet open is geweest vraagt er niet om -- dan staan de vijftien wijken wel
+  # in het vakje, maar weet de server ze niet en blijft de figuur leeg. Het gaat
+  # hier hooguit om enkele tientallen namen, dus ze kunnen gewoon mee.
+  observeEvent(list(input$v_niveau, input$v_scope), {
+    ch <- v_regio_keuzes()
+    updateSelectizeInput(session, "v_regios", choices = ch,
+                         selected = vergelijk_start_selectie(ch))
+  }, ignoreInit = FALSE)
+
+  observeEvent(input$v_alles, {
+    ch <- v_regio_keuzes()
+    updateSelectizeInput(session, "v_regios", choices = ch, selected = unname(ch))
+  })
+  observeEvent(input$v_geen, {
+    ch <- v_regio_keuzes()
+    updateSelectizeInput(session, "v_regios", choices = ch, selected = character(0))
+  })
+
+  output$v_regio_note <- renderUI({
+    ch <- v_regio_keuzes()
+    if (length(ch) == 0L) {
+      return(div(class = "note",
+                 "Op dit regioniveau zijn hier geen regio's. Kies een ander",
+                 " niveau of een ander stadsdeel."))
+    }
+    n_sel <- length(v_regio_sel())
+    div(class = "note",
+        sprintf("%d van %d %s geselecteerd.", n_sel, length(ch),
+                niveau_meervoud(input$v_niveau)),
+        if (n_sel == 0L) " Kies er ten minste \u00e9\u00e9n.",
+        if (n_sel > VERGELIJK_MAX_AUTO)
+          sprintf(" Boven de %d lijnen worden de kleuren lastig uit elkaar te houden.",
+                  VERGELIJK_MAX_AUTO))
+  })
+
+  # De gekozen regio's, gesneden op wat er bij het huidige niveau hoort.
+  # updateSelectizeInput() is een rondje langs de browser, dus vlak na een
+  # niveauwissel draagt de input nog de codes van het vorige niveau; die zouden
+  # anders tegen het nieuwe niveau opgevraagd worden. Snijden in plaats van
+  # freezeReactiveValue(): dat laatste hangt ervan af dat de browser de nieuwe
+  # waarde terugstuurt, en dat doet hij voor een lijst in een nog niet geopend
+  # tabblad niet betrouwbaar.
+  v_regio_sel <- reactive({
+    intersect(input$v_regios %||% character(0), unname(v_regio_keuzes()))
+  })
+
+  # Niets gekozen: filteren op een code die niet bestaat. Dat geeft nul rijen
+  # met het volledige schema, waar een lege vector bij arrow niet gegarandeerd
+  # hetzelfde "niets" is -- en de export heeft de kolommen nodig, ook als er
+  # geen rij onder staat.
+  v_regio_codes <- reactive({
+    r <- v_regio_sel()
+    if (length(r)) r else SPLIT_GEEN
+  })
+
+  vergelijk_rijen <- reactive({
+    req(input$populatie, input$v_niveau, input$v_var, input$v_val, input$v_metric)
+    lvl <- niets_als_leeg(v_split_levels())
+
+    ds |>
+      filter(population    == !!input$populatie,
+             region_level  == !!input$v_niveau,
+             region_code %in% !!v_regio_codes(),
+             variable_name == !!input$v_var,
+             variable_value== !!input$v_val,
+             metric_name   == !!input$v_metric,
+             split_var     == !!v_split_key(),
+             split_level %in% !!lvl) |>
+      collect() |>
+      as.data.table()
+  })
+
+  # Hoeveel cellen een regio x jaar moet hebben om compleet te zijn. Anders dan
+  # op de kaart is er hier altijd precies een indicatorwaarde, dus dit is het
+  # aantal gekozen splitsniveaus.
+  v_n_cellen <- reactive(length(v_split_levels()))
+
+  vergelijk_data <- reactive({
+    d <- map_aggregate(vergelijk_rijen(), v_n_cellen(),
+                       optelbaar = !isTRUE(metric_is_gemiddelde(input$v_metric)))
+    add_display(d, v_weergave())
+  })
+
+  # De reeksen: een per regio, in de volgorde waarin de figuur ze rechts van
+  # boven naar beneden zet. Diezelfde factorvolgorde gaat mee de export in.
+  vergelijk_plot_data <- reactive({
+    d <- copy(vergelijk_data())  # copy: `:=` zou anders de cache hierboven wijzigen
+    if (nrow(d) == 0) {
+      d[, reeks := factor()]
+      return(d[])
+    }
+    volgorde <- vergelijk_reeks_volgorde(d$region_name, d$year, d$waarde)
+    d[, reeks := factor(region_name, levels = volgorde)]
+    setorder(d, reeks, year)
+    d[]
+  })
+
+  # Waar de figuur over gaat, in woorden: "15 wijken in Oost". Gedeeld door de
+  # titel boven de figuur en de korte titel op de slide.
+  vergelijk_waar <- reactive({
+    req(input$v_niveau)
+    n_sel <- length(v_regio_sel())
+    uit <- sprintf("%d %s", n_sel, niveau_meervoud(input$v_niveau))
+    scope <- input$v_scope %||% SCOPE_ALLES
+    # Op gemeenteniveau doet "Beperk tot stadsdeel" niets (zie
+    # vergelijk_regio_keuzes()), dus dan moet de titel er ook niet over
+    # opscheppen.
+    if (!identical(scope, SCOPE_ALLES) && !identical(input$v_niveau, "gemeente")) {
+      uit <- sprintf("%s in %s", uit, scope)
+    }
+    uit
+  })
+
+  vergelijk_titel <- reactive({
+    req(input$v_var, input$v_val, input$v_metric)
+    sel <- v_split_sel()
+    # Elke gekozen uitsplitsing staat hier op een vast niveau -- de reeksen zijn
+    # immers de regio's -- dus ze horen alle in de titel: ze vertellen waar de
+    # hele figuur over gaat.
+    sp <- paste(vapply(names(sel$keuze), function(v)
+      sprintf("%s: %s", pretty_split_1(v),
+              som_label(pretty_level(sel$keuze[[v]], v, input$populatie))),
+      character(1)), collapse = " | ")
+    sp <- if (nzchar(sp)) paste0(" | ", sp) else ""
+    sprintf("%s = %s | %s (%s) | %s%s",
+            pretty_var(input$v_var),
+            pretty_value(input$v_val, input$v_var, input$populatie),
+            pretty_metric(input$v_metric), eenheid(v_weergave()),
+            vergelijk_waar(), sp)
+  })
+
+  output$v_titel <- renderText(vergelijk_titel())
+
+  # Korte kop voor de slide; de titel hierboven is te lang voor een titelbalk.
+  vergelijk_slide_titel <- reactive({
+    req(input$v_var)
+    sprintf("%s - %s, %s-%s", pretty_var(input$v_var), vergelijk_waar(),
+            min(YEARS), max(YEARS))
+  })
+
+  output$v_som_waarschuwing <- renderUI({
+    req(input$populatie, input$v_var)
+    lvl <- v_split_levels()
+    if (identical(v_split_key(), TOTAL_LABEL) || length(lvl) <= 1L) return(NULL)
+    div(class = "kaart-let-op",
+        tags$b(sprintf("Let op: %d groepen worden bij elkaar opgeteld.", length(lvl))),
+        sprintf(" Elke lijn is de som van %s, niet elke groep apart.",
+                som_label(pretty_level(lvl, v_split_key(), input$populatie))),
+        " Kies \u00e9\u00e9n niveau per uitsplitsing voor een enkele groep.")
+  })
+
+  output$v_waarschuwing <- renderUI({
+    d <- vergelijk_data()
+    if (nrow(d) == 0) return(NULL)
+    if (isTRUE(metric_is_gemiddelde(input$v_metric)) && any(d$n_gevonden > 1)) {
+      return(div(class = "kaart-let-op",
+                 tags$b("Een gemiddelde kan niet opgeteld worden."),
+                 " Er zijn meerdere niveaus geselecteerd, en het gemiddelde",
+                 " daarvan is niet uit deze cijfers te bepalen: daar zouden de",
+                 " aantallen per cel voor nodig zijn, en die staan niet in",
+                 " dezelfde slice. Kies \u00e9\u00e9n niveau."))
+    }
+    if (!"compleet" %in% names(d)) return(NULL)
+    onvolledig <- d[!is.na(compleet) & !compleet]
+    if (nrow(onvolledig) == 0) return(NULL)
+    aandeel <- map_is_aandeel(v_weergave())
+    div(class = "kaart-let-op",
+        tags$b(sprintf("Let op: bij %d van de %d punten is een gekozen groep onderdrukt.",
+                       nrow(onvolledig), nrow(d))),
+        sprintf(" Het gaat om %s.", som_label(sort(unique(onvolledig$region_name)))),
+        if (aandeel)
+          paste(" Daar telt niet alleen de teller maar ook de noemer alleen op wat",
+                " gepubliceerd is, en omdat er met een onderdrukte cel een hele groep",
+                " uit de noemer valt, kan het percentage daar te hoog uitvallen.")
+        else
+          paste(" Daar telt het punt alleen op wat wel gepubliceerd is, dus het is",
+                " een ondergrens."),
+        " In de xlsx staat het per punt als kolom ",
+        tags$code("alle_groepen_aanwezig"), ".")
+  })
+
+  output$vergelijk <- renderPlotly({
+    validate(need(length(v_regio_sel()) > 0,
+                  "Kies ten minste \u00e9\u00e9n regio."))
+    d <- vergelijk_plot_data()
+    validate(need(nrow(d) > 0, "Geen data voor deze selectie."))
+
+    lv_lab <- levels(d$reeks)
+    pal <- vergelijk_palet(length(lv_lab), ahti_branding$scale_discrete)
+
+    p <- plot_ly(source = "vergelijk")
+    for (i in seq_along(lv_lab)) {
+      di <- d[reeks == lv_lab[i]]
+      p <- add_trace(
+        p, data = di, x = ~year, y = ~waarde,
+        type = "scatter", mode = "lines+markers",
+        name = lv_lab[i], line = list(color = pal[i], width = 2.5),
+        marker = list(color = pal[i], size = 6),
+        hovertemplate = paste0(
+          "<b>", lv_lab[i], "</b><br>%{x}<br>",
+          if (v_weergave() == "rel") "%{y:.1f}%"
+          else if (v_weergave() == "gem") "%{y:.2f}" else "%{y:,.0f}",
+          "<extra></extra>")
+      )
+    }
+
+    p |>
+      layout(
+        title = list(text = ""),
+        xaxis = list(title = "", dtick = 1, tickmode = "linear"),
+        yaxis = list(title = eenheid(v_weergave()),
+                     rangemode = "tozero",
+                     ticksuffix = if (v_weergave() == "rel") "%" else ""),
+        # Bij een handvol lijnen is een gedeelde tooltip het prettigst; bij
+        # vijftien wordt dat een blok tekst over de halve figuur heen.
+        hovermode = if (length(lv_lab) > 6) "closest" else "x unified",
+        legend = list(orientation = "h", y = -0.12),
+        showlegend = length(lv_lab) > 1,
+        margin = list(t = 20)
+      ) |>
+      config(displaylogo = FALSE,
+             modeBarButtonsToRemove = c("select2d", "lasso2d", "autoScale2d"))
+  })
+
   # -------------------------------------------------------------- Downloads ---
   # The Kaart tab keeps its plain xlsx export (a choropleth has no think-cell
-  # equivalent); the Per regio line chart is wired to the shared export layer in
-  # utils/ -- raw xlsx, think-cell xlsx, slide .pptx, favorites and export
-  # history (PLAN.md §4, stap 7). Wiring a second chart means repeating the
-  # ui/server pair, never reimplementing any of it here.
+  # equivalent); both line charts -- Per regio and Regio's vergelijken -- are
+  # wired to the shared export layer in utils/ through their own
+  # chart_data_downloads_ui/server pair: raw xlsx, think-cell xlsx, slide
+  # .pptx, favorites and export history (PLAN.md §4, stap 7). Wiring a further
+  # chart means repeating that pair, never reimplementing any of it here.
 
   export_cols <- function(d) {
     uit <- d[, .(populatie = population, regioniveau = region_level,
@@ -2131,7 +2509,8 @@ server <- function(input, output, session) {
     nav_id = "hoofdtab",
     subtab_by_tab = c("Iteratie 1" = "subtab"),
     dl_option_prefixes = c(
-      "r_downloads" = "^(populatie|r_niveau|r_regio|r_var|r_val|r_metric|r_split_[A-Za-z0-9_]+|r_weergave)$"
+      "r_downloads" = "^(populatie|r_niveau|r_regio|r_var|r_val|r_metric|r_split_[A-Za-z0-9_]+|r_weergave)$",
+      "v_downloads" = "^(populatie|v_niveau|v_scope|v_regios|v_var|v_val|v_metric|v_split_[A-Za-z0-9_]+|v_weergave)$"
     )
   )
 
@@ -2148,6 +2527,38 @@ server <- function(input, output, session) {
     agg_fun      = NULL,
     slide_title  = regio_slide_titel,
     figure_title = regio_titel,
+    source_output = RA_OUTPUT_ID,
+    source_sheet  = reactive({
+      req(input$populatie)
+      f <- RA_SOURCE_FILE[input$populatie]
+      if (is.na(f)) "" else unname(f)
+    }),
+    source_mtime = APP_DATA_MTIME
+  )
+
+  # Dezelfde tabel voor Regio's vergelijken, met de regionaam als reeks. Ook
+  # hier draagt `reeks` de factorvolgorde van de figuur mee, zodat het
+  # spreadsheet de regio's in dezelfde volgorde zet als de legenda.
+  vergelijk_export_data <- reactive({
+    d <- vergelijk_plot_data()
+    out <- export_cols(d)
+    out[, reeks := d$reeks]
+    out[]
+  })
+
+  chart_data_downloads_server(
+    id           = "v_downloads",
+    data         = vergelijk_export_data,
+    chart_type   = "line",
+    category_col = "jaar",
+    series_col   = "reeks",
+    value_col    = "weergegeven_waarde",
+    filename_prefix = "dynamo_vergelijk",
+    # Een rij per regio x jaar na map_aggregate(); er valt niets meer op te
+    # tellen en een dubbel paar zou een echte fout zijn.
+    agg_fun      = NULL,
+    slide_title  = vergelijk_slide_titel,
+    figure_title = vergelijk_titel,
     source_output = RA_OUTPUT_ID,
     source_sheet  = reactive({
       req(input$populatie)

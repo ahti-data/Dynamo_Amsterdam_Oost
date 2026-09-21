@@ -164,8 +164,8 @@ klein genoeg om wél mee te deployen.
 
 ### App — `app.R`
 Eén hoofdtab **"Iteratie 1"**; de populatiekeuze (`ouderen (65+)` / `huishoudens met
-kinderen`) staat direct daarbinnen, boven de twee subtabs, en vult de keuzelijsten van
-beide.
+kinderen`) staat direct daarbinnen, boven de drie subtabs, en vult de keuzelijsten van
+alle drie.
 
 **Labels komen uit `Outcomes.xlsx`** (tabbladen "Definities-MPG"/"Definities-Ouderen"),
 overgenomen in `data/metadata/variable_labels.R` — niet afgeleid uit de kolomnaam. Elke
@@ -248,7 +248,8 @@ de standaardkeuze — dat is de vergelijkingsbasis.
 `plotly` lijndiagram 2018–2024, één lijn per niveau van de gekozen splitvariabele (bij
 "(totaal)" één lijn). Hover met jaar + waarde. Zelfde absoluut/relatief-keuze.
 
-Dit is de enige figuur met de volledige exportlaag eronder (§4 stap 7): ruwe xlsx,
+Deze figuur heeft de volledige exportlaag eronder (§4 stap 7) — net als die op subtab 3
+hieronder: ruwe xlsx,
 think-cell-xlsx, slide (.pptx) en de favorietenster, via
 `chart_data_downloads_ui()`/`chart_data_downloads_server()`. De tabel achter die knoppen is
 exact wat het diagram tekent — één rij per jaar × lijn, met de legendanaam van de lijn als
@@ -301,6 +302,37 @@ jaren van de levering (Amsterdam-breed 5.400 en 3.100 in hun laatste jaar, ruim 
 onderdrukkingsdrempel). Een lege kolom is daar dus géén onderdrukking, en de tabel zegt dat
 er met zoveel woorden onder.
 
+#### Subtab 3 — Regio's vergelijken
+Het spiegelbeeld van Per regio: daar staat één regio met een lijn per uitsplitsing, hier één
+uitsplitsing met een **lijn per regio**. De vraag erachter is "welke wijken van Oost lopen uit
+de pas?", en die past op geen van de twee andere subtabs — de kaart toont één jaar, Per regio
+één regio.
+
+Besturing: regioniveau · *beperk tot stadsdeel* (dezelfde inperking als "Toon" op de kaart) ·
+de regio's zelf (meervoudig, met "Alle regio's" / "Wis selectie") · indicator · waarde · metric
+· split_by · absoluut/aandeel. Het tabblad opent op de wijken van Oost. Wisselt het niveau of
+het stadsdeel, dan wordt de selectie **opnieuw gezet** op de regio's van die scope (tot
+`VERGELIJK_MAX_AUTO` = 15): "wijk + Oost" leest als "geef me de wijken van Oost", en een half
+overgebleven selectie van het vorige niveau zit dan in de weg.
+
+De slice is die van de kaart met de jaren erin in plaats van één peiljaar, dus hij loopt door
+dezelfde `map_aggregate()` en erft de noemerregel hierboven (som over de *unieke*
+splitsniveaus, een onvolledige regio houdt zijn cijfer met `compleet = FALSE`). Wat de kaart
+met een gestippelde rand doet, zegt dit tabblad in de waarschuwing boven de figuur en in de
+kolom `alle_groepen_aanwezig` van de xlsx. "Elk niveau apart" bestaat hier niet: de reeksen
+zijn al vergeven aan de regio's, dus een uitsplitsing staat op "alle" of op een vaste groep.
+
+De legenda loopt van hoog naar laag op de **waarde in het laatste jaar waarin überhaupt iets
+gepubliceerd is** (`vergelijk_reeks_volgorde()` in `utils/vergelijk.R`) — zo leest hij van
+boven naar beneden zoals de rechterkant van de figuur. Die volgorde is de factorvolgorde van
+de reeks en dus ook de volgorde van de export. De kleuren komen uit de huisstijlschaal zolang
+die groot genoeg is (vijf reeksen) en daarboven uit `grDevices::hcl.colors()`: de vijf
+merkkleuren herhalen zou op vijftien lijnen twee wijken dezelfde kleur geven.
+
+Onder de figuur hangt dezelfde exportlaag als onder Per regio (§4 stap 7), met de regionaam
+als reeks: één rij per regio per jaar, met het aantal, de gebruikte noemer en het getoonde
+cijfer.
+
 ---
 
 ## 4. Werkvolgorde
@@ -351,7 +383,8 @@ op tot `n_totaal` (Amsterdam 2024, R_MPG_totaal: 38.610 + 26.660 + 13.910 + 8.34
 
 ### De exportlaag — wat er wel en niet aangesloten is
 
-Aangesloten op het **lijndiagram** (subtab "Per regio"): ruwe xlsx, think-cell-xlsx,
+Aangesloten op de **twee lijndiagrammen** (subtab "Per regio", id `r_downloads`, en subtab
+"Regio's vergelijken", id `v_downloads`): ruwe xlsx, think-cell-xlsx,
 slide-ZIP en de favorietenster, plus de drie gedeelde tabbladen **Favorites**,
 **Export history** en **Manage templates**. Elke export krijgt automatisch een herkomstregel
 mee (`tc_build_datasheet_log()`): tijdstip, download-id, dashboard/tab/subtab, chart_type,

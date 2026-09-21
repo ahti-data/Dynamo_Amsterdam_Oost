@@ -251,6 +251,29 @@ wrong, not the data.
     (`scale_fill_gradientn` + `scales::squish`), not binned — binning lost the difference
     between two regions in the same class, and the colourbar guide sidesteps the empty-key
     problem that the old discrete legend had.
+- `utils/vergelijk.R` — Dynamo-specific: what the **Regio's vergelijken** tab shares between the
+  screen and the download. That tab is the mirror image of Per regio — a line per *region* for
+  one fixed group, instead of a line per split level within one region — which is why it is its
+  own tab rather than a switch on Per regio or on the Kaart.
+  - It deliberately has **no aggregation of its own**: its slice is the map's slice with the
+    years left in, so it runs through `map_aggregate()` and inherits that denominator rule
+    (sum over the *unique* split levels). A second implementation would drift.
+  - Its splits offer no "elk niveau apart": the series are already spent on the regions, so a
+    split is either "alle" or a fixed group (`split_ui("v", elk = FALSE)`, like the Kaart).
+  - `vergelijk_reeks_volgorde()` orders the legend by each region's value in the **last year
+    that has any figures**, high to low, so the legend reads top-to-bottom like the right edge
+    of the chart. That order is the `reeks` factor's levels and therefore also the export's
+    series order (the thinkcell-export skill's "preserve the plotted order").
+  - `vergelijk_palet()` uses the ahti scale up to five series and `grDevices::hcl.colors()`
+    above it. Repeating the five-colour brand scale would give two wijken the same colour on a
+    figure with fifteen lines, which is the one mistake this tab must not make.
+  - Switching region level or stadsdeel **resets** the region selection to that scope's regions
+    (capped at `VERGELIJK_MAX_AUTO`), rather than keeping what still matches: "wijk + Oost"
+    means "give me the wijken of Oost", which is the question the tab was built for.
+  - Its picker (`REGIO_META`) lists only regions the delivery actually has at that level
+    (`DEKKING`), not every region in the geometry — Oost has 76 buurten in `geo.rds` and 63 in
+    `output_1b`. On the map an undelivered region is a grey shape with a note above it; in a
+    picker it would be a name you tick that then draws no line, which reads as suppression.
 - `utils/` — reusable functions shared across the app, incl. `auth.R` (shinymanager) and the
   think-cell export stack. `venn_diagram.R` is Dynamo-specific (a hand-built 3-circle SVG venn
   for `O_MPG_combination`/`O_OUD_combination`), not shared with sibling dashboards. One
@@ -286,8 +309,9 @@ wrong, not the data.
   The tables' styling lives with the rest of the app's CSS in `app.R`, unlike
   `venn_svg()`, which stays self-contained because it also ships as a standalone `.svg`.
 - `templates/` — built-in think-cell `.pptx` slide templates for the "Download slide" export.
-  The line chart on **Per regio** is the one chart wired to the export layer
-  (`chart_data_downloads_ui`/`_server`, id `r_downloads`, `chart_type = "line"`); the
+  The two line charts — **Per regio** (id `r_downloads`) and **Regio's vergelijken** (id
+  `v_downloads`) — are the charts wired to the export layer
+  (`chart_data_downloads_ui`/`_server`, `chart_type = "line"`); the
   choropleth and the venn have no think-cell equivalent and keep plain download buttons
   (the venn: its own `.svg` of the figure plus an xlsx of its slice, which has a different
   year and split than the line chart's export). Adding a chart means repeating that ui/server
