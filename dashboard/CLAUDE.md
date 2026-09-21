@@ -38,9 +38,7 @@ CBS output rules still apply to anything rendered: cells below 10 are suppressed
 are rounded to 10 in the delivery. **Render a suppressed region as explicitly "onvoldoende
 waarnemingen", never as 0** — the distinction matters and collapsing it misreads the data.
 **In `output_1b` the suppression step did not run**, so the prep step applies it —
-see `herstel_onderdrukking()` and the bullet below. **The committed parquet does not carry that
-repair yet**: the rebuild takes about an hour and lands in its own commit, so until then the
-app still shows those cells as `0`.
+see `herstel_onderdrukking()` and the bullet below.
 `variable_value` is the exception to the rounding rule: it is a category label (`0`, `1`, `2`,
 `3plus`), not a count.
 

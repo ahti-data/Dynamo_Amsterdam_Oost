@@ -16,8 +16,17 @@
 CHANGELOG <- list(
   list(
     datum = "2026-09-21",
-    titel = "De kruistabel staat nu los van de venn",
+    titel = "Nullen zijn onderdrukte cellen, en de kruistabel staat nu los",
     punten = c(
+      paste("Waar eerst een 0 stond, staat nu \"onvoldoende waarnemingen\". In de levering is",
+            "de stap die cellen onder de tien had moeten weghalen niet uitgevoerd; alleen het",
+            "afronden op tientallen gebeurde, en daardoor werd een telling van 1 tot 5 een 0.",
+            "Zo'n 0 betekende dus niet \"hier is niemand\" maar \"te weinig om te publiceren\".",
+            "Op de kaart blijven die gebieden nu grijs en in de tabellen staat er een streepje."),
+      paste("Dat raakt vooral de fijnere kruisingen: op buurtniveau ging het om ruim een kwart",
+            "van de cellen, op de totaalrijen om een enkel procent. Cijfers die je eerder als 0",
+            "hebt overgenomen, kloppen dus niet -- daar zat een klein aantal achter. Dit wordt",
+            "bij de leverancier gemeld, zodat een volgende levering het wel goed doet."),
       paste("De kruistabel op Per regio is losgekoppeld van de venn. Hij heeft nu eigen keuzes:",
             "welke uitsplitsing in de rijen (ondersteuningscombinatie, aantal vormen, wel/geen",
             "signaal, of een achtergrondkenmerk), welke indicator in de kolommen, en een eigen",
