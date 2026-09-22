@@ -464,19 +464,21 @@ export default function App() {
 
             {isVerkennenAnalyse && (
               <div className="scopebar">
-                <label>Gemeente</label>
-                <select className="control" value={gm} onChange={(e) => setGm(e.target.value)} aria-label="Gemeente">
-                  {[...index.gemeenten]
-                    .sort((a, b) => a.naam.localeCompare(b.naam, 'nl'))
-                    .map((g) => (
-                      <option key={g.code} value={g.code}>
-                        {g.naam}
-                      </option>
-                    ))}
-                </select>
+                <div className="field">
+                  <label>Gemeente</label>
+                  <select className="control" value={gm} onChange={(e) => setGm(e.target.value)} aria-label="Gemeente">
+                    {[...index.gemeenten]
+                      .sort((a, b) => a.naam.localeCompare(b.naam, 'nl'))
+                      .map((g) => (
+                        <option key={g.code} value={g.code}>
+                          {g.naam}
+                        </option>
+                      ))}
+                  </select>
+                </div>
 
                 {scopeOptions.length > 0 && (
-                  <>
+                  <div className="field">
                     <label>Focus</label>
                     <select
                       className="control"
@@ -497,22 +499,24 @@ export default function App() {
                         </optgroup>
                       ))}
                     </select>
-                  </>
+                  </div>
                 )}
 
-                <label>Peiljaar</label>
-                <select
-                  className="control"
-                  value={year}
-                  onChange={(e) => setYear(Number(e.target.value))}
-                  aria-label="Peiljaar"
-                >
-                  {ds.years.map((y) => (
-                    <option key={y} value={y}>
-                      {y}
-                    </option>
-                  ))}
-                </select>
+                <div className="field">
+                  <label>Peiljaar</label>
+                  <select
+                    className="control"
+                    value={year}
+                    onChange={(e) => setYear(Number(e.target.value))}
+                    aria-label="Peiljaar"
+                  >
+                    {ds.years.map((y) => (
+                      <option key={y} value={y}>
+                        {y}
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
                 <div className="seg" role="group" aria-label="Niveau">
                   {levelsForScope(ds, scope).map((lv) => (
@@ -533,29 +537,31 @@ export default function App() {
 
             {showIndicatorParams && paramIndicator && (
               <div className="view-params-bar">
-                <label>Indicator</label>
-                <select
-                  className="control"
-                  value={paramIndicator.id}
-                  onChange={(e) => setIndicatorId(e.target.value)}
-                  aria-label="Indicator"
-                >
-                  {ds.themes.map((t) => (
-                    <optgroup key={t.id} label={t.title}>
-                      {t.indicatorIds.map((iid) => {
-                        const ind = indicatorById(ds, iid)
-                        if (!ind) return null
-                        const ok = availableYears(ds, paramList, iid).length > 0
-                        return (
-                          <option key={`${t.id}-${iid}`} value={iid} disabled={!ok}>
-                            {ind.label}
-                            {!ok ? ' — geen data op dit niveau' : ''}
-                          </option>
-                        )
-                      })}
-                    </optgroup>
-                  ))}
-                </select>
+                <div className="field">
+                  <label>Indicator</label>
+                  <select
+                    className="control"
+                    value={paramIndicator.id}
+                    onChange={(e) => setIndicatorId(e.target.value)}
+                    aria-label="Indicator"
+                  >
+                    {ds.themes.map((t) => (
+                      <optgroup key={t.id} label={t.title}>
+                        {t.indicatorIds.map((iid) => {
+                          const ind = indicatorById(ds, iid)
+                          if (!ind) return null
+                          const ok = availableYears(ds, paramList, iid).length > 0
+                          return (
+                            <option key={`${t.id}-${iid}`} value={iid} disabled={!ok}>
+                              {ind.label}
+                              {!ok ? ' — geen data op dit niveau' : ''}
+                            </option>
+                          )
+                        })}
+                      </optgroup>
+                    ))}
+                  </select>
+                </div>
 
                 {view === 'kaart' && (
                   <div className="seg" role="group" aria-label="Weergave">
@@ -585,30 +591,34 @@ export default function App() {
 
             {showGroupParams && paramGroup && (
               <div className="view-params-bar">
-                <label htmlFor="vooruitblik-doelgroep">Doelgroep</label>
-                <select
-                  id="vooruitblik-doelgroep"
-                  className="control"
-                  value={paramGroup.id}
-                  onChange={(e) => {
-                    setGroupId(e.target.value)
-                    setSelectedArea(null)
-                  }}
-                >
-                  {GROUPS.map((g) => (
-                    <option key={g.id} value={g.id}>
-                      {g.label}
-                    </option>
-                  ))}
-                </select>
+                <div className="field">
+                  <label htmlFor="vooruitblik-doelgroep">Doelgroep</label>
+                  <select
+                    id="vooruitblik-doelgroep"
+                    className="control"
+                    value={paramGroup.id}
+                    onChange={(e) => {
+                      setGroupId(e.target.value)
+                      setSelectedArea(null)
+                    }}
+                  >
+                    {GROUPS.map((g) => (
+                      <option key={g.id} value={g.id}>
+                        {g.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-                <label>Prognosejaar</label>
-                <div className="seg" role="group" aria-label="Horizon">
-                  {HORIZONS.map((h) => (
-                    <button key={h} className={horizon === h ? 'active' : ''} onClick={() => setHorizon(h)}>
-                      {h}
-                    </button>
-                  ))}
+                <div className="field">
+                  <label>Prognosejaar</label>
+                  <div className="seg" role="group" aria-label="Horizon">
+                    {HORIZONS.map((h) => (
+                      <button key={h} className={horizon === h ? 'active' : ''} onClick={() => setHorizon(h)}>
+                        {h}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
             )}

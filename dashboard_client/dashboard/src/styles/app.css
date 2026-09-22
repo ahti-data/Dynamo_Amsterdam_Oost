@@ -128,9 +128,9 @@
 .view-params-bar {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 6px 10px; /* kleinere row-gap dan column-gap: als een rij wrapt (smallere vensters) blijven de regels dicht op elkaar i.p.v. een volle 10px op te schuiven */
   flex-wrap: wrap;
-  padding: 10px 28px;
+  padding: 7px 24px;
   /* --tab-fill-light: gezet op .frozen-bar, per actieve subtab (App.tsx) —
      valt terug op de oude vaste merk-tint waar dat niet gezet is (Verantwoording & Bronnen) */
   background: var(--tab-fill-light, color-mix(in srgb, var(--surface-2) 88%, var(--brand) 12%));
@@ -145,7 +145,15 @@
 .view-params-bar label {
   font-size: 12.5px;
   color: var(--text-muted);
-  margin-right: -4px;
+}
+
+/* — label + control als één blok: zonder dit wrapt een smaller venster het
+   label soms los van zijn eigen control (het label blijft bij de vorige regel
+   hangen, de control valt naar de volgende) — elk paar wrapt nu als geheel — */
+.field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 /* — filterbalk: per-view controls ín de content, geen onderdeel van de
@@ -172,7 +180,7 @@
   background: var(--surface-1);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-control);
-  padding: 7px 30px 7px 12px;
+  padding: 6px 26px 6px 10px;
   font-size: 13.5px;
   font-weight: 500;
   cursor: pointer;
@@ -188,7 +196,7 @@
    deeltabbladen) — dezelfde opmaak voor alle groepen, spant de volle breedte
    van de kolom, met een geanimeerde indicator die naar de actieve tab schuift — */
 .subnav {
-  padding: 8px 28px;
+  padding: 6px 24px;
   background: var(--surface-1);
   border-bottom: 1px solid var(--border);
 }
@@ -201,11 +209,11 @@
 
 .subnav-indicator {
   position: absolute;
-  /* -8px == .subnav's eigen padding: strekt het blok uit tot de rand van
+  /* -6px == .subnav's eigen padding: strekt het blok uit tot de rand van
      .subnav, zodat het recht aansluit op de parameterbalk eronder i.p.v.
      los te zweven als pil */
-  top: -8px;
-  bottom: -8px;
+  top: -6px;
+  bottom: -6px;
   left: calc(100% / var(--sn-count, 1) * var(--sn-index, 0));
   width: calc(100% / var(--sn-count, 1));
   /* --tab-fill/--tab-ink: gezet op .frozen-bar, per actieve subtab (App.tsx) */
