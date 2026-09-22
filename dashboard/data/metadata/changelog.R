@@ -15,6 +15,21 @@
 
 CHANGELOG <- list(
   list(
+    datum = "2026-09-22",
+    titel = "Zijbalk compacter: uitleg staat nu achter \"Wat betekent dit?\"",
+    punten = c(
+      paste("De uitleg onder \"Splits uit naar\" en \"Weergave\" (op Kaart, Per regio en",
+            "Regio's vergelijken) staat niet meer altijd open, maar achter een link",
+            "\"Wat betekent dit?\". De tekst zelf is niet gewijzigd -- een klik toont",
+            "hem weer -- maar de zijbalk hoeft er niet meer standaard zo ver voor naar",
+            "beneden."),
+      paste("Op Regio's vergelijken heeft de lijst geselecteerde regio's nu een eigen",
+            "scrollbalkje in plaats van steeds verder te groeien: bij de standaard 15",
+            "regio's van een stadsdeel duwde die lijst de rest van de keuzes ver naar",
+            "onderen.")
+    )
+  ),
+  list(
     datum = "2026-09-21",
     titel = "Nieuw tabblad: regio's naast elkaar in één lijnfiguur",
     punten = c(

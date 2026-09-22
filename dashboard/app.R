@@ -416,6 +416,22 @@ update_preserving <- function(session, id, choices, current) {
 
 control_card <- function(...) div(class = "control-card", ...)
 
+# Static, non-selection-dependent explainer text (e.g. what "Splits uit naar"
+# or "Weergave" mean) -- collapsed by default behind a native <details>, so the
+# sidebar shows its controls first and the reference text stays one click away
+# instead of always pushing the map/chart further down. Never use this for
+# uiOutput() notes that report the *current* selection (dekking, waarschuwing,
+# k_var_note e.d.) -- those must stay visible.
+# `label` has no default on purpose: it is the first *named* argument, so a
+# call that forgets it does not silently swallow the note's first sentence as
+# the (invisible-until-clicked) summary -- it errors at app start instead.
+help_note <- function(label, ...) {
+  tags$details(class = "note-details",
+    tags$summary(label),
+    div(class = "note", ...)
+  )
+}
+
 ui <- fluidPage(
   title = "Dynamo Amsterdam - dashboard",
 
@@ -429,6 +445,13 @@ ui <- fluidPage(
     .control-card { background: %4$s; border-radius: 4px; padding: 12px 14px; margin-bottom: 12px; }
     .control-card .form-group { margin-bottom: 10px; }
     .note { font-size: 12px; color: %3$s; line-height: 1.45; }
+    .note-details { margin: 2px 0 10px; }
+    .note-details > summary { font-size: 12px; color: %2$s; cursor: pointer; }
+    .note-details > summary:hover { text-decoration: underline; }
+    .note-details .note { margin-top: 6px; }
+    /* Regio's vergelijken start met tot 15 regio's tegelijk aangevinkt (VERGELIJK_MAX_AUTO):
+       zonder grens duwt die ene chips-lijst de rest van de zijbalk ver naar beneden. */
+    #v_regios + .selectize-control .selectize-input { max-height: 150px; overflow-y: auto; }
     .chart-title { font-weight: 600; font-size: 15px; margin-bottom: 8px; color: %1$s; }
     .nav-tabs > li.active > a { border-top: 2px solid %2$s !important; }
     .venn-tab { width: 100%%; border-collapse: collapse; font-size: 12.5px; }
@@ -500,7 +523,7 @@ ui <- fluidPage(
               ),
               control_card(
                 tags$label(class = "control-label", "Splits uit naar"),
-                div(class = "note", style = "margin: 2px 0 10px;",
+                help_note(label = "Wat betekent dit?",
                     "Elke uitsplitsing staat op \u201calle\u201d: dan telt hij niet mee",
                     " in de selectie. Kies een niveau om er wel op te filteren.",
                     " Meerdere niveaus van dezelfde uitsplitsing worden bij elkaar",
@@ -517,7 +540,7 @@ ui <- fluidPage(
                                "Aandeel binnen indicatorwaarde (%)" = "rel_indicator"),
                              selected = "rel_regio"),
                 uiOutput("k_gem_note"),
-                div(class = "note", style = "margin: -6px 0 10px;",
+                help_note("Wat betekenen deze aandelen?",
                     tags$b("Van regiototaal:"),
                     " ten opzichte van alle huishoudens/ouderen in die buurt, wijk,",
                     " dat gebied of dat stadsdeel \u2014 \"x% van alle gezinnen hier\". ",
@@ -577,7 +600,7 @@ ui <- fluidPage(
               ),
               control_card(
                 tags$label(class = "control-label", "Splits de lijn uit naar"),
-                div(class = "note", style = "margin: 2px 0 10px;",
+                help_note(label = "Wat betekent dit?",
                     "\u201cAlle\u201d laat de uitsplitsing weg. \u201cElk niveau apart\u201d",
                     " geeft een lijn per niveau; kies je in plaats daarvan \u00e9\u00e9n",
                     " niveau, dan gaat de hele figuur over die groep. Twee",
@@ -692,7 +715,7 @@ ui <- fluidPage(
               ),
               control_card(
                 tags$label(class = "control-label", "Splits uit naar"),
-                div(class = "note", style = "margin: 2px 0 10px;",
+                help_note(label = "Wat betekent dit?",
                     "Hier bepaalt de uitsplitsing over welke groep de lijnen",
                     " gaan; de lijnen zelf zijn de regio's. Elke uitsplitsing",
                     " staat op “alle”: dan telt hij niet mee in de",
@@ -706,7 +729,7 @@ ui <- fluidPage(
                              c("Absoluut" = "abs", "Aandeel (%)" = "rel"),
                              selected = "rel"),
                 uiOutput("v_gem_note"),
-                div(class = "note", style = "margin: -6px 0 0;",
+                help_note("Wat betekent dit aandeel?",
                     "Bij “Aandeel (%)” is de noemer de gekozen groep",
                     " binnen die regio zelf, net als op Per regio. Regio's van",
                     " heel verschillende omvang zijn zo naast elkaar te lezen;",
